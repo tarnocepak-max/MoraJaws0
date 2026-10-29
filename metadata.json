@@ -1,0 +1,8 @@
+{
+  "name": "MoraJawsV6",
+  "description": "Comprehensive enterprise field operations, dispatching, WhatsApp automation, and technician tracking system for FTTH telecommunication work orders.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

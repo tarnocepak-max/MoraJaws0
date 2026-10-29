@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Security Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email in ['rayhanafirzanx@gmail.com', 'tarnocepak@gmail.com', 'nurhestafauladhea@gmail.com'] ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin')
+      );
+    }
+
+    // System Health / Connection Ping
+    match /system_health/{healthId} {
+      allow read: if isValidId(healthId);
+      allow write: if isSignedIn() && isValidId(healthId);
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(userId) && (isAdmin() || request.auth.uid == userId);
+      allow update: if isSignedIn() && isValidId(userId) && (isAdmin() || request.auth.uid == userId);
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // Work Orders / Tickets Collection
+    match /tickets/{ticketId} {
+      allow get: if isSignedIn() && isValidId(ticketId);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(ticketId);
+      allow update: if isSignedIn() && isValidId(ticketId);
+      allow delete: if isAdmin() && isValidId(ticketId);
+    }
+
+    // Contractors & Basecamps Collection
+    match /contractors/{contractorId} {
+      allow get: if isSignedIn() && isValidId(contractorId);
+      allow list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(contractorId);
+      allow delete: if isAdmin() && isValidId(contractorId);
+    }
+
+    // Coverage Areas Collection
+    match /coverage_areas/{areaId} {
+      allow get: if isSignedIn() && isValidId(areaId);
+      allow list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(areaId);
+      allow delete: if isAdmin() && isValidId(areaId);
+    }
+
+    // Work Order Real-Time Messages (Live Chat)
+    match /ticket_messages/{messageId} {
+      allow get: if isSignedIn() && isValidId(messageId);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(messageId);
+      allow update, delete: if isAdmin() && isValidId(messageId);
+    }
+
+    // Audit Logs Collection (Append-Only)
+    match /audit_logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(logId);
+      allow update, delete: if false;
+    }
+
+    // WhatsApp Message Templates
+    match /wa_templates/{templateId} {
+      allow get: if isSignedIn() && isValidId(templateId);
+      allow list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(templateId);
+      allow delete: if isAdmin() && isValidId(templateId);
+    }
+  }
+}

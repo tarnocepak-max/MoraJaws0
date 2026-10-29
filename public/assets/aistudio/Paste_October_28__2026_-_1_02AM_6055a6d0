@@ -1,0 +1,1149 @@
+PROMPT UPDATE APLIKASI MORAJAWS
+
+Role-Based Ticket Management, Appointment Schedule, Anti-Duplicate WO, Installer Fullview, WhatsApp Integration, Database Management, dan Autentikasi Portal Staff
+
+INSTRUKSI UTAMA
+
+Lakukan update dan penyempurnaan pada aplikasi MoraJaws yang sudah ada di Google AI Studio.
+
+Jangan membangun ulang aplikasi dari nol. Audit struktur proyek, database, API, autentikasi, role pengguna, komponen ticket, dan workflow yang sudah tersedia sebelum melakukan perubahan.
+
+Pertahankan semua fitur yang masih berfungsi. Perubahan harus terintegrasi dengan aplikasi yang sudah ada, bukan berupa halaman demo atau mockup yang tidak terhubung ke backend.
+
+Fokus update ini adalah:
+
+1. Mengelompokkan data WO sesuai kategori akun, role, kontraktor, area, dan penugasan.
+2. Menampilkan WO berdasarkan jadwal Appointment Date yang berasal dari data impor.
+3. Memastikan tidak ada duplikasi WO Number.
+4. Memindahkan tombol WhatsApp URL ke sebelah informasi pelanggan.
+5. Mempertegas garis tepi ticket WO agar setiap ticket terlihat jelas.
+6. Membuat tampilan ticket Fullview khusus untuk Installer.
+7. Menambahkan menu Database Management untuk mengelola data aplikasi secara terpusat.
+8. Menambahkan opsi logout dari aplikasi.
+9. Menambahkan portal login khusus staff menggunakan data akun staff yang sudah terdaftar.
+
+Semua perubahan wajib menggunakan data aktual dari database dan mengikuti hak akses masing-masing role.
+
+---
+
+1. ROLE-BASED WO DATA MANAGEMENT
+
+1.1 Tujuan
+
+Perbaiki sistem pengelompokan data sehingga setiap staff hanya melihat ticket WO yang relevan dengan role, cakupan akses, kontraktor, area, jadwal, dan penugasannya.
+
+Jangan menampilkan semua WO yang ada di database kepada seluruh staff.
+
+Buat aturan visibilitas data yang konsisten antara dashboard, daftar ticket, pencarian, detail ticket, ekspor, dan API.
+
+1.2 Super Agent
+
+Super Agent memiliki akses administratif sesuai konfigurasi role aplikasi.
+
+Super Agent dapat:
+
+- Melihat seluruh WO yang diizinkan dalam lingkup sistem.
+- Mengelola data WO.
+- Mengimpor data WO.
+- Memeriksa duplikasi WO Number.
+- Memantau distribusi WO.
+- Mengelola data kontraktor dan area.
+- Mengelola akun staff sesuai kewenangannya.
+- Mengakses Database Management.
+- Memeriksa jadwal Appointment Date.
+- Melihat histori impor dan perubahan data.
+- Mengelola konfigurasi autentikasi dan sesi pengguna sesuai permission.
+
+Super Agent tidak boleh kehilangan akses administratif akibat perubahan filter role.
+
+1.3 Dispatch
+
+Dispatch dapat:
+
+- Melihat WO yang termasuk dalam cakupan tugas Dispatch.
+- Memantau distribusi WO.
+- Memantau progres pekerjaan Installer.
+- Melihat WO berdasarkan tanggal dan status.
+- Melakukan tindakan sesuai permission yang telah diberikan.
+- Mengimpor data apabila diizinkan oleh konfigurasi role.
+
+Pertahankan aturan akses yang sudah berlaku pada aplikasi.
+
+Jangan memberikan akses Database Management secara otomatis kepada Dispatch apabila permission tersebut belum diberikan.
+
+1.4 Leader / Korlap
+
+Leader hanya dapat melihat WO yang memenuhi seluruh ketentuan berikut:
+
+- Sesuai kontraktor yang menjadi tanggung jawabnya.
+- Sesuai area kerja yang diizinkan.
+- Sesuai jadwal Appointment Date.
+- Sesuai cakupan data yang ditetapkan sistem.
+- Sesuai relasi penugasan yang berlaku.
+
+Leader dapat:
+
+- Melihat WO yang tersedia untuk ditugaskan.
+- Melihat WO yang sudah ditugaskan kepada Installer.
+- Melihat progres pekerjaan Installer.
+- Melakukan manual assignment sesuai kewenangannya.
+- Melihat ticket yang membutuhkan tindakan.
+- Memfilter WO berdasarkan Appointment Date dan status.
+
+Leader tidak boleh mengakses data kontraktor lain hanya dengan mengganti parameter URL atau ID WO.
+
+1.5 Installer
+
+Installer hanya dapat melihat WO yang benar-benar ditugaskan kepada akun Installer tersebut.
+
+Ketentuan:
+
+- WO harus memiliki relasi penugasan yang valid.
+- Installer tidak boleh melihat ticket milik Installer lain tanpa permission.
+- Ticket yang ditampilkan harus mengikuti jadwal Appointment Date yang berlaku.
+- Installer dapat melihat ticket sesuai jadwal dan cakupan aksesnya.
+- Installer dapat memperbarui progres dan laporan sesuai workflow aplikasi.
+- Installer tidak boleh mengubah Customer ID, WO Number, Appointment Date, atau identitas utama ticket tanpa kewenangan khusus.
+
+Jangan mengandalkan filter frontend sebagai satu-satunya pengaman.
+
+Seluruh pembatasan akses harus diterapkan di backend.
+
+---
+
+2. AUTENTIKASI PORTAL STAFF DAN LOGOUT
+
+2.1 Portal login khusus staff
+
+Tambahkan portal login khusus staff yang terpisah dari halaman operasional aplikasi.
+
+Portal login harus menggunakan data staff yang sudah terdaftar di database aplikasi. Jangan membuat akun dummy, akun hardcoded, atau data login statis di frontend.
+
+Gunakan field akun staff yang sudah tersedia, seperti:
+
+- Username, email, atau identitas login sesuai struktur database.
+- Password yang tersimpan secara aman menggunakan hashing.
+- Status akun.
+- Role.
+- Kontraktor.
+- Area kerja.
+- Permission.
+- Relasi penugasan jika tersedia.
+
+Jika aplikasi sudah memiliki sistem autentikasi, gunakan dan perluas sistem tersebut. Jangan membuat sistem autentikasi kedua yang tidak terhubung dengan akun staff yang sudah ada.
+
+2.2 Validasi login
+
+Saat staff melakukan login:
+
+1. Validasi input login.
+2. Cari akun staff pada backend.
+3. Pastikan akun terdaftar.
+4. Pastikan akun aktif dan tidak diblokir.
+5. Verifikasi password menggunakan mekanisme hashing yang aman.
+6. Ambil role dan permission dari database.
+7. Buat sesi atau token autentikasi yang aman.
+8. Arahkan pengguna ke dashboard sesuai role.
+9. Jangan mengirim password atau data sensitif ke frontend.
+10. Catat aktivitas login jika audit log aplikasi mendukungnya.
+
+Jika login gagal, tampilkan pesan yang jelas tetapi jangan membocorkan apakah username atau password yang salah.
+
+Akun nonaktif, terblokir, atau belum memiliki permission yang sesuai tidak boleh masuk ke aplikasi operasional.
+
+2.3 Sesi dan keamanan akses
+
+Terapkan perlindungan berikut:
+
+- Sesi memiliki masa berlaku.
+- Token atau cookie autentikasi disimpan secara aman.
+- Backend memvalidasi sesi pada setiap endpoint yang membutuhkan autentikasi.
+- Role dan permission tidak boleh hanya ditentukan dari data frontend.
+- Pengguna yang tidak login tidak boleh mengakses dashboard, detail WO, API operasional, atau Database Management.
+- Jika sesi kedaluwarsa, arahkan pengguna kembali ke portal login.
+- Jangan menyimpan password dalam bentuk teks biasa.
+- Jangan menampilkan token, secret, atau kredensial di browser.
+- Terapkan mekanisme logout pada sesi aktif.
+
+Jika aplikasi sudah menggunakan provider autentikasi tertentu, pertahankan integrasinya dan sesuaikan dengan data staff yang sudah terdaftar.
+
+2.4 Opsi logout
+
+Tambahkan opsi "Logout" yang mudah ditemukan pada aplikasi, terutama pada:
+
+- Menu profil pengguna.
+- Sidebar atau navigation menu.
+- Header aplikasi pada desktop.
+- Menu navigasi mobile.
+
+Saat logout dilakukan:
+
+1. Tampilkan konfirmasi apabila diperlukan.
+2. Hapus sesi lokal yang aman.
+3. Invalidasi token atau sesi pada backend jika mekanisme tersebut tersedia.
+4. Bersihkan data sensitif dari state frontend.
+5. Arahkan pengguna ke portal login.
+6. Pastikan tombol Back browser tidak dapat membuka kembali halaman terlindungi tanpa autentikasi valid.
+7. Catat aktivitas logout jika audit log mendukungnya.
+
+Setelah logout, pengguna tidak boleh mengakses kembali data WO melalui URL langsung, cache aplikasi, atau state frontend lama.
+
+2.5 Pengarahan berdasarkan role
+
+Setelah login, arahkan staff ke halaman yang sesuai dengan role dan permission:
+
+- Super Agent ke dashboard administratif.
+- Dispatch ke dashboard distribusi dan monitoring.
+- Leader ke dashboard area, kontraktor, dan penugasan.
+- Installer ke daftar WO yang ditugaskan dan jadwal pekerjaan.
+
+Jangan memberikan akses ke halaman atau menu yang tidak sesuai dengan role.
+
+Jika akun memiliki lebih dari satu role, gunakan konfigurasi role yang sudah berlaku atau tampilkan pilihan konteks role hanya jika sistem memang mendukungnya.
+
+2.6 Pengelolaan akun staff
+
+Gunakan data staff yang sudah terdaftar sebagai sumber utama autentikasi.
+
+Jika terdapat menu pengelolaan akun staff, sediakan sesuai permission:
+
+- Melihat daftar staff.
+- Mengaktifkan atau menonaktifkan akun.
+- Mengatur role.
+- Mengatur kontraktor.
+- Mengatur area.
+- Mengatur permission.
+- Mengatur ulang password melalui proses aman.
+- Melihat status login terakhir jika tersedia.
+- Mencatat perubahan akun dalam audit log.
+
+Jangan mengizinkan staff mengubah role atau permission dirinya sendiri tanpa otorisasi.
+
+Jangan menghapus akun staff secara permanen tanpa prosedur dan audit yang jelas.
+
+---
+
+3. FILTER WO BERDASARKAN APPOINTMENT DATE
+
+3.1 Aturan utama
+
+Gunakan Appointment Date yang berasal dari data WO yang diimpor sebagai sumber jadwal pekerjaan.
+
+Jangan menggunakan tanggal impor, tanggal assign, tanggal pembuatan akun, atau tanggal saat ini sebagai pengganti Appointment Date.
+
+Pastikan sistem membedakan field berikut:
+
+- WO Date.
+- Appointment Date.
+- Import Date.
+- Assignment Date.
+- Report Date.
+- Last Updated Date.
+
+Masing-masing field harus memiliki fungsi yang berbeda.
+
+3.2 Pengelompokan jadwal
+
+Buat pengelompokan WO berdasarkan Appointment Date:
+
+- Hari Ini.
+- Besok.
+- Jadwal Mendatang.
+- Jadwal Sebelumnya.
+- Semua Jadwal yang Diizinkan.
+
+Semua kategori tersebut harus dihitung dari Appointment Date aktual.
+
+Gunakan zona waktu yang konsisten dengan konfigurasi aplikasi. Untuk operasional Indonesia, gunakan zona waktu yang sesuai dengan area operasional, dan jangan membandingkan tanggal lokal dengan timestamp UTC secara langsung tanpa konversi.
+
+Jika Appointment Date menyimpan waktu, pertahankan informasi waktu tersebut sesuai format sumber data.
+
+3.3 Filter tanggal
+
+Tambahkan filter:
+
+- Appointment Date dari tanggal tertentu.
+- Appointment Date sampai tanggal tertentu.
+- Rentang tanggal.
+- Status WO.
+- Kontraktor.
+- Area.
+- Installer.
+- Status penugasan.
+
+Filter harus dapat digunakan secara bersamaan.
+
+Contoh:
+
+Leader memilih Appointment Date 28 Oktober 2026.
+
+Sistem hanya menampilkan WO dengan Appointment Date yang sesuai tanggal tersebut dan berada dalam cakupan kontraktor serta area Leader.
+
+Installer hanya melihat WO pada tanggal tersebut apabila WO memang ditugaskan kepada Installer yang sedang login.
+
+Contoh tanggal tersebut hanya ilustrasi pengujian, bukan tanggal tetap di dalam kode.
+
+3.4 Perubahan Appointment Date
+
+Jika data impor memperbarui Appointment Date sebuah WO:
+
+1. Validasi format tanggal.
+2. Periksa hak akses pengimpor.
+3. Simpan perubahan secara konsisten.
+4. Perbarui hasil filter jadwal.
+5. Perbarui dashboard terkait.
+6. Catat perubahan dalam audit log.
+7. Pastikan ticket tidak tetap muncul pada jadwal lama jika tanggal sebelumnya sudah tidak berlaku.
+
+Jika WO sudah ditugaskan tetapi Appointment Date berubah, jangan menghapus penugasan secara diam-diam.
+
+Pertahankan relasi penugasan, perbarui jadwal yang berlaku, dan tampilkan informasi perubahan kepada role yang terdampak.
+
+Jika perubahan tanggal membutuhkan konfirmasi atau penjadwalan ulang, ikuti aturan workflow yang sudah ada.
+
+3.5 Appointment Date kosong atau tidak valid
+
+WO yang tidak memiliki Appointment Date valid tidak boleh otomatis dimasukkan ke jadwal hari ini.
+
+Tampilkan WO tersebut pada kategori:
+
+"Jadwal Belum Valid"
+
+Kategori ini terutama digunakan untuk pemeriksaan oleh role administratif yang berwenang.
+
+Berikan informasi:
+
+- WO Number.
+- Appointment Date yang terbaca.
+- Alasan validasi gagal.
+- Sumber data impor.
+- Tindakan koreksi yang tersedia.
+
+Jangan mengarang tanggal pengganti.
+
+---
+
+4. PENCEGAHAN DUPLIKASI WO NUMBER
+
+4.1 Identitas unik WO
+
+WO Number merupakan identitas utama untuk mencegah ticket WO duplikat.
+
+Sebelum mengubah struktur database, periksa apakah WO Number sudah memiliki constraint unik.
+
+Jika belum, tambahkan mekanisme pencegahan duplikasi yang sesuai dengan database yang digunakan.
+
+Target akhirnya adalah:
+
+Satu WO Number hanya memiliki satu record utama WO dalam database aktif.
+
+Beberapa riwayat laporan, riwayat penugasan, percakapan, dan aktivitas tetap dapat terhubung dengan WO yang sama tanpa dianggap sebagai duplikasi ticket.
+
+4.2 Validasi saat impor
+
+Setiap proses impor harus memeriksa:
+
+1. Duplikasi WO Number di dalam file yang sedang diimpor.
+2. Duplikasi WO Number terhadap database.
+3. WO Number kosong.
+4. WO Number dengan format tidak valid.
+5. Data yang memiliki konflik pada field penting.
+6. Baris yang gagal dipetakan ke field tujuan.
+
+Sebelum penyimpanan, tampilkan ringkasan:
+
+- Total baris ditemukan.
+- Baris valid.
+- WO baru.
+- WO sudah ada.
+- WO duplikat di dalam file.
+- Baris tidak valid.
+- Baris yang membutuhkan pemeriksaan.
+
+4.3 Kebijakan jika WO sudah ada
+
+Jangan langsung membuat record baru apabila WO Number sudah ditemukan.
+
+Sediakan pilihan sesuai kewenangan:
+
+A. Lewati data duplikat.
+
+B. Perbarui field yang diizinkan pada WO yang sudah ada.
+
+C. Tampilkan konflik agar admin dapat memeriksa data terlebih dahulu.
+
+Jangan menimpa seluruh data WO secara otomatis hanya karena WO Number sama.
+
+Jangan mengosongkan field database yang sudah berisi nilai valid hanya karena kolom sumber impor kosong.
+
+Gunakan kebijakan mapping dan update yang konsisten.
+
+4.4 Normalisasi WO Number
+
+Sebelum pemeriksaan duplikasi:
+
+- Hilangkan spasi yang tidak diperlukan di awal dan akhir.
+- Validasi nilai kosong.
+- Terapkan aturan normalisasi secara konsisten.
+- Jangan mengubah karakter atau format WO Number secara sembarangan.
+- Jangan menggabungkan dua WO berbeda hanya karena memiliki bentuk teks yang mirip.
+
+Jika sistem menganggap huruf besar dan kecil setara, terapkan aturan tersebut secara konsisten di seluruh proses impor dan pencarian.
+
+4.5 Pencegahan duplikasi di database
+
+Validasi frontend saja tidak cukup.
+
+Gunakan unique constraint atau mekanisme database yang setara.
+
+Proses impor harus tetap aman ketika dua pengguna mengimpor WO yang sama secara bersamaan.
+
+Jika terjadi konflik unique constraint:
+
+- Jangan membuat ticket kedua.
+- Tangani konflik dengan aman.
+- Catat hasilnya dalam riwayat impor.
+- Tampilkan pesan yang dapat dipahami pengguna.
+
+Jika database sudah memiliki duplikasi lama, lakukan audit dan rekonsiliasi sebelum menerapkan unique constraint.
+
+Jangan menghapus data lama secara otomatis tanpa pemeriksaan.
+
+---
+
+5. POSISI TOMBOL WHATSAPP URL
+
+5.1 Perubahan UI
+
+Ubah posisi tombol WhatsApp URL agar berada tepat di sebelah informasi kontak pelanggan pada ticket WO.
+
+Contoh susunan:
+
+Informasi Pelanggan
+
+Nama Pelanggan: [Nama Customer]
+
+Customer ID: [ID Customer]
+
+Nomor Telepon: [Nomor Customer] [Tombol WhatsApp]
+
+Appointment Date: [Tanggal]
+
+Slot Time: [Waktu]
+
+Tombol WhatsApp harus terlihat sebagai tindakan yang berhubungan langsung dengan nomor telepon pelanggan.
+
+Jangan menempatkan tombol WhatsApp terlalu jauh dari informasi kontak.
+
+Pada desktop, tombol dapat berada sejajar dengan nomor telepon.
+
+Pada smartphone, tombol boleh berada di sebelah kanan jika ruang mencukupi atau tepat di bawah nomor telepon jika layar sempit.
+
+Jangan sampai tombol menutupi nomor telepon atau informasi pelanggan.
+
+5.2 Perilaku tombol
+
+Saat tombol WhatsApp diklik:
+
+1. Periksa nomor telepon pelanggan.
+2. Normalisasi nomor sesuai aturan internasional yang berlaku.
+3. Validasi nomor sebelum membangun URL.
+4. Siapkan template pesan sesuai konfigurasi aplikasi.
+5. Buka WhatsApp melalui URL yang sesuai.
+6. Isi pesan awal jika fitur tersebut sudah tersedia.
+7. Jangan mengirim pesan otomatis tanpa proses konfirmasi pengguna apabila sistem hanya menggunakan URL pembuka WhatsApp.
+
+Gunakan nomor telepon yang benar-benar terhubung dengan WO yang sedang dibuka.
+
+Jangan mengambil nomor telepon dari ticket lain.
+
+Jika nomor pelanggan kosong atau tidak valid, tampilkan pesan yang jelas dan nonaktifkan tindakan yang tidak dapat digunakan.
+
+Jangan menanam token atau secret API langsung di frontend.
+
+Pertahankan konfigurasi template WhatsApp yang sudah ada.
+
+---
+
+6. PERBAIKAN TAMPILAN TICKET WO
+
+6.1 Garis tepi ticket
+
+Pertegas garis tepi setiap ticket WO agar masing-masing ticket terlihat jelas dan tidak menyatu dengan ticket lainnya.
+
+Gunakan desain kartu yang konsisten:
+
+- Border yang jelas.
+- Sudut kartu proporsional.
+- Padding internal yang rapi.
+- Jarak antar-ticket yang cukup.
+- Pemisahan antara header, informasi pelanggan, detail pekerjaan, progres, dan action.
+- Kontras yang baik antara latar belakang dan konten.
+
+Contoh susunan visual:
+
+┌──────────────────────────────────────┐
+│ WO NUMBER               STATUS       │
+├──────────────────────────────────────┤
+│ Informasi Pelanggan                  │
+│ Nama                                 │
+│ Customer ID                          │
+│ Nomor Telepon     [WhatsApp]         │
+├──────────────────────────────────────┤
+│ Jadwal Pekerjaan                     │
+│ Appointment Date                     │
+│ Slot Time                            │
+├──────────────────────────────────────┤
+│ Informasi Lokasi                     │
+│ Cluster                              │
+│ Street Name / Address                │
+├──────────────────────────────────────┤
+│ Progress dan Laporan                 │
+│ Status Pekerjaan                     │
+│ Progress Bar                         │
+├──────────────────────────────────────┤
+│ Action                               │
+└──────────────────────────────────────┘
+
+Ilustrasi di atas merupakan struktur visual yang harus disesuaikan dengan field aktual aplikasi.
+
+6.2 Status ticket
+
+Tampilkan badge status yang mudah dibedakan.
+
+Gunakan warna dan label konsisten untuk:
+
+- Belum Di-assign.
+- Sudah Di-assign.
+- Belum Mulai.
+- Sedang Dikerjakan.
+- Menunggu.
+- Tertunda.
+- Bermasalah.
+- Selesai.
+
+Gunakan hanya status yang sesuai dengan workflow resmi aplikasi.
+
+Jangan membuat label visual yang bertentangan dengan status backend.
+
+6.3 Informasi panjang
+
+Alamat, laporan teknisi, dan informasi tambahan tidak boleh merusak dimensi kartu.
+
+Gunakan:
+
+- Expandable section.
+- Read More.
+- Panel detail.
+- Pemisahan bagian informasi.
+
+Informasi penting tidak boleh terpotong secara permanen.
+
+Pastikan tampilan ticket tetap rapi pada desktop dan smartphone.
+
+---
+
+7. TICKET FULLVIEW KHUSUS PORTAL INSTALLER
+
+7.1 Tujuan
+
+Ketika Installer membuka ticket WO, tampilkan halaman detail Fullview yang memanfaatkan seluruh area konten utama.
+
+Jangan hanya membuka modal kecil atau panel sempit apabila hal tersebut menghambat pembacaan informasi dan pengisian laporan.
+
+Fullview hanya berlaku untuk pengalaman detail ticket Installer. Jangan memaksakan tampilan yang sama kepada seluruh role jika workflow mereka berbeda.
+
+7.2 Struktur Fullview
+
+Buat susunan sebagai berikut.
+
+A. Header ticket
+
+Tampilkan:
+
+- WO Number.
+- Status WO.
+- Appointment Date.
+- Slot Time.
+- Tombol kembali ke daftar WO.
+- Tombol tindakan yang diizinkan.
+
+Header harus mudah dikenali dan tetap nyaman digunakan pada layar kecil.
+
+B. Informasi pelanggan
+
+Tampilkan:
+
+- Customer Name.
+- Customer ID.
+- Customer Phone.
+- Customer Phone 2 dan Phone 3 jika tersedia.
+- Tombol WhatsApp di sebelah nomor telepon.
+- Tombol panggilan jika sudah didukung aplikasi.
+
+Jangan menampilkan field kosong yang tidak memberikan informasi.
+
+C. Informasi lokasi
+
+Tampilkan:
+
+- Cluster Name.
+- Street Name.
+- Alamat lengkap.
+- Area.
+- Kecamatan atau wilayah jika tersedia.
+- Kode pos jika tersedia.
+- Informasi teknis jaringan yang memang tersedia pada WO.
+
+Sediakan tombol salin alamat apabila berguna.
+
+Jika terdapat fitur navigasi yang sudah tersedia, pertahankan integrasinya.
+
+D. Informasi pekerjaan
+
+Tampilkan:
+
+- Jenis pekerjaan.
+- Appointment Date.
+- Slot Time.
+- Contractor.
+- Nama Leader.
+- Status penugasan.
+- Catatan pekerjaan.
+- Field teknis yang relevan.
+
+Gunakan mapping field yang sudah digunakan aplikasi.
+
+Jangan membuat data baru hanya untuk memenuhi tampilan.
+
+E. Progress dan laporan
+
+Tampilkan:
+
+- Status pengerjaan.
+- Progress bar jika progres numerik tersedia.
+- Form laporan teknisi.
+- Kategori penyebab atau hasil pekerjaan.
+- Catatan Installer.
+- Foto lampiran jika fitur upload tersedia.
+- Waktu laporan.
+- Status verifikasi jika workflow menggunakannya.
+
+Jika laporan harus diisi sebelum WO dapat dinyatakan selesai, terapkan validasi tersebut di backend dan frontend.
+
+F. Action Installer
+
+Sediakan tindakan yang sesuai dengan permission Installer, seperti:
+
+- Mulai Pengerjaan.
+- Perbarui Status.
+- Isi Laporan.
+- Tambahkan Foto.
+- Simpan Draft jika didukung.
+- Kirim Laporan.
+- Tandai Selesai jika diizinkan.
+
+Jangan tampilkan tindakan yang melampaui hak akses Installer.
+
+7.3 Pengalaman mobile
+
+Fullview harus dioptimalkan untuk smartphone Android.
+
+Ketentuan:
+
+- Gunakan hampir seluruh area konten yang tersedia.
+- Hindari modal sempit.
+- Hindari horizontal overflow.
+- Gunakan satu kolom untuk informasi utama pada layar kecil.
+- Gunakan tombol yang mudah disentuh.
+- Tempatkan action utama pada posisi yang mudah dijangkau.
+- Pastikan keyboard tidak menutupi field laporan.
+- Pertahankan tombol kembali yang jelas.
+- Tampilkan loading dan status penyimpanan.
+- Berikan konfirmasi jika pengguna meninggalkan halaman dengan perubahan yang belum disimpan.
+
+Jika aplikasi menggunakan routing, pertimbangkan URL detail ticket tersendiri agar ticket dapat dibuka dan dimuat ulang secara konsisten sesuai sesi dan hak akses.
+
+Jangan mengandalkan data dari state frontend saja untuk memuat ticket. Ambil kembali data melalui backend dan validasi akses pengguna.
+
+---
+
+8. MENU DATABASE MANAGEMENT
+
+8.1 Tujuan
+
+Tambahkan menu khusus bernama:
+
+"Database Management"
+
+Menu ini digunakan untuk mengelola data aplikasi secara terpusat.
+
+Menu harus terpisah dari halaman operasional WO agar pengelolaan database tidak mengganggu workflow Leader dan Installer.
+
+Hanya role dengan permission database management yang boleh membuka menu ini.
+
+Secara default, berikan akses kepada Super Agent atau role administrator yang secara eksplisit diizinkan.
+
+Jangan otomatis memberikan akses database penuh kepada Leader atau Installer.
+
+8.2 Submenu Database Management
+
+Buat submenu berikut berdasarkan struktur data aktual aplikasi.
+
+A. Database Overview
+
+Tampilkan ringkasan:
+
+- Total WO.
+- Total WO aktif.
+- Total WO selesai.
+- Total akun staff.
+- Total Installer.
+- Total Leader.
+- Total kontraktor.
+- Total data yang memerlukan pemeriksaan.
+- Total duplikasi yang terdeteksi.
+- Status proses impor terakhir.
+
+Gunakan data aktual dari backend.
+
+B. WO Database
+
+Fitur:
+
+- Melihat daftar WO.
+- Mencari WO berdasarkan WO Number.
+- Memfilter Appointment Date.
+- Memfilter kontraktor.
+- Memfilter area.
+- Memfilter status.
+- Melihat detail WO.
+- Memeriksa relasi WO dengan Installer.
+- Memeriksa relasi WO dengan Leader.
+- Memperbaiki data yang tidak valid sesuai permission.
+- Melihat histori perubahan.
+- Mengarsipkan atau menonaktifkan data jika workflow mendukungnya.
+
+WO Number tidak boleh dapat diubah sembarangan karena merupakan identitas utama ticket.
+
+Jika perubahan WO Number memang diperlukan, sediakan proses khusus dengan validasi, audit log, dan pemeriksaan relasi.
+
+C. Import History
+
+Tampilkan riwayat impor dengan informasi:
+
+- Waktu impor.
+- Nama file.
+- Pengguna yang mengimpor.
+- Jumlah baris.
+- Jumlah WO baru.
+- Jumlah WO yang diperbarui.
+- Jumlah duplikasi.
+- Jumlah baris gagal.
+- Status proses.
+- Detail error.
+
+Sediakan akses ke laporan impor untuk membantu admin memperbaiki mapping dan validasi data.
+
+D. Duplicate Checker
+
+Buat halaman khusus untuk pemeriksaan duplikasi.
+
+Fitur:
+
+- Mendeteksi WO Number yang duplikat.
+- Memeriksa duplikasi dalam file impor.
+- Memeriksa konflik dengan database.
+- Menampilkan sumber data.
+- Menampilkan waktu pembuatan atau impor.
+- Menampilkan relasi laporan dan penugasan.
+- Memberikan rekomendasi tindakan.
+
+Jangan otomatis menghapus salah satu record duplikat.
+
+Sebelum melakukan rekonsiliasi, periksa relasi laporan, penugasan, percakapan, dan histori.
+
+Jika beberapa record harus digabungkan, gunakan prosedur rekonsiliasi yang mempertahankan riwayat penting.
+
+E. Data Validation
+
+Buat pemeriksaan kualitas data, termasuk:
+
+- WO Number kosong.
+- Appointment Date kosong.
+- Appointment Date tidak valid.
+- Field wajib tidak lengkap.
+- Customer ID tidak sesuai aturan validasi aplikasi.
+- Relasi Installer tidak valid.
+- Relasi Leader atau kontraktor tidak valid.
+- WO yang memiliki status tidak konsisten.
+- Field impor yang tidak berhasil dipetakan.
+
+Setiap temuan harus memiliki:
+
+- Jenis masalah.
+- WO Number atau identitas record.
+- Field terkait.
+- Nilai saat ini.
+- Penjelasan masalah.
+- Rekomendasi perbaikan.
+- Tombol tindakan jika pengguna memiliki permission.
+
+F. Data Archive
+
+Sediakan fitur arsip apabila struktur aplikasi mendukungnya.
+
+Arsip harus berbeda dari penghapusan permanen.
+
+Ketentuan:
+
+- Data arsip tidak ditampilkan sebagai WO aktif.
+- Data tetap dapat ditelusuri oleh role berwenang.
+- Riwayat laporan tetap terhubung.
+- Arsip tidak boleh menyebabkan WO Number yang sama dapat dibuat ulang tanpa kebijakan yang jelas.
+- Pengembalian dari arsip harus memeriksa kemungkinan duplikasi.
+- Kebijakan retensi harus dapat dikonfigurasi sesuai kebutuhan bisnis.
+
+Jangan membuat penghapusan otomatis hanya berdasarkan asumsi umur data.
+
+G. Database Audit Log
+
+Catat tindakan penting:
+
+- Impor WO.
+- Pembaruan WO.
+- Perubahan Appointment Date.
+- Penugasan Installer.
+- Perubahan kontraktor atau area.
+- Perubahan status.
+- Pengarsipan.
+- Rekonsiliasi duplikasi.
+- Penghapusan jika secara resmi diizinkan.
+- Login staff.
+- Logout staff.
+- Perubahan role atau permission.
+- Aktivasi atau penonaktifan akun staff.
+- Reset password atau perubahan kredensial.
+
+Simpan informasi:
+
+- Pengguna.
+- Waktu.
+- Jenis tindakan.
+- Record terkait.
+- Nilai sebelum perubahan jika tersedia dan aman disimpan.
+- Nilai sesudah perubahan.
+- Alasan tindakan apabila diwajibkan.
+
+Audit log tidak boleh dapat diubah oleh role operasional biasa.
+
+---
+
+9. KEAMANAN DATABASE MANAGEMENT DAN AUTENTIKASI
+
+Database Management adalah fitur administrasi aplikasi, bukan akses bebas ke database server.
+
+Jangan mengekspos koneksi database, kredensial, atau query SQL mentah ke frontend.
+
+Semua tindakan harus menggunakan API backend yang tervalidasi.
+
+Ketentuan keamanan:
+
+1. Validasi autentikasi.
+2. Validasi permission.
+3. Validasi input.
+4. Gunakan parameterized query atau ORM yang aman.
+5. Terapkan transaksi untuk operasi yang memerlukan konsistensi.
+6. Terapkan audit log.
+7. Terapkan pagination untuk data besar.
+8. Jangan mengirim semua data database ke browser sekaligus.
+9. Lindungi data pelanggan.
+10. Batasi ekspor berdasarkan permission.
+11. Jangan menampilkan password, token, atau secret.
+12. Jangan menghapus data permanen tanpa konfirmasi dan otorisasi.
+13. Jangan menyediakan eksekusi SQL bebas melalui browser.
+14. Simpan password staff menggunakan hashing yang aman.
+15. Terapkan validasi sesi pada setiap endpoint terlindungi.
+16. Invalidasi sesi saat logout jika mekanisme backend mendukungnya.
+17. Jangan mempercayai role atau permission yang dikirim dari frontend.
+18. Lindungi endpoint login dari percobaan berulang jika infrastruktur aplikasi mendukungnya.
+19. Jangan menyimpan kredensial dalam source code.
+20. Pastikan halaman terlindungi tidak dapat diakses setelah logout atau sesi kedaluwarsa.
+
+Jika aplikasi menggunakan PostgreSQL, gunakan migrasi yang aman dan constraint pada database.
+
+Jika aplikasi menggunakan database lain, sesuaikan implementasi dengan teknologi yang benar-benar dipakai.
+
+Jangan mengganti database hanya untuk mengimplementasikan menu ini.
+
+---
+
+10. INTEGRASI ANTARFITUR
+
+Pastikan seluruh perubahan terhubung.
+
+Contoh alur:
+
+1. Staff membuka portal login khusus.
+2. Sistem memvalidasi akun staff yang sudah terdaftar.
+3. Sistem memuat role, permission, kontraktor, area, dan cakupan akses dari backend.
+4. Staff diarahkan ke dashboard sesuai role.
+5. Super Agent mengimpor data WO.
+6. Sistem memvalidasi Appointment Date.
+7. Sistem memeriksa WO Number.
+8. WO baru disimpan jika valid dan tidak duplikat.
+9. Data WO dikelompokkan berdasarkan kontraktor, area, dan jadwal.
+10. Leader melihat WO yang sesuai dengan cakupan aksesnya.
+11. Leader melakukan penugasan kepada Installer.
+12. Installer melihat WO yang ditugaskan dan sesuai jadwal.
+13. Installer membuka ticket dalam Fullview.
+14. Installer memperbarui progres atau mengirim laporan.
+15. Dashboard Leader menampilkan perubahan setelah backend mengonfirmasi.
+16. Database Management menyimpan riwayat impor dan tindakan administratif yang relevan.
+17. Staff dapat melakukan logout.
+18. Setelah logout, akses ke halaman terlindungi ditolak sampai staff login kembali.
+
+Jangan membuat setiap modul memiliki salinan data WO yang berbeda.
+
+Gunakan satu record utama WO dan relasi yang sesuai untuk:
+
+- Penugasan.
+- Laporan.
+- Riwayat status.
+- Percakapan.
+- Lampiran.
+- Audit log.
+
+Jika aplikasi sudah memiliki struktur yang setara, gunakan struktur yang tersedia.
+
+---
+
+11. STANDAR UI DAN UX
+
+Gunakan tampilan admin dashboard yang rapi dan konsisten.
+
+Terapkan:
+
+- Portal login staff yang jelas dan responsif.
+- Informasi akun staff yang sedang login.
+- Opsi Logout yang mudah ditemukan.
+- Garis tepi ticket yang jelas.
+- Hierarki informasi yang mudah dibaca.
+- Badge status yang konsisten.
+- Tombol WhatsApp dekat nomor telepon.
+- Layout Fullview Installer yang responsif.
+- Filter jadwal yang mudah ditemukan.
+- Empty state untuk jadwal tanpa WO.
+- Loading state untuk permintaan data.
+- Error state dengan penjelasan yang jelas.
+- Konfirmasi sebelum tindakan yang berisiko.
+- Notifikasi keberhasilan atau kegagalan.
+- Pengaturan kolom jika tabel membutuhkan banyak field.
+
+Jangan membuat seluruh halaman melebar hanya karena satu kolom alamat panjang.
+
+Jangan membiarkan tombol action menutupi konten.
+
+Jangan menghilangkan informasi penting demi desain yang terlalu minimalis.
+
+---
+
+12. PENGUJIAN WAJIB
+
+Lakukan pengujian sebelum menyatakan update selesai.
+
+Test 1 — Role-based visibility
+
+- Login sebagai Super Agent.
+- Login sebagai Dispatch.
+- Login sebagai Leader.
+- Login sebagai Installer.
+
+Pastikan setiap role hanya melihat data sesuai permission dan cakupannya.
+
+Test 2 — Portal login staff
+
+Uji:
+
+- Login menggunakan akun staff yang valid.
+- Login menggunakan password salah.
+- Login menggunakan akun tidak terdaftar.
+- Login menggunakan akun nonaktif.
+- Login menggunakan input kosong.
+- Akses langsung ke halaman terlindungi tanpa login.
+- Pengarahan ke dashboard sesuai role.
+- Sesi kedaluwarsa.
+- Akses setelah logout.
+- Percobaan membuka detail WO setelah logout.
+
+Pastikan hanya staff yang terdaftar dan aktif yang dapat masuk.
+
+Test 3 — Logout
+
+Pastikan:
+
+- Tombol Logout terlihat sesuai role dan perangkat.
+- Sesi lokal dibersihkan.
+- Sesi backend diinvalidasi jika didukung.
+- Pengguna diarahkan ke portal login.
+- Tombol Back tidak membuka kembali halaman terlindungi.
+- Data sensitif tidak tertinggal di state frontend.
+- Pengguna harus login kembali untuk mengakses aplikasi.
+
+Test 4 — Appointment Date
+
+Buat data pengujian dengan tanggal Appointment Date berbeda.
+
+Pastikan:
+
+- WO hari ini masuk kategori hari ini.
+- WO besok masuk kategori besok.
+- WO mendatang tidak muncul dalam kategori hari ini.
+- WO dengan tanggal tidak valid masuk kategori pemeriksaan.
+- Installer hanya melihat WO yang ditugaskan dan sesuai filter jadwal.
+
+Test 5 — Duplicate WO Number
+
+Uji:
+
+- WO Number yang sama dalam satu file.
+- WO Number yang sudah ada di database.
+- WO Number kosong.
+- Dua proses impor bersamaan.
+- Update WO yang sudah ada.
+
+Pastikan tidak ada dua record utama aktif dengan WO Number yang sama.
+
+Test 6 — WhatsApp URL
+
+Pastikan:
+
+- Tombol berada di sebelah informasi kontak.
+- Nomor pelanggan yang digunakan benar.
+- Nomor kosong ditangani dengan aman.
+- Pesan menggunakan template yang sesuai.
+- Tampilan mobile tidak berantakan.
+
+Test 7 — Installer Fullview
+
+Pastikan:
+
+- Ticket terbuka pada tampilan penuh.
+- Seluruh field penting dapat dibaca.
+- Form laporan dapat digunakan.
+- Foto dapat ditampilkan atau diunggah jika fitur tersebut tersedia.
+- Perubahan status tersimpan.
+- Tombol kembali bekerja.
+- Ticket milik Installer lain tidak dapat diakses.
+
+Test 8 — Database Management
+
+Pastikan:
+
+- Permission bekerja.
+- Pencarian dan filter berjalan.
+- Data impor dapat ditelusuri.
+- Duplicate Checker memberikan hasil yang benar.
+- Operasi administratif tercatat.
+- Penghapusan tidak terjadi tanpa otorisasi.
+- Data yang direkonsiliasi tetap memiliki relasi laporan yang benar.
+
+Test 9 — Regression
+
+Pastikan login, logout, distribusi WO, manual assignment, laporan Installer, filter tanggal, ekspor, dan fitur yang sudah ada tetap berjalan.
+
+---
+
+13. INSTRUKSI EKSEKUSI DI GOOGLE AI STUDIO
+
+Jangan berhenti pada penjelasan atau pemberian contoh kode.
+
+Lakukan perubahan pada proyek yang benar-benar tersedia.
+
+Urutan implementasi:
+
+TAHAP 1 — AUDIT
+
+- Baca struktur proyek.
+- Identifikasi frontend, backend, database, dan API.
+- Identifikasi role.
+- Identifikasi field Appointment Date.
+- Identifikasi WO Number.
+- Identifikasi komponen ticket.
+- Identifikasi mekanisme impor dan penugasan.
+- Identifikasi tabel atau koleksi akun staff.
+- Identifikasi sistem autentikasi yang sudah tersedia.
+- Identifikasi mekanisme sesi, token, dan logout.
+- Identifikasi permission untuk setiap role.
+
+TAHAP 2 — PEMETAAN
+
+- Petakan field sumber dan tujuan.
+- Petakan hak akses masing-masing role.
+- Petakan aturan jadwal.
+- Petakan status WO.
+- Petakan relasi database.
+- Petakan field login staff.
+- Petakan status akun staff.
+- Petakan role dan permission.
+- Tentukan migrasi yang dibutuhkan.
+
+TAHAP 3 — IMPLEMENTASI
+
+- Terapkan portal login staff menggunakan data staff yang sudah terdaftar.
+- Terapkan validasi sesi dan permission.
+- Tambahkan opsi logout.
+- Terapkan role-based data filtering.
+- Terapkan Appointment Date filtering.
+- Terapkan pencegahan duplikasi.
+- Ubah posisi tombol WhatsApp.
+- Perbaiki desain ticket.
+- Implementasikan Fullview Installer.
+- Tambahkan Database Management.
+- Tambahkan audit log untuk aktivitas autentikasi dan administrasi.
+
+TAHAP 4 — VALIDASI
+
+- Jalankan migrasi jika diperlukan.
+- Jalankan aplikasi.
+- Periksa error.
+- Jalankan pengujian login.
+- Jalankan pengujian logout.
+- Jalankan pengujian akses tanpa autentikasi.
+- Jalankan pengujian akses berdasarkan role.
+- Jalankan pengujian impor.
+- Jalankan pengujian duplikasi.
+- Jalankan pengujian jadwal.
+- Jalankan pengujian tampilan mobile.
+- Jalankan regression test.
+
+TAHAP 5 — LAPORAN
+
+Laporkan:
+
+- File yang diubah.
+- Komponen baru.
+- API yang diubah.
+- Migrasi database.
+- Sistem autentikasi yang digunakan.
+- Sumber data akun staff.
+- Aturan sesi dan logout.
+- Aturan visibilitas WO per role.
+- Aturan Appointment Date.
+- Strategi pencegahan duplikasi.
+- Fitur Database Management yang selesai.
+- Hasil pengujian login dan logout.
+- Hasil pengujian akses role.
+- Hasil pengujian lainnya.
+- Error yang masih ditemukan.
+- Fitur yang belum selesai.
+
+Jika suatu fitur memerlukan backend atau database yang belum tersedia, jelaskan keterbatasannya dan implementasikan bagian yang dapat dikerjakan tanpa membuat data palsu.
+
+Jangan menyatakan bahwa perubahan sudah berhasil jika belum diuji.
+
+TARGET AKHIR
+
+Aplikasi MoraJaws harus memiliki portal login khusus staff yang menggunakan data akun staff terdaftar, opsi logout yang aman, pengelolaan WO yang konsisten, penjadwalan berdasarkan Appointment Date, satu record utama untuk setiap WO Number, tampilan ticket yang lebih jelas, pengalaman Fullview yang optimal bagi Installer, tombol WhatsApp yang mudah dijangkau, serta menu Database Management yang aman dan terintegrasi.
+
+Seluruh sistem harus tetap mengikuti role, permission, kontraktor, area, autentikasi, sesi, dan workflow aplikasi yang sudah berlaku.
