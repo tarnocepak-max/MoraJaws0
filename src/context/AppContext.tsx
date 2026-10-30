@@ -65,8 +65,18 @@ import {
   saveTemplateToFirestore,
   deleteTemplateFromFirestore,
   saveUserToFirestore,
-  seedFirestoreIfEmpty
+  seedFirestoreIfEmpty,
+  saveGlobalAppSettingsToFirestore,
+  loadGlobalAppSettingsFromFirestore
 } from '../services/firestoreDb';
+import { getJakartaDateString, getJakartaDateParts, getTicketAppointmentDate } from '../services/appointmentDateParser';
+import {
+  normalizeWoNumber,
+  isValidWoNumber,
+  getDeterministicTicketId,
+  validateAndDeduplicateImportBatch,
+  deduplicateTicketsInMemory
+} from '../services/woDeduplicationService';
 
 interface AppContextType {
   // Current user & RBAC
@@ -833,7 +843,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('morajaws_operational_date');
       if (saved) return saved;
     } catch (e) {}
-    return '2026-10-28';
+    return getJakartaDateString(0);
   });
 
   const setOperationalDate = (date: string) => {
@@ -841,6 +851,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       localStorage.setItem('morajaws_operational_date', date);
     } catch (e) {}
+    saveGlobalAppSettingsToFirestore({ operationalDate: date }).catch(() => {});
     fetch('/api/system/operational-date', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2025,10 +2036,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const createTicket = (data: Omit<Ticket, 'id' | 'createdAt' | 'updatedAt' | 'isArchived'>): Ticket => {
-    const newId = 't-' + Date.now();
+    const rawWo = data.woNumber || (data as any).workOrderNumber || '';
+    const normWo = normalizeWoNumber(rawWo);
+
+    if (!normWo || !isValidWoNumber(normWo)) {
+      toast.error('Gagal membuat WO: Nomor WO tidak valid atau kosong.', 'Validasi Gagal');
+      throw new Error(`Nomor WO "${rawWo}" tidak valid.`);
+    }
+
+    // Check if WO already exists in current state
+    const existing = tickets.find(t => normalizeWoNumber(t.woNumber || (t as any).workOrderNumber) === normWo);
+    if (existing) {
+      toast.warning(`Work Order ${normWo} sudah terdaftar di database. Duplikasi dicegah.`, 'Duplikasi Dicegah');
+      return existing;
+    }
+
+    const deterministicId = getDeterministicTicketId(normWo);
     const created: Ticket = {
       ...data,
-      id: newId,
+      id: deterministicId,
+      woNumber: normWo,
+      workOrderNumber: normWo,
       isArchived: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -2044,7 +2072,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser.role
     );
 
-    setTickets(prev => [processed, ...prev]);
+    setTickets(prev => deduplicateTicketsInMemory([processed, ...prev]));
     saveTicketToFirestore(processed).catch(e => console.warn('[Firestore] Error saving created ticket:', e));
 
     if (logs.length > 0) {
@@ -2666,7 +2694,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const validCustId = custDigits.length === 7 ? custDigits : (rawCustId || '');
 
       const ticket: Ticket = {
-        id: 't-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+        id: getDeterministicTicketId(woNum),
         woNumber: woNum,
         workOrderNumber: woNum,
         idCustomer: validCustId,
@@ -2761,15 +2789,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return t;
         });
       }
-      return [...newItems, ...result];
+      return deduplicateTicketsInMemory([...newItems, ...result]);
     });
 
-    // Persist imported tickets to Cloud Firestore (Confirmed Write)
-    if (newItems.length > 0) {
-      batchSaveTicketsToFirestore(newItems)
+    // Persist imported and updated tickets to Cloud Firestore (Confirmed Write)
+    const itemsToSave = [...newItems];
+    if (updatedTicketsMap.size > 0) {
+      updatedTicketsMap.forEach((updates, upperWo) => {
+        const found = tickets.find(t => (t.woNumber || '').toUpperCase().trim() === upperWo);
+        if (found) {
+          itemsToSave.push({ ...found, ...updates });
+        }
+      });
+    }
+
+    if (itemsToSave.length > 0) {
+      batchSaveTicketsToFirestore(itemsToSave)
         .then(({ saved }) => {
           toast.success(
-            `Berhasil mengimpor ${saved} tiket baru ke Cloud Firestore${updatedCount > 0 ? ` & memperbarui ${updatedCount} tiket` : ''}.${duplicatesIgnored > 0 ? ` (${duplicatesIgnored} nomor WO duplikat ditolak)` : ''}`,
+            `Berhasil menyimpan ${saved} tiket ke Cloud Firestore${updatedCount > 0 ? ` (${newItems.length} baru, ${updatedCount} diperbarui)` : ''}.${duplicatesIgnored > 0 ? ` (${duplicatesIgnored} nomor WO duplikat ditolak)` : ''}`,
             'Import Selesai'
           );
         })

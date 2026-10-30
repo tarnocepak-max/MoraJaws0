@@ -1,7 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Ticket } from '../../types';
-import { parseAppointmentDate } from '../../services/appointmentDateParser';
+import {
+  parseAppointmentDate,
+  getJakartaDateString,
+  getJakartaDateParts,
+  getTicketAppointmentDate,
+  formatAppointmentDateDisplay
+} from '../../services/appointmentDateParser';
 import {
   Ticket as TicketIcon,
   Clock,
@@ -34,22 +40,35 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
   const [activeTab, setActiveTab] = useState<'contractors' | 'coverage_areas'>('contractors');
 
-  // Schedule Appointment Date Filtering:
-  const [scheduleDateFilter, setScheduleDateFilter] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  // Schedule Appointment Date Filtering (Asia/Jakarta WIB standard)
+  const [scheduleDateFilter, setScheduleDateFilter] = useState<string>(() => getJakartaDateString(0));
   const [scheduleFilterMode, setScheduleFilterMode] = useState<'selected_date' | 'all'>('all');
+  const [currentTimeKey, setCurrentTimeKey] = useState<string>(() => getJakartaDateString(0));
+
+  // Auto-rollover at midnight WIB
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const liveToday = getJakartaDateString(0);
+      if (liveToday !== currentTimeKey) {
+        setCurrentTimeKey(liveToday);
+        setScheduleDateFilter(prev => (prev === currentTimeKey ? liveToday : prev));
+      }
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [currentTimeKey]);
 
   // Role Scoping: Leader and Installer dashboard is strictly scoped to their contractor or area
   const isRoleRestricted = currentUser.role === 'leader' || currentUser.role === 'installer';
   const effectiveTickets = isRoleRestricted ? scopedTickets : tickets;
   const activeTickets = effectiveTickets.filter(t => !t.isArchived && !t.isDeleted);
 
-  // Filtered tickets based on role and scheduled appointment date (supports 2026-10-30 and flexible date formats)
+  // Filtered tickets based on role and scheduled appointment date
   const displayTickets: Ticket[] = useMemo<Ticket[]>(() => {
     if (scheduleFilterMode === 'selected_date') {
       return activeTickets.filter((t: Ticket) => {
-        const raw = t.appointmentDate || t.date || '';
-        const parsed = parseAppointmentDate(raw);
-        const ticketDate = parsed.date || (raw.length >= 10 ? raw.slice(0, 10) : raw.trim());
+        const ticketDate = getTicketAppointmentDate(t);
+        // Work Order tanpa tanggal jadwal harus ditangani dengan aman dan tidak boleh dianggap memiliki jadwal hari ini
+        if (!ticketDate) return false;
         return ticketDate === scheduleDateFilter;
       });
     }
@@ -62,8 +81,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
   // Scope contractors list if role is leader or installer
   const visibleContractors = isRoleRestricted && userContractor
     ? contractors.filter(c => {
-        const cName = c.name.toLowerCase().trim();
-        const cCode = c.code.toLowerCase().trim();
+        if (!c) return false;
+        const cName = (c.name || '').toLowerCase().trim();
+        const cCode = (c.code || '').toLowerCase().trim();
         return cName === userContractor || cName.includes(userContractor) || userContractor.includes(cName) || cCode === userContractor;
       })
     : contractors;
@@ -71,13 +91,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
   // Scope coverage areas list if role is leader or installer
   const visibleCoverageAreas = isRoleRestricted
     ? coverageAreas.filter(a => {
-        const aName = a.name.toLowerCase().trim();
+        if (!a) return false;
+        const aName = (a.name || '').toLowerCase().trim();
         const matchesUserArea = userArea && (aName === userArea || aName.includes(userArea) || userArea.includes(aName));
         const matchedContractorObj = contractors.find(c => {
-          const cName = c.name.toLowerCase().trim();
+          if (!c) return false;
+          const cName = (c.name || '').toLowerCase().trim();
           return cName === userContractor || cName.includes(userContractor) || userContractor.includes(cName);
         });
-        const inContractorCoverage = matchedContractorObj?.coverageAreas.some(ca => ca.toLowerCase().trim() === aName);
+        const inContractorCoverage = matchedContractorObj?.coverageAreas?.some(ca => (ca || '').toLowerCase().trim() === aName);
         return matchesUserArea || inContractorCoverage;
       })
     : coverageAreas;
@@ -130,11 +152,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
   });
 
   const filteredContractorRows = contractorRows.filter(row => {
-    const matchesSearch = row.contractor.name.toLowerCase().includes(contractorSearch.toLowerCase()) ||
-      row.contractor.code.toLowerCase().includes(contractorSearch.toLowerCase()) ||
-      (row.contractor.leaderName && row.contractor.leaderName.toLowerCase().includes(contractorSearch.toLowerCase()));
+    const searchLow = (contractorSearch || '').toLowerCase();
+    const matchesSearch = (row.contractor?.name || '').toLowerCase().includes(searchLow) ||
+      (row.contractor?.code || '').toLowerCase().includes(searchLow) ||
+      (row.contractor?.leaderName && row.contractor.leaderName.toLowerCase().includes(searchLow));
 
-    const matchesArea = selectedAreaFilter === 'ALL' || row.contractor.coverageAreas.includes(selectedAreaFilter);
+    const matchesArea = selectedAreaFilter === 'ALL' || (row.contractor?.coverageAreas || []).includes(selectedAreaFilter);
     return matchesSearch && matchesArea;
   });
 
@@ -223,72 +246,81 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
               <div className="text-xs font-bold text-[#3B1D78] dark:text-[#E9E1FF] flex items-center gap-2">
                 <span>Filter Schedule Appointment Date</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#E9E1FF] text-[#3B1D78] dark:bg-[#3B1D78] dark:text-[#E9E1FF] border border-[#D8CCF3] dark:border-[#5B35B1]">
-                  {scheduleFilterMode === 'selected_date' ? scheduleDateFilter : 'Semua Tanggal'}
+                  {scheduleFilterMode === 'selected_date' ? formatAppointmentDateDisplay(scheduleDateFilter) : 'Semua Tanggal'}
                 </span>
               </div>
               <p className="text-[11px] text-[#756B8D] dark:text-[#D8CCF3] mt-0.5">
                 {scheduleFilterMode === 'selected_date'
-                  ? `Akun Super Admin dibatasi menampilkan ${displayTickets.length} Work Order sesuai jadwal appointment date ${scheduleDateFilter}.`
-                  : `Menampilkan seluruh ${displayTickets.length} Work Order aktif dari database.`}
+                  ? `Akun Super Admin menampilkan ${displayTickets.length} Work Order sesuai jadwal appointment ${formatAppointmentDateDisplay(scheduleDateFilter)}.`
+                  : `Menampilkan seluruh ${displayTickets.length} Work Order aktif dari database (tanpa filter tanggal).`}
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                setScheduleDateFilter('2026-10-18');
-                setScheduleFilterMode('selected_date');
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                scheduleFilterMode === 'selected_date' && scheduleDateFilter === '2026-10-18'
-                  ? 'bg-[#3B1D78] text-white shadow-xs'
-                  : 'bg-[#F5F1FF] text-[#3B1D78] dark:bg-[#251247] dark:text-[#E9E1FF] border border-[#D8CCF3] dark:border-[#3B1D78] hover:bg-[#E9E1FF]'
-              }`}
-            >
-              18 Okt (Hari Ini)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setScheduleDateFilter('2026-10-19');
-                setScheduleFilterMode('selected_date');
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                scheduleFilterMode === 'selected_date' && scheduleDateFilter === '2026-10-19'
-                  ? 'bg-[#3B1D78] text-white shadow-xs'
-                  : 'bg-[#F5F1FF] text-[#3B1D78] dark:bg-[#251247] dark:text-[#E9E1FF] border border-[#D8CCF3] dark:border-[#3B1D78] hover:bg-[#E9E1FF]'
-              }`}
-            >
-              19 Okt (Besok)
-            </button>
-            <div className="flex items-center gap-1.5 bg-[#F5F1FF] dark:bg-[#251247] px-2.5 py-1 rounded-xl border border-[#D8CCF3] dark:border-[#3B1D78]">
-              <span className="text-[10.5px] text-[#756B8D] font-medium">Pilih:</span>
-              <input
-                type="date"
-                value={scheduleDateFilter}
-                onChange={e => {
-                  if (e.target.value) {
-                    setScheduleDateFilter(e.target.value);
+          {(() => {
+            const todayWib = getJakartaDateString(0);
+            const tomorrowWib = getJakartaDateString(1);
+            const todayParts = getJakartaDateParts(0);
+            const tomorrowParts = getJakartaDateParts(1);
+
+            return (
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScheduleDateFilter(todayWib);
                     setScheduleFilterMode('selected_date');
-                  }
-                }}
-                className="bg-transparent text-xs font-bold font-mono text-[#3B1D78] dark:text-[#E9E1FF] focus:outline-none"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setScheduleFilterMode(prev => prev === 'all' ? 'selected_date' : 'all')}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
-                scheduleFilterMode === 'all'
-                  ? 'bg-[#5B35B1] text-white border-[#5B35B1]'
-                  : 'text-[#756B8D] dark:text-[#D8CCF3] border-[#D8CCF3] dark:border-[#3B1D78] hover:bg-[#E9E1FF]/50'
-              }`}
-            >
-              {scheduleFilterMode === 'all' ? 'Aktifkan Filter Jadwal' : 'Semua Tanggal'}
-            </button>
-          </div>
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    scheduleFilterMode === 'selected_date' && scheduleDateFilter === todayWib
+                      ? 'bg-[#3B1D78] text-white shadow-xs'
+                      : 'bg-[#F5F1FF] text-[#3B1D78] dark:bg-[#251247] dark:text-[#E9E1FF] border border-[#D8CCF3] dark:border-[#3B1D78] hover:bg-[#E9E1FF]'
+                  }`}
+                >
+                  Hari Ini ({todayParts.labelShort})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScheduleDateFilter(tomorrowWib);
+                    setScheduleFilterMode('selected_date');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    scheduleFilterMode === 'selected_date' && scheduleDateFilter === tomorrowWib
+                      ? 'bg-[#3B1D78] text-white shadow-xs'
+                      : 'bg-[#F5F1FF] text-[#3B1D78] dark:bg-[#251247] dark:text-[#E9E1FF] border border-[#D8CCF3] dark:border-[#3B1D78] hover:bg-[#E9E1FF]'
+                  }`}
+                >
+                  Besok ({tomorrowParts.labelShort})
+                </button>
+                <div className="flex items-center gap-1.5 bg-[#F5F1FF] dark:bg-[#251247] px-2.5 py-1 rounded-xl border border-[#D8CCF3] dark:border-[#3B1D78]">
+                  <span className="text-[10.5px] text-[#756B8D] font-medium">Pilih:</span>
+                  <input
+                    type="date"
+                    value={scheduleDateFilter}
+                    onChange={e => {
+                      if (e.target.value) {
+                        setScheduleDateFilter(e.target.value);
+                        setScheduleFilterMode('selected_date');
+                      }
+                    }}
+                    className="bg-transparent text-xs font-bold font-mono text-[#3B1D78] dark:text-[#E9E1FF] focus:outline-none cursor-pointer"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setScheduleFilterMode(prev => prev === 'all' ? 'selected_date' : 'all')}
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                    scheduleFilterMode === 'all'
+                      ? 'bg-[#5B35B1] text-white border-[#5B35B1] shadow-xs'
+                      : 'text-[#756B8D] dark:text-[#D8CCF3] border-[#D8CCF3] dark:border-[#3B1D78] hover:bg-[#E9E1FF]/50'
+                  }`}
+                >
+                  {scheduleFilterMode === 'all' ? 'Aktifkan Filter Jadwal' : 'Semua Tanggal'}
+                </button>
+              </div>
+            );
+          })()}
         </div>
       )}
 

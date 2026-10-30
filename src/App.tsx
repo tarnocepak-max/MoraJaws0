@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { UIConfigProvider, useUIConfig } from './context/UIConfigContext';
 import { ToastProvider } from './context/ToastContext';
+import { AnimationProvider } from './context/AnimationContext';
 import { OfflineSyncProvider } from './context/OfflineSyncContext';
 
 import { Header } from './components/layout/Header';
@@ -320,13 +321,15 @@ const MainLayout: React.FC = () => {
 export default function App() {
   return (
     <ToastProvider>
-      <OfflineSyncProvider>
-        <AppProvider>
-          <UIConfigProvider>
-            <MainLayout />
-          </UIConfigProvider>
-        </AppProvider>
-      </OfflineSyncProvider>
+      <AnimationProvider>
+        <OfflineSyncProvider>
+          <AppProvider>
+            <UIConfigProvider>
+              <MainLayout />
+            </UIConfigProvider>
+          </AppProvider>
+        </OfflineSyncProvider>
+      </AnimationProvider>
     </ToastProvider>
   );
 }

@@ -21,6 +21,7 @@ import {
   KeyRound
 } from 'lucide-react';
 import { ShieldAlert } from 'lucide-react';
+import { getJakartaDateString } from '../../services/appointmentDateParser';
 
 export const SystemSettings: React.FC = () => {
   const {
@@ -831,14 +832,14 @@ export const SystemSettings: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    const realDate = '2026-10-28';
+                    const realDate = getJakartaDateString(0);
                     setOperationalDateInput(realDate);
                     setOperationalDate(realDate);
-                    triggerNotice(`Tanggal operasional di-reset ke baseline: ${realDate}`);
+                    triggerNotice(`Tanggal operasional di-reset ke tanggal hari ini (WIB): ${realDate}`);
                   }}
                   className="px-3 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
                 >
-                  Reset Baseline (28 Okt 2026)
+                  Reset Hari Ini (Aktual WIB)
                 </button>
               </div>
             </div>

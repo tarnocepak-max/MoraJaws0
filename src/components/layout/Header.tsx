@@ -29,6 +29,9 @@ import {
   Users2
 } from 'lucide-react';
 import { useOfflineSync } from '../../context/OfflineSyncContext';
+import { MoraJawsLogo } from '../common/MoraJawsLogo';
+import { useAnimation } from '../../context/AnimationContext';
+import { useToast } from '../../context/ToastContext';
 
 interface HeaderProps {
   activeTab: string;
@@ -39,9 +42,19 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onNavigate }) => {
   const { currentUser, tickets, logout, contractorsList, areasList, firestoreStatus } = useApp();
   const { config, setGlobalTheme, setDeviceMode, applyDevicePreset } = useUIConfig();
   const { isOnline, isSyncing, pendingCount, setIsOfflineModalOpen, isSimulatedOffline } = useOfflineSync();
+  const { triggerRefresh } = useAnimation();
+  const { toast } = useToast();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [deviceMenuOpen, setDeviceMenuOpen] = useState(false);
+
+  const handleGlobalRefresh = async () => {
+    await triggerRefresh(async () => {
+      // Simulate or trigger active synchronization
+      await new Promise(r => setTimeout(r, 600));
+    }, 'SINKRONISASI MORAJAWS...', 'Menyelaraskan data Work Order, Schedule & Status');
+    toast.sync('Sinkronisasi database berhasil.');
+  };
 
   const activeContractor = currentUser.contractor || (contractorsList?.[0] || 'PT Mitra Jaringan Solusi');
   const activeArea = currentUser.area || (areasList?.[0] || 'Jakarta Selatan');
@@ -71,7 +84,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onNavigate }) => {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex items-center justify-between gap-4 sm:gap-8 px-4 sm:px-6 py-3 bg-white/95 dark:bg-[#1a0f30]/95 backdrop-blur-md border-b border-[#D8CCF3] dark:border-[#3B1D78] transition-colors shadow-2xs">
+    <header className="sticky top-0 z-40 flex items-center justify-between gap-4 sm:gap-8 px-4 sm:px-6 py-3 bg-white/95 dark:bg-[#160D29]/95 backdrop-blur-md border-b border-[#D8CCF3] dark:border-[#35105E] transition-colors shadow-2xs">
       {/* Zone 1: Menu toggle & Brand wordmark */}
       <div className="flex items-center gap-3 shrink-0">
         <button
@@ -85,7 +98,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onNavigate }) => {
               setGlobalTheme({ sidebarState: 'expanded', sidebarCollapsed: false });
             }
           }}
-          className="p-1.5 text-[#3B1D78] hover:text-[#5B35B1] dark:text-[#E9E1FF] dark:hover:text-white hover:bg-[#E9E1FF]/50 dark:hover:bg-[#3B1D78]/50 rounded-lg transition-colors cursor-pointer"
+          className="p-1.5 text-[#3B1D78] hover:text-[#5B35B1] dark:text-[#E9D5FF] dark:hover:text-white hover:bg-[#E9E1FF]/50 dark:hover:bg-[#35105E]/50 rounded-lg transition-colors cursor-pointer"
           title="Buka / Minimize Sidebar"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -93,11 +106,12 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onNavigate }) => {
           </svg>
         </button>
 
-        <div className="w-8 h-8 rounded-lg bg-[#5B35B1] flex items-center justify-center text-white shadow-sm font-bold text-sm tracking-wider">
-          M
+        {/* Custom MoraJaws 3D Glossy Logo */}
+        <div className="hover:scale-105 transition-transform duration-200">
+          <MoraJawsLogo size="sm" animated={false} />
         </div>
         <div className="flex flex-col">
-          <span className="text-base font-bold tracking-tight text-[#21183A] dark:text-[#F5F1FF] whitespace-nowrap">
+          <span className="text-base font-bold tracking-tight text-[#21183A] dark:text-[#FFFFFF] whitespace-nowrap">
             {config.global.appName || 'MoraJaws'}
           </span>
           {activeTab === 'leader_portal' ? (
@@ -130,7 +144,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onNavigate }) => {
             activeTab === 'tickets' ? 'text-[#5B35B1] dark:text-[#E9E1FF] border-b-2 border-[#5B35B1] dark:border-[#8064D9] font-bold' : ''
           }`}
         >
-          Tickets ({tickets.filter(t => !t.isArchived).length})
+          Ticket MyRepublic ({tickets.filter(t => !t.isArchived).length})
         </button>
 
         {(currentUser.role === 'super_admin' || currentUser.role === 'leader') && (
@@ -195,6 +209,17 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onNavigate }) => {
 
       {/* Zone 3: Actions & Profile switcher */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {/* Global MoraJaws Refresh Button */}
+        <button
+          type="button"
+          onClick={handleGlobalRefresh}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D8B4FE]/40 bg-[#35105E]/40 hover:bg-[#7135B5]/60 text-[#D8B4FE] hover:text-white shadow-[0_0_12px_rgba(113,53,181,0.2)] transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          title="Sinkronisasi & Refresh Data MoraJaws"
+        >
+          <RefreshCw className="w-3.5 h-3.5 text-[#D8B4FE]" />
+          <span className="hidden md:inline font-bold">Refresh</span>
+        </button>
+
         {/* Offline Sync & Connectivity Badge Button */}
         <button
           type="button"

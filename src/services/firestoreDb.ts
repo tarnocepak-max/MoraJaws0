@@ -21,8 +21,10 @@ import {
   TicketMessage,
   AuditLog,
   WhatsAppTemplate,
-  User
+  User,
+  UIConfiguration
 } from '../types/index.ts';
+import { deduplicateTicketsInMemory, getDeterministicTicketId, normalizeWoNumber } from './woDeduplicationService';
 
 // Collection path constants
 export const COLLECTIONS = {
@@ -33,18 +35,49 @@ export const COLLECTIONS = {
   MESSAGES: 'ticket_messages',
   AUDIT_LOGS: 'audit_logs',
   WA_TEMPLATES: 'wa_templates',
+  APP_SETTINGS: 'appSettings',
   HEALTH: 'system_health'
 } as const;
 
 // -------------------------------------------------------------
 // Data Sanitizer (Removes undefined fields which Firestore rejects)
 // -------------------------------------------------------------
-function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
+function sanitizeForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return obj;
+  if (obj instanceof Date) return obj.toISOString();
+
+  if (Array.isArray(obj)) {
+    return (obj as any[])
+      .filter(item => item !== undefined)
+      .map(item => {
+        if (item !== null && typeof item === 'object' && !(item instanceof Date)) {
+          return sanitizeForFirestore(item);
+        }
+        if (item instanceof Date) return item.toISOString();
+        return item;
+      }) as any;
+  }
+
   const result: Record<string, any> = {};
   for (const [key, val] of Object.entries(obj)) {
     if (val === undefined) continue;
-    if (val !== null && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
-      result[key] = sanitizeForFirestore(val);
+    if (val instanceof Date) {
+      result[key] = val.toISOString();
+    } else if (val !== null && typeof val === 'object') {
+      if (Array.isArray(val)) {
+        result[key] = (val as any[])
+          .filter(item => item !== undefined)
+          .map(item => {
+            if (item !== null && typeof item === 'object' && !(item instanceof Date)) {
+              return sanitizeForFirestore(item);
+            }
+            if (item instanceof Date) return item.toISOString();
+            return item;
+          });
+      } else {
+        result[key] = sanitizeForFirestore(val);
+      }
     } else {
       result[key] = val;
     }
@@ -76,11 +109,14 @@ export function subscribeToMoraJawsFirestore(callbacks: FirestoreSubscriptionCal
       const unsub = onSnapshot(
         ticketsRef,
         (snapshot) => {
-          const tickets: Ticket[] = [];
+          const rawTickets: Ticket[] = [];
           snapshot.forEach((docSnap) => {
-            tickets.push(docSnap.data() as Ticket);
+            const data = docSnap.data() as Ticket;
+            if (!data.id) data.id = docSnap.id;
+            rawTickets.push(data);
           });
-          callbacks.onTicketsChange?.(tickets);
+          const deduplicated = deduplicateTicketsInMemory(rawTickets);
+          callbacks.onTicketsChange?.(deduplicated);
         },
         (error) => {
           console.warn('[Firestore] Tickets subscription warning:', error);
@@ -276,10 +312,11 @@ export function subscribeToMoraJawsFirestore(callbacks: FirestoreSubscriptionCal
 // Ticket Mutations (Confirmed Writes)
 // -------------------------------------------------------------
 export async function saveTicketToFirestore(ticket: Ticket): Promise<void> {
-  const path = `${COLLECTIONS.TICKETS}/${ticket.id}`;
+  const targetId = ticket.id || getDeterministicTicketId(ticket.woNumber);
+  const path = `${COLLECTIONS.TICKETS}/${targetId}`;
   try {
-    const docRef = doc(db, COLLECTIONS.TICKETS, ticket.id);
-    const sanitized = sanitizeForFirestore(ticket);
+    const docRef = doc(db, COLLECTIONS.TICKETS, targetId);
+    const sanitized = sanitizeForFirestore({ ...ticket, id: targetId });
     await setDoc(docRef, sanitized, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
@@ -291,15 +328,19 @@ export async function batchSaveTicketsToFirestore(tickets: Ticket[]): Promise<{ 
   let saved = 0;
   let failed = 0;
 
+  // Deduplicate before saving to avoid duplicate keys in the same batch
+  const uniqueTickets = deduplicateTicketsInMemory(tickets);
+
   // Process in batches of 450 (Firestore limit is 500 per batch)
   const chunkSize = 450;
-  for (let i = 0; i < tickets.length; i += chunkSize) {
-    const chunk = tickets.slice(i, i + chunkSize);
+  for (let i = 0; i < uniqueTickets.length; i += chunkSize) {
+    const chunk = uniqueTickets.slice(i, i + chunkSize);
     const batch = writeBatch(db);
 
     for (const t of chunk) {
-      const docRef = doc(db, COLLECTIONS.TICKETS, t.id);
-      batch.set(docRef, sanitizeForFirestore(t), { merge: true });
+      const targetId = t.id || getDeterministicTicketId(t.woNumber);
+      const docRef = doc(db, COLLECTIONS.TICKETS, targetId);
+      batch.set(docRef, sanitizeForFirestore({ ...t, id: targetId }), { merge: true });
     }
 
     try {
@@ -318,7 +359,168 @@ export async function batchSaveTicketsToFirestore(tickets: Ticket[]): Promise<{ 
     }
   }
 
+  if (saved === 0 && failed > 0) {
+    throw new Error(`Semua ${failed} tiket gagal disimpan ke Cloud Firestore.`);
+  }
+
   return { saved, failed };
+}
+
+// -------------------------------------------------------------
+// Global App Configuration & User Preferences (Permanent Storage)
+// -------------------------------------------------------------
+export async function saveGlobalAppSettingsToFirestore(settings: Record<string, any>): Promise<void> {
+  const path = `${COLLECTIONS.APP_SETTINGS}/global`;
+  try {
+    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'global');
+    await setDoc(docRef, {
+      ...sanitizeForFirestore(settings),
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function loadGlobalAppSettingsFromFirestore(): Promise<Record<string, any> | null> {
+  const path = `${COLLECTIONS.APP_SETTINGS}/global`;
+  try {
+    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'global');
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return snap.data();
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path);
+    return null;
+  }
+}
+
+export async function saveUserPreferencesToFirestore(userId: string, preferences: Record<string, any>): Promise<void> {
+  const path = `users/${userId}/preferences/settings`;
+  try {
+    const docRef = doc(db, 'users', userId, 'preferences', 'settings');
+    await setDoc(docRef, {
+      ...sanitizeForFirestore(preferences),
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function loadUserPreferencesFromFirestore(userId: string): Promise<Record<string, any> | null> {
+  const path = `users/${userId}/preferences/settings`;
+  try {
+    const docRef = doc(db, 'users', userId, 'preferences', 'settings');
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return snap.data();
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path);
+    return null;
+  }
+}
+
+// -------------------------------------------------------------
+// UI Builder & Database Application Configuration (Firestore)
+// -------------------------------------------------------------
+export interface CloudUIConfigurationPayload {
+  id?: string;
+  config: UIConfiguration;
+  navigationItems: any[];
+  menuCategories: string[];
+  updatedAt: string;
+  updatedBy: string;
+  app?: string;
+  type?: string;
+  version?: number;
+}
+
+export async function saveUIConfigurationToFirestore(payload: {
+  config: UIConfiguration;
+  navigationItems: any[];
+  menuCategories: string[];
+  updatedBy?: string;
+}): Promise<{ success: boolean; updatedAt: string }> {
+  const path = `${COLLECTIONS.APP_SETTINGS}/ui_configuration`;
+  try {
+    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'ui_configuration');
+    const updatedAt = new Date().toISOString();
+    const dataToSave = sanitizeForFirestore({
+      id: 'ui_configuration',
+      config: payload.config,
+      navigationItems: payload.navigationItems,
+      menuCategories: payload.menuCategories,
+      updatedAt,
+      updatedBy: payload.updatedBy || 'Super Admin',
+      app: 'MoraJaws',
+      type: 'database_configuration_app',
+      version: Date.now()
+    });
+    await setDoc(docRef, dataToSave, { merge: true });
+
+    // Also mirror to global for backwards compatibility
+    try {
+      const globalDoc = doc(db, COLLECTIONS.APP_SETTINGS, 'global');
+      await setDoc(globalDoc, {
+        uiConfig: payload.config,
+        navigationItems: payload.navigationItems,
+        menuCategories: payload.menuCategories,
+        updatedAt,
+        updatedBy: payload.updatedBy || 'Super Admin'
+      }, { merge: true });
+    } catch {}
+
+    return { success: true, updatedAt };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+    throw error;
+  }
+}
+
+export async function loadUIConfigurationFromFirestore(): Promise<CloudUIConfigurationPayload | null> {
+  const path = `${COLLECTIONS.APP_SETTINGS}/ui_configuration`;
+  try {
+    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'ui_configuration');
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return snap.data() as CloudUIConfigurationPayload;
+    }
+    // Fallback to global
+    const globalRef = doc(db, COLLECTIONS.APP_SETTINGS, 'global');
+    const gSnap = await getDoc(globalRef);
+    if (gSnap.exists()) {
+      const gData = gSnap.data();
+      if (gData.uiConfig || gData.navigationItems) {
+        return {
+          config: gData.uiConfig,
+          navigationItems: gData.navigationItems,
+          menuCategories: gData.menuCategories || [],
+          updatedAt: gData.updatedAt || new Date().toISOString(),
+          updatedBy: gData.updatedBy || 'System'
+        };
+      }
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path);
+    return null;
+  }
+}
+
+export function subscribeToUIConfiguration(callback: (data: CloudUIConfigurationPayload) => void): Unsubscribe {
+  const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'ui_configuration');
+  return onSnapshot(docRef, (snap) => {
+    if (snap.exists()) {
+      callback(snap.data() as CloudUIConfigurationPayload);
+    }
+  }, (err) => {
+    console.warn('[Firestore] UI Configuration subscription warning:', err);
+  });
 }
 
 export async function deleteTicketFromFirestore(ticketId: string): Promise<void> {

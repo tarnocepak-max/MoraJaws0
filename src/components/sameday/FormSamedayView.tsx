@@ -14,12 +14,13 @@ import {
   FileText
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
+import { getJakartaDateString } from '../../services/appointmentDateParser';
 
 export const FormSamedayView: React.FC = () => {
   const { createTicket, contractors, coverageAreas, currentUser } = useApp();
   const { toast } = useToast();
 
-  const todayStr = '2026-10-28';
+  const todayStr = getJakartaDateString(0);
   const [woNumber, setWoNumber] = useState(`WO${Date.now().toString().slice(-8)}`);
   const [customerId, setCustomerId] = useState('');
   const [customerName, setCustomerName] = useState('');

@@ -31,11 +31,21 @@ import {
   X,
   Lock,
   MessageCircle,
-  MapPin
+  MapPin,
+  RefreshCw,
+  Ticket as TicketIcon
 } from 'lucide-react';
+import { useAnimation } from '../../context/AnimationContext';
+import { useToast } from '../../context/ToastContext';
 import { openCustomerAddressInGoogleMaps } from '../../services/mapsService';
 import { SuperAdminDeleteModal } from '../common/SuperAdminDeleteModal';
-import { parseAppointmentDate } from '../../services/appointmentDateParser';
+import {
+  parseAppointmentDate,
+  getJakartaDateString,
+  getJakartaDateParts,
+  getTicketAppointmentDate,
+  formatAppointmentDateDisplay
+} from '../../services/appointmentDateParser';
 
 interface TicketsTableProps {
   onSelectTicket: (ticket: Ticket, defaultTab?: 'overview' | 'report' | 'chat' | 'history') => void;
@@ -45,6 +55,8 @@ interface TicketsTableProps {
 export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOpenWhatsApp }) => {
   const { tickets, currentUser, archiveTicket, restoreTicket, assignTicketPersonnel, leadersList, installersList, bulkDeleteTickets, getTicketUnreadCount } = useApp();
   const { config, setColumnVisibility, applyPreset, isMobileView, updateAndroidSettings } = useUIConfig();
+  const { triggerRefresh } = useAnimation();
+  const { toast } = useToast();
 
   // Layout mode: 'cards' or 'table'
   const [layoutMode, setLayoutMode] = useState<'cards' | 'table' | 'auto'>('auto');
@@ -135,27 +147,35 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
 
   // Filtering
   const filteredTickets = useMemo(() => {
-    return tickets.filter(t => {
+    return (tickets || []).filter(t => {
+      if (!t) return false;
+
       // Archive filter
       if (showArchived ? !t.isArchived : t.isArchived) return false;
 
       // Role-based scoping: Leader
       // Leader tidak dapat melihat keseluruhan WO leader lain dan area yang berbeda
-      if (currentUser.role === 'leader') {
+      if (currentUser?.role === 'leader') {
+        const currentLeaderName = (currentUser.name || '').trim().toLowerCase();
+        const currentLeaderArea = (currentUser.area || '').trim().toLowerCase();
+        const currentLeaderContractor = (currentUser.contractor || '').trim().toLowerCase();
+
         // Blokir jika WO sudah ditugaskan ke leader lain
-        if (t.leaderName && t.leaderName.trim() && t.leaderName.trim().toLowerCase() !== currentUser.name.trim().toLowerCase()) {
+        const tLeader = (t.leaderName || '').trim().toLowerCase();
+        if (tLeader && currentLeaderName && tLeader !== currentLeaderName) {
           return false;
         }
         // Blokir jika area tiket berbeda dengan area Leader
-        if (currentUser.area && currentUser.area.trim()) {
-          if ((t.area || '').trim().toLowerCase() !== currentUser.area.trim().toLowerCase()) {
+        if (currentLeaderArea) {
+          const tArea = (t.area || '').trim().toLowerCase();
+          if (tArea && tArea !== currentLeaderArea) {
             return false;
           }
         }
         // Blokir jika kontraktor tiket berbeda dengan kontraktor Leader
-        if (currentUser.contractor && currentUser.contractor.trim()) {
+        if (currentLeaderContractor) {
           const tCont = (t.contactorName || t.contractorName || '').trim().toLowerCase();
-          if (tCont && tCont !== currentUser.contractor.trim().toLowerCase()) {
+          if (tCont && tCont !== currentLeaderContractor) {
             return false;
           }
         }
@@ -163,16 +183,24 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
 
       // Role-based scoping: Teknisi (Installer)
       // Teknisi tidak dapat melihat keseluruhan WO leader/teknisi lain dan area yang berbeda
-      if (currentUser.role === 'installer') {
+      if (currentUser?.role === 'installer') {
+        const currentInstallerName = (currentUser.name || '').trim().toLowerCase();
+        const currentInstallerPhone = (currentUser.phone || '').trim();
+        const currentInstallerArea = (currentUser.area || '').trim().toLowerCase();
+
+        const tInstaller = (t.installerName || '').trim().toLowerCase();
+        const tContact = (t.installerContact || '').trim();
+
         const isAssignedToMe =
-          (t.installerName && t.installerName.trim().toLowerCase() === currentUser.name.trim().toLowerCase()) ||
-          (t.installerContact && currentUser.phone && t.installerContact.trim() === currentUser.phone.trim());
+          (tInstaller && currentInstallerName && tInstaller === currentInstallerName) ||
+          (tContact && currentInstallerPhone && tContact === currentInstallerPhone);
         if (!isAssignedToMe) {
           return false;
         }
         // Blokir jika area tiket berbeda dengan area Teknisi
-        if (currentUser.area && currentUser.area.trim()) {
-          if ((t.area || '').trim().toLowerCase() !== currentUser.area.trim().toLowerCase()) {
+        if (currentInstallerArea) {
+          const tArea = (t.area || '').trim().toLowerCase();
+          if (tArea && tArea !== currentInstallerArea) {
             return false;
           }
         }
@@ -190,43 +218,38 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
       if (selectedWhatsAppStatus !== 'ALL' && t.statusWhatsApp !== selectedWhatsAppStatus) return false;
       if (selectedCategory !== 'ALL' && t.ticketCategory !== selectedCategory) return false;
 
-      // Appointment Date filter (Normalized parsing handles 2026-10-30, DD/MM/YYYY, etc.)
+      // Appointment Date filter (Strict Asia/Jakarta WIB calendar date comparison)
       if (quickDatePreset !== 'all' || selectedAppointmentDate) {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const tmrDate = new Date();
-        tmrDate.setDate(tmrDate.getDate() + 1);
-        const tomorrowStr = tmrDate.toISOString().split('T')[0];
-
-        const rawDate = t.appointmentDate || t.date || '';
-        const parsed = parseAppointmentDate(rawDate);
-        const tDate = parsed.date || (rawDate.length >= 10 ? rawDate.slice(0, 10) : rawDate.trim());
+        const todayStr = getJakartaDateString(0);
+        const tomorrowStr = getJakartaDateString(1);
+        const ticketDate = getTicketAppointmentDate(t);
 
         if (quickDatePreset === 'today') {
-          if (tDate !== todayStr && tDate !== '2026-10-28') return false;
+          if (!ticketDate || ticketDate !== todayStr) return false;
         } else if (quickDatePreset === 'tomorrow') {
-          if (tDate !== tomorrowStr && tDate !== '2026-10-29') return false;
+          if (!ticketDate || ticketDate !== tomorrowStr) return false;
         } else if (quickDatePreset === 'upcoming') {
-          if (!tDate || tDate <= tomorrowStr) return false;
+          if (!ticketDate || ticketDate <= tomorrowStr) return false;
         } else if (quickDatePreset === 'past') {
-          if (!tDate || tDate >= todayStr) return false;
+          if (!ticketDate || ticketDate >= todayStr) return false;
         } else if (quickDatePreset === 'invalid') {
           // Empty or unparseable date
-          if (parsed.isValid && tDate) return false;
+          if (ticketDate) return false;
         } else if (selectedAppointmentDate) {
-          if (tDate !== selectedAppointmentDate && !tDate.startsWith(selectedAppointmentDate)) return false;
+          if (!ticketDate || (ticketDate !== selectedAppointmentDate && !ticketDate.startsWith(selectedAppointmentDate))) return false;
         }
       }
 
       // Search term match across key identifiers including ticketCategory
-      if (searchTerm.trim()) {
-        const q = searchTerm.toLowerCase();
-        const matchWo = t.woNumber.toLowerCase().includes(q);
-        const matchCust = t.customerName.toLowerCase().includes(q);
-        const matchId = t.idCustomer.toLowerCase().includes(q);
-        const matchPhone = (t.customerPhone || '').includes(q);
-        const matchInstaller = (t.installerName || '').toLowerCase().includes(q);
-        const matchCluster = (t.clusterName || '').toLowerCase().includes(q);
-        const matchCategory = (t.ticketCategory || '').toLowerCase().includes(q);
+      if (searchTerm && typeof searchTerm === 'string' && searchTerm.trim()) {
+        const q = searchTerm.trim().toLowerCase();
+        const matchWo = (t.woNumber ? String(t.woNumber).toLowerCase() : '').includes(q);
+        const matchCust = (t.customerName ? String(t.customerName).toLowerCase() : '').includes(q);
+        const matchId = (t.idCustomer ? String(t.idCustomer).toLowerCase() : '').includes(q);
+        const matchPhone = String(t.customerPhone || '').includes(q);
+        const matchInstaller = (t.installerName ? String(t.installerName).toLowerCase() : '').includes(q);
+        const matchCluster = (t.clusterName ? String(t.clusterName).toLowerCase() : '').includes(q);
+        const matchCategory = (t.ticketCategory ? String(t.ticketCategory).toLowerCase() : '').includes(q);
         if (!matchWo && !matchCust && !matchId && !matchPhone && !matchInstaller && !matchCluster && !matchCategory) {
           return false;
         }
@@ -243,6 +266,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
     selectedWhatsAppStatus,
     selectedCategory,
     searchTerm,
+    quickDatePreset,
     selectedAppointmentDate,
     currentUser.role,
     currentUser.name,
@@ -352,6 +376,31 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
 
   return (
     <div className="space-y-4">
+      {/* TICKET MYREPUBLIC Official Page Header */}
+      <div className="bg-white dark:bg-[#1a0f30] rounded-2xl border-2 border-[#D8CCF3] dark:border-[#3B1D78] p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#5B35B1] text-white flex items-center justify-center font-bold shadow-xs shrink-0">
+            <TicketIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base font-bold text-[#3B1D78] dark:text-purple-200">
+                TICKET MYREPUBLIC
+              </h2>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E9E1FF] text-[#3B1D78] dark:bg-[#3B1D78] dark:text-[#E9E1FF] border border-[#D8CCF3] dark:border-[#5B35B1]">
+                {filteredTickets.length} Work Order
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                Live Firestore Active
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Pusat pelacakan tiket gangguan, instalasi baru FTTH, penugasan teknisi, dan pemantauan pengerjaan lapangan MyRepublic.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Table Toolbar Area */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
         {/* Top Controls Row */}
@@ -416,6 +465,19 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
                 <span className="hidden sm:inline">Kartu HP</span>
               </button>
             </div>
+
+            {/* MoraJaws Luxury Refresh Button */}
+            <button
+              onClick={async () => {
+                await triggerRefresh(undefined, 'MEMPERBARUI WORK ORDER...', 'Menyelaraskan data tabel tiket dan jadwal appointment');
+                toast.sync('Tabel Work Order berhasil diperbarui.');
+              }}
+              className="px-2.5 py-1.5 text-xs font-semibold text-[#D8B4FE] bg-[#35105E]/40 hover:bg-[#7135B5]/60 hover:text-white rounded-md border border-[#D8B4FE]/30 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              title="Refresh tabel tiket & sinkronkan data"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Refresh</span>
+            </button>
 
             {/* Export CSV */}
             <button
@@ -547,20 +609,19 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
                   const val = e.target.value as any;
                   setQuickDatePreset(val);
                   if (val === 'today') {
-                    setSelectedAppointmentDate(new Date().toISOString().split('T')[0]);
+                    setSelectedAppointmentDate(getJakartaDateString(0));
                   } else if (val === 'tomorrow') {
-                    const tmr = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-                    setSelectedAppointmentDate(tmr);
+                    setSelectedAppointmentDate(getJakartaDateString(1));
                   } else if (val === 'all') {
                     setSelectedAppointmentDate('');
                   }
                   setCurrentPage(1);
                 }}
-                className="w-full px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-700 rounded text-slate-800 dark:text-slate-200 font-semibold"
+                className="w-full px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-700 rounded text-slate-800 dark:text-slate-200 font-semibold cursor-pointer"
               >
                 <option value="all">Semua Jadwal</option>
-                <option value="today">Hari Ini</option>
-                <option value="tomorrow">Besok</option>
+                <option value="today">Hari Ini ({getJakartaDateParts(0).labelShort})</option>
+                <option value="tomorrow">Besok ({getJakartaDateParts(1).labelShort})</option>
                 <option value="upcoming">Jadwal Mendatang</option>
                 <option value="past">Jadwal Sebelumnya</option>
                 <option value="invalid">Jadwal Belum Valid</option>

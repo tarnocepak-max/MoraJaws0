@@ -3,7 +3,13 @@ import { useApp } from '../../context/AppContext';
 import { Ticket, User, TicketStatusWOInstaller } from '../../types/index.ts';
 import { StatusAgentBadge, StatusInstallerBadge, StatusWhatsAppBadge } from '../common/Badge';
 import { renderWhatsAppMessage, buildWhatsAppClickToChatUrl, isValidPhoneNumber } from '../../services/whatsappService';
-import { formatAppointmentDateDisplay, parseAppointmentDate } from '../../services/appointmentDateParser';
+import {
+  formatAppointmentDateDisplay,
+  parseAppointmentDate,
+  getJakartaDateString,
+  getJakartaDateParts,
+  getTicketAppointmentDate
+} from '../../services/appointmentDateParser';
 import {
   Users2,
   CheckCircle2,
@@ -117,8 +123,8 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
   // Last refreshed timestamp
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string>(() => new Date().toISOString());
 
-  // Date schedule for timetable matrix (default today, not hardcoded sample)
-  const [scheduleDate, setScheduleDate] = useState(() => new Date().toISOString().split('T')[0]);
+  // Date schedule for timetable matrix (default today Asia/Jakarta WIB, not hardcoded sample)
+  const [scheduleDate, setScheduleDate] = useState(() => getJakartaDateString(0));
   const [selectedSlotForAssign, setSelectedSlotForAssign] = useState<{ installer: string; slot: string } | null>(null);
 
   const STANDARD_SLOTS = [
@@ -519,18 +525,17 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
         }
       }
 
-      // Date Range Filter (Supports 2026-10-30 and any standard date formats)
-      const rawDate = t.appointmentDate || t.date || '';
-      const parsed = parseAppointmentDate(rawDate);
-      const ticketDate = parsed.date || (rawDate.length >= 10 ? rawDate.slice(0, 10) : rawDate.trim());
-      const todayStr = new Date().toISOString().split('T')[0];
-      const tmrStr = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+      // Date Range Filter (Strict Asia/Jakarta WIB calendar date comparison)
+      const ticketDate = getTicketAppointmentDate(t);
+      const todayStr = getJakartaDateString(0);
+      const tmrStr = getJakartaDateString(1);
 
       if (dateFilterType === 'today') {
-        if (ticketDate !== todayStr && ticketDate !== '2026-10-28' && ticketDate !== '2026-10-18') return false;
+        if (!ticketDate || ticketDate !== todayStr) return false;
       } else if (dateFilterType === 'tomorrow') {
-        if (ticketDate !== tmrStr && ticketDate !== '2026-10-29' && ticketDate !== '2026-10-19') return false;
+        if (!ticketDate || ticketDate !== tmrStr) return false;
       } else if (dateFilterType === 'custom') {
+        if (!ticketDate) return false;
         if (customDateStart && ticketDate < customDateStart) return false;
         if (customDateEnd && ticketDate > customDateEnd) return false;
       }
@@ -2348,25 +2353,25 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
                 <span className="text-slate-500 font-medium">Tanggal Operasi:</span>
                 <button
                   type="button"
-                  onClick={() => setScheduleDate('2026-10-18')}
+                  onClick={() => setScheduleDate(getJakartaDateString(0))}
                   className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    scheduleDate === '2026-10-18'
+                    scheduleDate === getJakartaDateString(0)
                       ? 'bg-[#5B35B1] text-white font-bold'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                   }`}
                 >
-                  18 Okt (Hari Ini)
+                  Hari Ini ({getJakartaDateParts(0).labelShort})
                 </button>
                 <button
                   type="button"
-                  onClick={() => setScheduleDate('2026-10-19')}
+                  onClick={() => setScheduleDate(getJakartaDateString(1))}
                   className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    scheduleDate === '2026-10-19'
+                    scheduleDate === getJakartaDateString(1)
                       ? 'bg-[#5B35B1] text-white font-bold'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                   }`}
                 >
-                  19 Okt (Besok)
+                  Besok ({getJakartaDateParts(1).labelShort})
                 </button>
                 <input
                   type="date"

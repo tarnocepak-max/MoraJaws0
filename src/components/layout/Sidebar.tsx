@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { useUIConfig } from '../../context/UIConfigContext';
+import { MoraJawsLogo } from '../common/MoraJawsLogo';
 import {
   LayoutDashboard,
   FileSpreadsheet,
@@ -74,8 +75,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   > = {
     // Dispatch Management Group
     tickets: {
-      label: 'Monitoring Dispatch',
-      icon: LayoutDashboard,
+      label: 'TICKET MYREPUBLIC',
+      icon: TicketIcon,
       badge: totalActiveTickets,
       roles: ['super_admin', 'dispatch']
     },
@@ -245,17 +246,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       />
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 md:relative md:inset-auto md:z-auto bg-[#F5F1FF] dark:bg-[#1a0f30]/95 border-r border-[#D8CCF3] dark:border-[#3B1D78] transition-all duration-200 flex flex-col shrink-0 shadow-2xl md:shadow-none h-full ${
+        className={`fixed inset-y-0 left-0 z-50 md:relative md:inset-auto md:z-auto bg-[#F5F1FF] dark:bg-[#160D29] border-r border-[#D8CCF3] dark:border-[#35105E] transition-all duration-200 flex flex-col shrink-0 shadow-2xl md:shadow-none h-full ${
           isMinimized ? 'w-16' : 'w-64'
         }`}
       >
       {/* Top Header of Sidebar: Menu title with Minimize (-) and Close (X) buttons */}
-      <div className="px-3 py-2.5 border-b border-[#D8CCF3] dark:border-[#3B1D78] flex items-center justify-between text-xs">
+      <div className="px-3 py-2.5 border-b border-[#D8CCF3] dark:border-[#35105E] flex items-center justify-between text-xs">
         {!isMinimized ? (
           <>
-            <span className="font-bold text-[#756B8D] dark:text-[#D8CCF3] uppercase tracking-wider text-[11px]">
-              Menu Navigasi
-            </span>
+            <div className="flex items-center gap-2">
+              <MoraJawsLogo size="xs" animated={false} />
+              <span className="font-bold text-[#756B8D] dark:text-[#D8B4FE] uppercase tracking-wider text-[11px]">
+                Menu Navigasi
+              </span>
+            </div>
             <div className="flex items-center gap-1">
               {/* Minimize Button */}
               <button

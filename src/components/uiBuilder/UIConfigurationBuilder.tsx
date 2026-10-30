@@ -27,8 +27,18 @@ import {
   Maximize2,
   FolderTree,
   Menu,
-  Edit2
+  Edit2,
+  Database,
+  Cloud,
+  CloudUpload,
+  CloudDownload,
+  RefreshCw,
+  AlertCircle,
+  HardDrive,
+  ShieldCheck,
+  FileJson
 } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 
 export const UIConfigurationBuilder: React.FC = () => {
   const {
@@ -64,10 +74,17 @@ export const UIConfigurationBuilder: React.FC = () => {
     setMenuCategories,
     resetNavigationMenu,
     exportConfigJson,
-    importConfigJson
+    importConfigJson,
+    saveConfigToFirestore,
+    loadConfigFromFirestore,
+    isCloudSyncing,
+    lastCloudSyncTime,
+    cloudSyncStatus
   } = useUIConfig();
 
-  const [activeTab, setActiveTab] = useState<'device_layout' | 'menu_layout' | 'table_columns' | 'toolbar' | 'detail_sections' | 'global_theme' | 'presets' | 'json'>('device_layout');
+  const { currentUser } = useApp();
+
+  const [activeTab, setActiveTab] = useState<'firestore_config' | 'device_layout' | 'menu_layout' | 'table_columns' | 'toolbar' | 'detail_sections' | 'global_theme' | 'presets' | 'json'>('device_layout');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
 
@@ -133,25 +150,109 @@ export const UIConfigurationBuilder: React.FC = () => {
     }
   };
 
+  const handleUploadToFirestore = async () => {
+    try {
+      const res = await saveConfigToFirestore(currentUser?.name || 'Super Admin');
+      if (res.success) {
+        triggerNotice(
+          `Konfigurasi UI berhasil di-upload ke Cloud Firestore sebagai Database Configuration App! (${res.updatedAt ? new Date(res.updatedAt).toLocaleTimeString('id-ID') : ''})`
+        );
+      } else {
+        alert('Gagal mengupload konfigurasi ke Firestore: ' + (res.error || 'Terjadi kesalahan'));
+      }
+    } catch (e: any) {
+      alert('Gagal mengupload: ' + e?.message);
+    }
+  };
+
+  const handlePullFromFirestore = async () => {
+    if (!confirm('Tarik konfigurasi master dari Cloud Firestore dan terapkan pada tampilan Anda?')) return;
+    try {
+      const res = await loadConfigFromFirestore();
+      if (res.success) {
+        triggerNotice('Konfigurasi UI berhasil ditarik dan disinkronkan dari Cloud Firestore!');
+      } else {
+        alert('Gagal memuat konfigurasi dari Firestore: ' + (res.error || 'Data belum tersedia'));
+      }
+    } catch (e: any) {
+      alert('Gagal memuat: ' + e?.message);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner */}
       <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-md bg-indigo-600 text-white flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 rounded-md bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
             <Sliders className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              Dynamic UI & Layout Configuration Builder
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Ubah seluruh layout aplikasi, visibilitas kolom tabel, urutan toolbar, form detail, tema, dan preset tanpa edit kode.
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Dynamic UI & Layout Configuration Builder
+              </h3>
+              {/* Cloud Firestore Sync Status Badge */}
+              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                {isCloudSyncing ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 text-indigo-500 animate-spin" />
+                    <span className="text-indigo-600 dark:text-indigo-400">Sinkronisasi Cloud...</span>
+                  </>
+                ) : cloudSyncStatus === 'synced' ? (
+                  <>
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                    <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
+                      Database Config: Firestore
+                      {lastCloudSyncTime ? ` (${new Date(lastCloudSyncTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })})` : ''}
+                    </span>
+                  </>
+                ) : cloudSyncStatus === 'error' ? (
+                  <>
+                    <AlertCircle className="w-3 h-3 text-rose-500" />
+                    <span className="text-rose-600 dark:text-rose-400 font-semibold">Gagal Sinkron Cloud</span>
+                  </>
+                ) : (
+                  <>
+                    <Database className="w-3 h-3 text-amber-500" />
+                    <span className="text-amber-700 dark:text-amber-300">Lokal (Belum Upload)</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Ubah seluruh layout aplikasi, visibilitas kolom tabel, susunan menu, dan simpan sebagai Database Configuration App di Cloud Firestore.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Firestore Save / Upload Primary Button */}
+          <button
+            onClick={handleUploadToFirestore}
+            disabled={isCloudSyncing}
+            className="px-3.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-60 rounded-md flex items-center gap-1.5 shadow-sm transition-all"
+            title="Upload dan jadikan konfigurasi ini sebagai Database Configuration App di Cloud Firestore"
+          >
+            {isCloudSyncing ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <CloudUpload className="w-3.5 h-3.5" />
+            )}
+            <span>Simpan & Upload ke Firestore</span>
+          </button>
+
+          {/* Firestore Pull / Sync Button */}
+          <button
+            onClick={handlePullFromFirestore}
+            disabled={isCloudSyncing}
+            className="px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-md flex items-center gap-1.5 transition-colors"
+            title="Tarik konfigurasi master dari Cloud Firestore"
+          >
+            <CloudDownload className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <span>Tarik dari Firestore</span>
+          </button>
+
           <button
             onClick={() => {
               if (confirm('Kembalikan seluruh layout dan pengaturan UI ke standar sistem (Default)?')) {
@@ -159,15 +260,15 @@ export const UIConfigurationBuilder: React.FC = () => {
                 triggerNotice('Konfigurasi berhasil direset ke standar sistem.');
               }
             }}
-            className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded flex items-center gap-1.5 transition-colors"
+            className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md flex items-center gap-1.5 transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
-            <span>Reset to Default</span>
+            <span>Reset</span>
           </button>
 
           <button
             onClick={handleExport}
-            className="px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded flex items-center gap-1.5 transition-colors"
+            className="px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-md flex items-center gap-1.5 transition-colors"
           >
             <Download className="w-3.5 h-3.5 text-slate-400" />
             <span>Export JSON</span>
@@ -184,6 +285,17 @@ export const UIConfigurationBuilder: React.FC = () => {
 
       {/* Tabs Switcher */}
       <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 text-xs font-medium overflow-x-auto pb-1">
+        <button
+          onClick={() => setActiveTab('firestore_config')}
+          className={`px-3 py-2 border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
+            activeTab === 'firestore_config'
+              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50/50 dark:bg-indigo-950/30 rounded-t'
+              : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          <Database className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <span>☁️ Database Config App</span>
+        </button>
         <button
           onClick={() => setActiveTab('device_layout')}
           className={`px-3 py-2 border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap ${
@@ -280,6 +392,268 @@ export const UIConfigurationBuilder: React.FC = () => {
           <span>Import / Backup</span>
         </button>
       </div>
+
+      {/* Tab: Database Configuration App (Cloud Firestore Master Storage) */}
+      {activeTab === 'firestore_config' && (
+        <div className="space-y-6">
+          {/* Hero Banner */}
+          <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white rounded-2xl p-6 sm:p-7 shadow-lg border border-indigo-800/50 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="space-y-2 max-w-2xl">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+                    <Cloud className="w-3 h-3 text-emerald-400" />
+                    Cloud Firestore Real-Time Config
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                    appSettings/ui_configuration
+                  </span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2.5">
+                  <Database className="w-6 h-6 text-indigo-400" />
+                  Database Configuration App
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  Jadikan tata letak UI, susunan menu, visibilitas kolom tabel, dan preferensi perangkat sebagai <strong>Database Configuration App</strong> terpusat di Cloud Firestore. Seluruh pengguna dan perangkat (Android & PC) akan otomatis menggunakan konfigurasi baku ini secara real-time.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                <button
+                  onClick={handleUploadToFirestore}
+                  disabled={isCloudSyncing}
+                  className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+                >
+                  {isCloudSyncing ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CloudUpload className="w-4 h-4" />
+                  )}
+                  <span>Upload ke Firestore Sekarang</span>
+                </button>
+
+                <button
+                  onClick={handlePullFromFirestore}
+                  disabled={isCloudSyncing}
+                  className="px-4 py-2.5 bg-white/10 hover:bg-white/20 active:scale-95 text-white border border-white/20 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+                >
+                  <CloudDownload className="w-4 h-4 text-indigo-300" />
+                  <span>Tarik dari Cloud</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Status Information Bar */}
+            <div className="mt-6 pt-4 border-t border-indigo-800/40 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+              <div>
+                <p className="text-slate-400 text-[11px]">Status Sinkronisasi:</p>
+                <p className="font-semibold text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  {cloudSyncStatus === 'synced' ? 'Tersimpan & Aktif di Firestore' : cloudSyncStatus === 'syncing' ? 'Sedang Sinkronisasi...' : cloudSyncStatus === 'error' ? 'Gagal Terhubung' : 'Konfigurasi Lokal'}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-slate-400 text-[11px]">Terakhir Di-upload:</p>
+                <p className="font-semibold text-slate-200 mt-0.5">
+                  {lastCloudSyncTime ? new Date(lastCloudSyncTime).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'Belum di-upload'}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-slate-400 text-[11px]">Pengunggah Terakhir:</p>
+                <p className="font-semibold text-slate-200 mt-0.5">
+                  {currentUser?.name || 'Super Admin'} ({currentUser?.role || 'Admin'})
+                </p>
+              </div>
+
+              <div>
+                <p className="text-slate-400 text-[11px]">Firestore Collection:</p>
+                <p className="font-mono text-indigo-300 text-[11px] mt-0.5 truncate">
+                  appSettings / ui_configuration
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Component Summary Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Kolom Tabel WO</span>
+                <Columns3 className="w-4 h-4 text-indigo-600" />
+              </div>
+              <p className="text-xl font-black text-slate-900 dark:text-white mt-2">
+                {config.ticketsTable.columns.filter(c => c.visible).length} <span className="text-xs font-normal text-slate-500">/ {config.ticketsTable.columns.length} Aktif</span>
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                Tersimpan di properti `ticketsTable.columns`
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Susunan Menu Navigasi</span>
+                <FolderTree className="w-4 h-4 text-emerald-600" />
+              </div>
+              <p className="text-xl font-black text-slate-900 dark:text-white mt-2">
+                {navigationItems.filter(i => i.visible).length} <span className="text-xs font-normal text-slate-500">Menu ({menuCategories.length} Kategori)</span>
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                Tersimpan di properti `navigationItems`
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Mode Perangkat</span>
+                <Smartphone className="w-4 h-4 text-teal-600" />
+              </div>
+              <p className="text-xl font-black text-slate-900 dark:text-white mt-2 capitalize">
+                {config.device?.mode || 'Auto'}
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                Android: {config.device?.android?.layoutType === 'cards' ? 'Card View' : 'Table'}, PC: Compact
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Preset & Tema Global</span>
+                <Palette className="w-4 h-4 text-purple-600" />
+              </div>
+              <p className="text-xl font-black text-slate-900 dark:text-white mt-2">
+                {config.ticketsTable.presets.length} Preset <span className="text-xs font-normal text-slate-500 capitalize">({config.global.themeMode})</span>
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                Densitas: {config.global.density}, Skala Font: {config.global.fontScale}
+              </p>
+            </div>
+          </div>
+
+          {/* Detailed Action Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Action 1: Upload Card */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-2xs space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                  <CloudUpload className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                    Simpan & Upload ke Firestore
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Jadikan konfigurasi lokal saat ini sebagai database configuration app baku.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-300 space-y-1.5 leading-relaxed">
+                <p className="font-medium text-slate-800 dark:text-slate-200">Yang akan disimpan ke Cloud Firestore:</p>
+                <ul className="list-disc list-inside space-y-1 text-slate-500 dark:text-slate-400 text-[11px]">
+                  <li>Visibilitas, urutan, dan pengaturan {config.ticketsTable.columns.length} kolom tabel Work Order</li>
+                  <li>Susunan dan urutan {navigationItems.length} menu navigasi di {menuCategories.length} kategori</li>
+                  <li>Pengaturan khusus layar sentuh Android (Navigasi bawah, kartu responsif)</li>
+                  <li>Pengaturan efisiensi layar PC Desktop (Sticky column, scroll kompak)</li>
+                  <li>Seluruh preset tampilan kolom yang tersimpan ({config.ticketsTable.presets.length} preset)</li>
+                  <li>Pengaturan tema global ({config.global.themeMode}, {config.global.density})</li>
+                </ul>
+              </div>
+
+              <button
+                onClick={handleUploadToFirestore}
+                disabled={isCloudSyncing}
+                className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-60 text-white font-bold text-xs rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all"
+              >
+                {isCloudSyncing ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CloudUpload className="w-4 h-4" />
+                )}
+                <span>Simpan Sekarang ke Cloud Firestore</span>
+              </button>
+            </div>
+
+            {/* Action 2: Pull / Sync Card */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-2xs space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <CloudDownload className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                    Tarik Konfigurasi dari Firestore
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Muat konfigurasi master yang tersimpan di cloud database ke sesi Anda.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-300 space-y-1.5 leading-relaxed">
+                <p className="font-medium text-slate-800 dark:text-slate-200">Manfaat Sinkronisasi dari Cloud:</p>
+                <ul className="list-disc list-inside space-y-1 text-slate-500 dark:text-slate-400 text-[11px]">
+                  <li>Menerapkan perubahan layout yang dibuat oleh Super Admin dari perangkat lain</li>
+                  <li>Mengembalikan tampilan ke konfigurasi baku cloud jika pengaturan lokal berubah</li>
+                  <li>Memastikan kolom dan urutan menu selaras dengan tim operasional pusat</li>
+                  <li>Bekerja secara real-time tanpa perlu me-reload atau menghapus cache browser</li>
+                </ul>
+              </div>
+
+              <button
+                onClick={handlePullFromFirestore}
+                disabled={isCloudSyncing}
+                className="w-full py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 disabled:opacity-60 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 flex items-center justify-center gap-2 transition-all"
+              >
+                {isCloudSyncing ? (
+                  <RefreshCw className="w-4 h-4 animate-spin text-slate-500" />
+                ) : (
+                  <CloudDownload className="w-4 h-4 text-emerald-600" />
+                )}
+                <span>Tarik & Terapkan dari Firestore</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Document Preview & JSON Schema */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileJson className="w-4 h-4 text-indigo-600" />
+                <h4 className="font-bold text-slate-900 dark:text-white text-xs uppercase tracking-wider">
+                  Pratinjau Dokumen Firestore (appSettings/ui_configuration)
+                </h4>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono">
+                Document Schema: AppSetting
+              </span>
+            </div>
+
+            <div className="p-3 bg-slate-950 rounded-xl overflow-x-auto text-[11px] font-mono text-emerald-400 max-h-72 border border-slate-800">
+              <pre>{JSON.stringify({
+                id: 'ui_configuration',
+                app: 'MoraJaws',
+                type: 'database_configuration_app',
+                updatedAt: lastCloudSyncTime || new Date().toISOString(),
+                updatedBy: currentUser?.name || 'Super Admin',
+                configSummary: {
+                  theme: config.global.themeMode,
+                  density: config.global.density,
+                  deviceMode: config.device?.mode,
+                  activeColumnsCount: config.ticketsTable.columns.filter(c => c.visible).length,
+                  totalColumnsCount: config.ticketsTable.columns.length,
+                  navigationItemsCount: navigationItems.length,
+                  menuCategoriesCount: menuCategories.length,
+                  presetsCount: config.ticketsTable.presets.length
+                },
+                navigationCategories: menuCategories
+              }, null, 2)}</pre>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tab 0: Android & PC Specific Settings (Fitur Setting UI Khusus Android dan PC) */}
       {activeTab === 'device_layout' && (

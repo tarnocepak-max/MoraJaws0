@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useToast } from '../../context/ToastContext';
-import { formatAppointmentDateDisplay, parseAppointmentDate } from '../../services/appointmentDateParser';
+import { formatAppointmentDateDisplay, parseAppointmentDate, getJakartaDateString } from '../../services/appointmentDateParser';
 import { StatusAgentBadge, StatusInstallerBadge } from '../common/Badge';
 
 export const ReportDataWOView: React.FC = () => {
@@ -53,7 +53,7 @@ export const ReportDataWOView: React.FC = () => {
     if (!parsed.date) return false;
     const isFinished = t.statusWOInstaller === 'Completed' || t.statusWOAgent === 'Closed' || t.statusWOAgent === 'Resolved';
     if (isFinished) return false;
-    return parsed.date < '2026-10-28';
+    return parsed.date < getJakartaDateString(0);
   };
 
   // Base list
@@ -98,10 +98,10 @@ export const ReportDataWOView: React.FC = () => {
       if (dateEnd && d > dateEnd) return false;
 
       // 4. Search query
-      if (searchQuery.trim()) {
+      if (searchQuery && typeof searchQuery === 'string' && searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const m1 = t.woNumber.toLowerCase().includes(q);
-        const m2 = t.customerName.toLowerCase().includes(q);
+        const m1 = (t.woNumber ? String(t.woNumber).toLowerCase() : '').includes(q);
+        const m2 = (t.customerName ? String(t.customerName).toLowerCase() : '').includes(q);
         const m3 = (t.idCustomer || t.customerId || '').toLowerCase().includes(q);
         const m4 = (t.installerName || '').toLowerCase().includes(q);
         if (!m1 && !m2 && !m3 && !m4) return false;

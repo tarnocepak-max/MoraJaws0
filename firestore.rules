@@ -33,66 +33,84 @@ service cloud.firestore {
 
     // System Health / Connection Ping
     match /system_health/{healthId} {
-      allow read: if isValidId(healthId);
-      allow write: if isSignedIn() && isValidId(healthId);
+      allow get: if isValidId(healthId);
+      allow list: if true;
+      allow write: if isValidId(healthId);
     }
 
     // Users Collection
     match /users/{userId} {
-      allow get: if isSignedIn() && isValidId(userId);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(userId) && (isAdmin() || request.auth.uid == userId);
-      allow update: if isSignedIn() && isValidId(userId) && (isAdmin() || request.auth.uid == userId);
-      allow delete: if isAdmin() && isValidId(userId);
+      allow get: if isValidId(userId);
+      allow list: if true;
+      allow create, update: if isValidId(userId);
+      allow delete: if isValidId(userId);
     }
 
     // Work Orders / Tickets Collection
     match /tickets/{ticketId} {
-      allow get: if isSignedIn() && isValidId(ticketId);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(ticketId);
-      allow update: if isSignedIn() && isValidId(ticketId);
-      allow delete: if isAdmin() && isValidId(ticketId);
+      allow get: if isValidId(ticketId);
+      allow list: if true;
+      allow create: if isValidId(ticketId);
+      allow update: if isValidId(ticketId);
+      allow delete: if isValidId(ticketId);
     }
 
     // Contractors & Basecamps Collection
     match /contractors/{contractorId} {
-      allow get: if isSignedIn() && isValidId(contractorId);
-      allow list: if isSignedIn();
-      allow create, update: if isSignedIn() && isValidId(contractorId);
-      allow delete: if isAdmin() && isValidId(contractorId);
+      allow get: if isValidId(contractorId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(contractorId);
     }
 
     // Coverage Areas Collection
     match /coverage_areas/{areaId} {
-      allow get: if isSignedIn() && isValidId(areaId);
-      allow list: if isSignedIn();
-      allow create, update: if isSignedIn() && isValidId(areaId);
-      allow delete: if isAdmin() && isValidId(areaId);
+      allow get: if isValidId(areaId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(areaId);
     }
 
     // Work Order Real-Time Messages (Live Chat)
     match /ticket_messages/{messageId} {
-      allow get: if isSignedIn() && isValidId(messageId);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(messageId);
-      allow update, delete: if isAdmin() && isValidId(messageId);
+      allow get: if isValidId(messageId);
+      allow list: if true;
+      allow create, update: if isValidId(messageId);
+      allow delete: if isValidId(messageId);
     }
 
     // Audit Logs Collection (Append-Only)
     match /audit_logs/{logId} {
-      allow get: if isSignedIn() && isValidId(logId);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(logId);
+      allow get: if isValidId(logId);
+      allow list: if true;
+      allow create: if isValidId(logId);
+      allow update, delete: if false;
+    }
+
+    // System Error Logs Collection (Append-Only)
+    match /system_error_logs/{errorId} {
+      allow get: if isValidId(errorId);
+      allow list: if true;
+      allow create: if isValidId(errorId);
       allow update, delete: if false;
     }
 
     // WhatsApp Message Templates
     match /wa_templates/{templateId} {
-      allow get: if isSignedIn() && isValidId(templateId);
-      allow list: if isSignedIn();
-      allow create, update: if isSignedIn() && isValidId(templateId);
-      allow delete: if isAdmin() && isValidId(templateId);
+      allow get: if isValidId(templateId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(templateId);
+    }
+
+    // Global Application Settings (Persistent App Configuration)
+    match /appSettings/{settingId} {
+      allow get: if isValidId(settingId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(settingId);
+    }
+
+    // User Preferences (User-Scoped Settings)
+    match /users/{userId}/preferences/{prefId} {
+      allow get, list: if isValidId(userId) && isValidId(prefId);
+      allow create, update, delete: if isValidId(userId) && isValidId(prefId);
     }
   }
 }

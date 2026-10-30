@@ -1,6 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UIConfiguration, ColumnConfig, ToolbarButtonConfig, SectionDetailConfig, TablePreset } from '../types';
 import { DEFAULT_UI_CONFIG } from '../constants/defaultConfig';
+import {
+  saveUIConfigurationToFirestore,
+  loadUIConfigurationFromFirestore,
+  subscribeToUIConfiguration
+} from '../services/firestoreDb';
 
 interface UIConfigContextType {
   config: UIConfiguration;
@@ -52,6 +57,13 @@ interface UIConfigContextType {
   // Import / Export JSON
   exportConfigJson: () => string;
   importConfigJson: (jsonString: string) => boolean;
+
+  // Cloud Database Configuration (Firestore)
+  saveConfigToFirestore: (operatorName?: string) => Promise<{ success: boolean; error?: string; updatedAt?: string }>;
+  loadConfigFromFirestore: () => Promise<{ success: boolean; error?: string }>;
+  isCloudSyncing: boolean;
+  lastCloudSyncTime: string | null;
+  cloudSyncStatus: 'synced' | 'local_only' | 'syncing' | 'error';
 }
 
 export interface NavigationMenuItem {
@@ -71,7 +83,7 @@ export const DEFAULT_MENU_CATEGORIES = [
 
 export const DEFAULT_NAVIGATION_ITEMS: NavigationMenuItem[] = [
   // Dispatch Management
-  { id: 'tickets', label: 'Monitoring Dispatch', category: 'Dispatch Management', order: 1, visible: true },
+  { id: 'tickets', label: 'TICKET MYREPUBLIC', category: 'Dispatch Management', order: 1, visible: true },
   { id: 'form_sameday', label: 'Form Sameday', category: 'Dispatch Management', order: 2, visible: true },
   { id: 'report_data_wo', label: 'Report Data WO', category: 'Dispatch Management', order: 3, visible: true },
   { id: 'schedule', label: 'Schedule', category: 'Dispatch Management', order: 4, visible: true },
@@ -214,7 +226,11 @@ export const UIConfigProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const parsed: NavigationMenuItem[] = JSON.parse(saved);
         const filtered = parsed
           .filter(i => !['assign_wo_fat', 'import_excel', 'contractors'].includes(i.id))
-          .map(i => (i.id === 'leader_portal' && i.label === 'Dashboard Area' ? { ...i, label: 'Dashboard Leader' } : i));
+          .map(i => {
+            if (i.id === 'leader_portal' && i.label === 'Dashboard Area') return { ...i, label: 'Dashboard Leader' };
+            if (i.id === 'tickets') return { ...i, label: 'TICKET MYREPUBLIC' };
+            return i;
+          });
         const existingIds = new Set(filtered.map(i => i.id));
         const merged = [...filtered];
         for (const def of DEFAULT_NAVIGATION_ITEMS) {
@@ -280,6 +296,163 @@ export const UIConfigProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       localStorage.removeItem(NAV_STORAGE_KEY);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  // Cloud Firestore Sync State
+  const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
+  const [lastCloudSyncTime, setLastCloudSyncTime] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('morajaws_ui_cloud_sync_time');
+    } catch {
+      return null;
+    }
+  });
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'local_only' | 'syncing' | 'error'>('local_only');
+
+  // Load from Cloud Firestore on mount & subscribe to real-time updates
+  useEffect(() => {
+    let isMounted = true;
+    let unsub: (() => void) | null = null;
+
+    async function initCloudConfig() {
+      try {
+        const cloudData = await loadUIConfigurationFromFirestore();
+        if (cloudData && isMounted) {
+          if (cloudData.config) {
+            setConfig(prev => ({
+              ...prev,
+              ...cloudData.config,
+              global: { ...prev.global, ...(cloudData.config.global || {}) },
+              device: {
+                ...prev.device,
+                ...(cloudData.config.device || {}),
+                android: { ...prev.device.android, ...(cloudData.config.device?.android || {}) },
+                pc: { ...prev.device.pc, ...(cloudData.config.device?.pc || {}) }
+              }
+            }));
+          }
+          if (Array.isArray(cloudData.navigationItems) && cloudData.navigationItems.length > 0) {
+            setNavigationItemsState(cloudData.navigationItems);
+          }
+          if (Array.isArray(cloudData.menuCategories) && cloudData.menuCategories.length > 0) {
+            setMenuCategoriesState(cloudData.menuCategories);
+          }
+          if (cloudData.updatedAt) {
+            setLastCloudSyncTime(cloudData.updatedAt);
+            try {
+              localStorage.setItem('morajaws_ui_cloud_sync_time', cloudData.updatedAt);
+            } catch {}
+          }
+          setCloudSyncStatus('synced');
+        }
+
+        // Attach real-time listener so changes made on other sessions/devices sync immediately
+        unsub = subscribeToUIConfiguration((data) => {
+          if (!isMounted || !data) return;
+          if (data.config) {
+            setConfig(prev => ({
+              ...prev,
+              ...data.config,
+              global: { ...prev.global, ...(data.config.global || {}) },
+              device: {
+                ...prev.device,
+                ...(data.config.device || {}),
+                android: { ...prev.device.android, ...(data.config.device?.android || {}) },
+                pc: { ...prev.device.pc, ...(data.config.device?.pc || {}) }
+              }
+            }));
+          }
+          if (Array.isArray(data.navigationItems) && data.navigationItems.length > 0) {
+            setNavigationItemsState(data.navigationItems);
+          }
+          if (Array.isArray(data.menuCategories) && data.menuCategories.length > 0) {
+            setMenuCategoriesState(data.menuCategories);
+          }
+          if (data.updatedAt) {
+            setLastCloudSyncTime(data.updatedAt);
+          }
+          setCloudSyncStatus('synced');
+        });
+      } catch (err) {
+        console.warn('[UIConfig] Could not sync initial cloud config:', err);
+      }
+    }
+
+    initCloudConfig();
+
+    return () => {
+      isMounted = false;
+      if (unsub) unsub();
+    };
+  }, []);
+
+  const saveConfigToFirestore = async (operatorName?: string): Promise<{ success: boolean; error?: string; updatedAt?: string }> => {
+    setIsCloudSyncing(true);
+    setCloudSyncStatus('syncing');
+    try {
+      const activeCfg = draftConfig || config;
+      const res = await saveUIConfigurationToFirestore({
+        config: activeCfg,
+        navigationItems,
+        menuCategories,
+        updatedBy: operatorName || 'Super Admin'
+      });
+      setLastCloudSyncTime(res.updatedAt);
+      setCloudSyncStatus('synced');
+      try {
+        localStorage.setItem('morajaws_ui_cloud_sync_time', res.updatedAt);
+      } catch {}
+      return { success: true, updatedAt: res.updatedAt };
+    } catch (err: any) {
+      setCloudSyncStatus('error');
+      return { success: false, error: err?.message || 'Gagal menyimpan ke Firestore' };
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  };
+
+  const loadConfigFromFirestore = async (): Promise<{ success: boolean; error?: string }> => {
+    setIsCloudSyncing(true);
+    setCloudSyncStatus('syncing');
+    try {
+      const cloudData = await loadUIConfigurationFromFirestore();
+      if (!cloudData) {
+        setCloudSyncStatus('local_only');
+        return { success: false, error: 'Belum ada data konfigurasi tersimpan di Cloud Firestore.' };
+      }
+      if (cloudData.config) {
+        setConfig(prev => ({
+          ...prev,
+          ...cloudData.config,
+          global: { ...prev.global, ...(cloudData.config.global || {}) },
+          device: {
+            ...prev.device,
+            ...(cloudData.config.device || {}),
+            android: { ...prev.device.android, ...(cloudData.config.device?.android || {}) },
+            pc: { ...prev.device.pc, ...(cloudData.config.device?.pc || {}) }
+          }
+        }));
+      }
+      if (Array.isArray(cloudData.navigationItems) && cloudData.navigationItems.length > 0) {
+        setNavigationItemsState(cloudData.navigationItems);
+      }
+      if (Array.isArray(cloudData.menuCategories) && cloudData.menuCategories.length > 0) {
+        setMenuCategoriesState(cloudData.menuCategories);
+      }
+      if (cloudData.updatedAt) {
+        setLastCloudSyncTime(cloudData.updatedAt);
+        try {
+          localStorage.setItem('morajaws_ui_cloud_sync_time', cloudData.updatedAt);
+        } catch {}
+      }
+      setCloudSyncStatus('synced');
+      return { success: true };
+    } catch (err: any) {
+      setCloudSyncStatus('error');
+      return { success: false, error: err?.message || 'Gagal membaca konfigurasi dari Firestore.' };
+    } finally {
+      setIsCloudSyncing(false);
     }
   };
 
@@ -678,7 +851,12 @@ export const UIConfigProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setMenuCategories,
         resetNavigationMenu,
         exportConfigJson,
-        importConfigJson
+        importConfigJson,
+        saveConfigToFirestore,
+        loadConfigFromFirestore,
+        isCloudSyncing,
+        lastCloudSyncTime,
+        cloudSyncStatus
       }}
     >
       {children}

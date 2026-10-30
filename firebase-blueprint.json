@@ -136,6 +136,42 @@
         "lastPing": { "type": "string" }
       },
       "required": ["status"]
+    },
+    "AppSetting": {
+      "title": "AppSetting",
+      "description": "Global application configuration, dynamic UI builder settings, and database app state",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "config": { "type": "object" },
+        "navigationItems": { "type": "array" },
+        "menuCategories": { "type": "array" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "app": { "type": "string" },
+        "type": { "type": "string" }
+      },
+      "required": ["id"]
+    },
+    "SystemErrorLog": {
+      "title": "SystemErrorLog",
+      "description": "Standardized application and database error logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "errorCode": { "type": "string" },
+        "firebaseErrorCode": { "type": "string" },
+        "module": { "type": "string" },
+        "operation": { "type": "string" },
+        "message": { "type": "string" },
+        "technicalDetails": { "type": "string" },
+        "severity": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "timestamp": { "type": "string" },
+        "userId": { "type": "string" },
+        "requestId": { "type": "string" },
+        "status": { "type": "string", "enum": ["OPEN", "INVESTIGATING", "RESOLVED"] }
+      },
+      "required": ["id", "errorCode", "module", "message", "timestamp"]
     }
   },
   "firestore": {
@@ -163,6 +199,10 @@
       "schema": "AuditLog",
       "description": "Audit trail log records"
     },
+    "/system_error_logs/{errorId}": {
+      "schema": "SystemErrorLog",
+      "description": "Standardized system error logs for observability"
+    },
     "/wa_templates/{templateId}": {
       "schema": "WATemplate",
       "description": "WhatsApp notification templates"
@@ -170,6 +210,10 @@
     "/system_health/{healthId}": {
       "schema": "SystemHealth",
       "description": "System health heartbeat ping"
+    },
+    "/appSettings/{settingId}": {
+      "schema": "AppSetting",
+      "description": "Global persistent application and UI builder configuration"
     }
   }
 }

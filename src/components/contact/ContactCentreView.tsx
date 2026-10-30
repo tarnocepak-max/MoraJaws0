@@ -49,15 +49,15 @@ export const ContactCentreView: React.FC = () => {
 
   // Available tickets for current user role
   const availableTickets = useMemo(() => {
-    return tickets.filter(t => {
-      if (t.isArchived || t.isDeleted) return false;
-      if (currentUser.role === 'super_admin' || currentUser.role === 'dispatch') return true;
-      if (currentUser.role === 'leader') {
-        const cName = t.contactorName || t.contractorName || '';
-        return !currentUser.contractor || cName.toLowerCase() === currentUser.contractor.toLowerCase();
+    return (tickets || []).filter(t => {
+      if (!t || t.isArchived || t.isDeleted) return false;
+      if (currentUser?.role === 'super_admin' || currentUser?.role === 'dispatch') return true;
+      if (currentUser?.role === 'leader') {
+        const cName = (t.contactorName || t.contractorName || '').toLowerCase();
+        return !currentUser.contractor || cName === (currentUser.contractor || '').toLowerCase();
       }
-      if (currentUser.role === 'installer') {
-        return (t.installerName || '').toLowerCase() === currentUser.name.toLowerCase();
+      if (currentUser?.role === 'installer') {
+        return (t.installerName || '').toLowerCase() === (currentUser?.name || '').toLowerCase();
       }
       return true;
     });
@@ -65,11 +65,12 @@ export const ContactCentreView: React.FC = () => {
 
   // Filtered ticket list for conversation drawer
   const conversationList = useMemo(() => {
-    return availableTickets.filter(t => {
-      if (searchQuery.trim()) {
+    return (availableTickets || []).filter(t => {
+      if (!t) return false;
+      if (searchQuery && typeof searchQuery === 'string' && searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchWo = t.woNumber.toLowerCase().includes(q);
-        const matchCust = t.customerName.toLowerCase().includes(q);
+        const matchWo = (t.woNumber ? String(t.woNumber).toLowerCase() : '').includes(q);
+        const matchCust = (t.customerName ? String(t.customerName).toLowerCase() : '').includes(q);
         const matchCid = (t.idCustomer || t.customerId || '').toLowerCase().includes(q);
         const matchPhone = (t.customerPhone || '').includes(q);
         if (!matchWo && !matchCust && !matchCid && !matchPhone) return false;

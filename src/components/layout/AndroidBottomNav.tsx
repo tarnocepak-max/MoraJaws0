@@ -73,7 +73,7 @@ export const AndroidBottomNav: React.FC<AndroidBottomNavProps> = ({
               </span>
             )}
           </div>
-          <span className="truncate">Tiket WO</span>
+          <span className="truncate">Ticket MyRep</span>
         </button>
 
         {/* Tab 3: Text To Table (or Leader/Teknisi depending on role) */}

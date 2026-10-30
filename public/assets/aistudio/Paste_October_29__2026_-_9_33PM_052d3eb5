@@ -1,0 +1,702 @@
+MASTER PROMPT — AUDIT DAN PERBAIKAN MENYELURUH APLIKASI MORAJAWS
+
+TUJUAN UTAMA
+
+Lakukan audit, perbaikan bug, peningkatan keamanan, dan penyempurnaan aplikasi MoraJaws yang sedang berjalan, berdasarkan kode sumber, struktur database, dan fitur aktual yang tersedia pada proyek.
+
+Fokus perbaikan:
+
+1. Memperbaiki tanggal Schedule Appointment Date agar mengikuti tanggal lokal Indonesia.
+2. Menghilangkan duplikasi Work Order (WO) pada seluruh jalur import dan sinkronisasi.
+3. Memastikan data operasional dan konfigurasi tersimpan permanen di Firebase Cloud Firestore.
+4. Memperbaiki proses create, read, update, delete (CRUD), import, dan sinkronisasi.
+5. Memperbaiki nama, fungsi, navigasi, ikon, dan logo menu yang tidak sesuai.
+6. Mengubah menu MONITORING DISPATCH menjadi TICKET MYREPUBLIC.
+7. Menggunakan ikon dan identitas visual TICKET MYREPUBLIC yang berbeda dari DASHBOARD MONITORING.
+8. Mempertahankan seluruh fitur, data, relasi, autentikasi, serta integrasi yang sudah berjalan.
+
+INSTRUKSI WAJIB
+
+- Perbaiki kode yang sudah ada secara langsung apabila lingkungan kerja menyediakan akses pengeditan.
+- Jangan membangun ulang aplikasi dari awal.
+- Jangan mengganti framework, arsitektur, Firebase project, atau database tanpa alasan teknis yang terverifikasi.
+- Jangan menghapus fitur lama yang tidak berkaitan dengan perbaikan.
+- Jangan merombak desain halaman lain.
+- Jangan menghapus data produksi atau melakukan migrasi massal tanpa persetujuan.
+- Jangan menimpa data WO lama akibat import ulang.
+- Jangan mengganti ID dokumen Firestore secara massal.
+- Jangan menggunakan data contoh sebagai pengganti data produksi.
+- Jangan menyatakan perbaikan selesai jika kode belum diubah atau pengujian belum dilakukan.
+- Jika akses langsung ke kode tidak tersedia, berikan patch atau instruksi yang sesuai dengan file aktual, bukan mengklaim perubahan telah diterapkan.
+- Pertahankan kompatibilitas dengan data lama dan perangkat pengguna lain.
+
+---
+
+BAGIAN A — PERBAIKAN MENU DAN IDENTITAS VISUAL
+
+1. Ubah menu MONITORING DISPATCH menjadi TICKET MYREPUBLIC
+
+Temukan seluruh referensi menu MONITORING DISPATCH pada proyek, termasuk:
+
+- Sidebar atau menu navigasi.
+- Menu mobile.
+- Dashboard dan halaman utama.
+- Judul halaman.
+- Breadcrumb.
+- Header halaman.
+- Label navigasi.
+- Ikon menu.
+- Pengaturan hak akses.
+- Route dan konfigurasi navigasi.
+- Referensi menu pada komponen lain.
+- Konfigurasi yang tersimpan di Firestore, jika menu dikendalikan melalui database.
+
+Ubah label menu MONITORING DISPATCH menjadi:
+
+TICKET MYREPUBLIC
+
+Ketentuan:
+
+1. Pastikan perubahan label tampil konsisten di semua tempat yang relevan.
+2. Pertahankan fungsi operasional yang memang masih diperlukan oleh halaman tersebut.
+3. Jangan menghapus route lama sebelum memeriksa dependensi dan tautan internal.
+4. Jika route lama masih digunakan, pertahankan kompatibilitas atau buat pengalihan yang aman sesuai arsitektur aplikasi.
+5. Jangan mengubah menu lain yang tidak berkaitan.
+6. Pastikan menu tetap berfungsi pada tampilan desktop maupun HP Android.
+7. Pastikan hak akses pengguna terhadap halaman tetap sesuai aturan yang berlaku.
+8. Jika halaman saat ini sebenarnya menampilkan data dispatch, audit apakah halaman tersebut memang merupakan halaman tiket MyRepublic atau perlu penyesuaian data dan fungsi.
+
+PENTING: Mengganti nama menu tidak berarti otomatis mengubah fungsi atau sumber data halaman. Periksa tujuan menu dan data yang ditampilkan sebelum mengubah logika bisnis.
+
+2. Bedakan ikon TICKET MYREPUBLIC dan DASHBOARD MONITORING
+
+Menu TICKET MYREPUBLIC harus menggunakan ikon tersendiri yang berbeda secara visual dari DASHBOARD MONITORING.
+
+Ketentuan:
+
+- DASHBOARD MONITORING mempertahankan ikon yang sekarang apabila sudah sesuai.
+- TICKET MYREPUBLIC menggunakan ikon yang relevan dengan tiket, laporan gangguan, atau pekerjaan layanan pelanggan.
+- Jika proyek menggunakan Lucide, gunakan ikon yang sesuai seperti "ticket", "ticket-check", atau "clipboard-list", berdasarkan ikon yang tersedia pada versi library aktual.
+- Jangan menggunakan ikon grafik atau monitor yang sama dengan DASHBOARD MONITORING.
+- Jangan mengganti seluruh sistem ikon aplikasi.
+- Pertahankan ukuran, jarak, warna, dan gaya ikon yang konsisten dengan desain MoraJaws.
+- Pastikan ikon terlihat jelas pada sidebar desktop dan navigasi HP Android.
+- Jangan mengubah logo global aplikasi jika tidak diperlukan.
+- Jangan menggunakan logo resmi MyRepublic yang tidak tersedia atau tidak terverifikasi.
+- Jika halaman memerlukan logo merek, gunakan aset resmi yang telah disediakan proyek atau aset yang pengguna berwenang gunakan. Jika belum tersedia, gunakan ikon tiket netral yang berbeda dari ikon dashboard.
+
+3. Periksa fungsi halaman TICKET MYREPUBLIC
+
+Audit apakah halaman memiliki:
+
+- Daftar tiket yang relevan.
+- Nomor tiket atau ID tiket.
+- Status tiket.
+- Tanggal pembuatan dan pembaruan tiket.
+- Informasi pelanggan atau lokasi, jika tersedia dan diizinkan.
+- Penanggung jawab atau teknisi, jika relevan.
+- Fitur pencarian dan filter.
+- Detail tiket.
+- Tambah, ubah, atau tutup tiket sesuai hak akses.
+- Sinkronisasi data jika memang didukung proyek.
+
+Jangan membuat field atau mengarang data tiket yang belum ada. Gunakan struktur database aktual.
+
+Jika halaman MONITORING DISPATCH memang tidak memiliki data tiket MyRepublic, jangan sekadar mengganti judul lalu mengklaim fungsi tiket sudah tersedia. Identifikasi kekurangan, jelaskan kebutuhan perubahan skema jika diperlukan, dan pertahankan data lama sampai strategi transisi disetujui.
+
+4. Pengujian menu
+
+Verifikasi:
+
+- Menu tampil dengan nama TICKET MYREPUBLIC.
+- Ikon TICKET MYREPUBLIC berbeda dari DASHBOARD MONITORING.
+- Klik menu membuka halaman yang benar.
+- Route tidak menghasilkan halaman kosong atau error.
+- Hak akses pengguna tetap berfungsi.
+- Navigasi mobile tetap rapi.
+- Tidak ada referensi MONITORING DISPATCH yang tertinggal pada label yang seharusnya diganti.
+- Fungsi lama yang masih dibutuhkan tidak rusak.
+
+---
+
+BAGIAN B — FIX BUG SCHEDULE APPOINTMENT DATE
+
+5. Gunakan tanggal lokal Asia/Jakarta
+
+Perbaiki seluruh logika tanggal pada Schedule Appointment Date.
+
+Gunakan zona waktu "Asia/Jakarta" sebagai acuan tanggal kalender aplikasi.
+
+Jangan menggunakan:
+
+- Tanggal hardcode.
+- Tanggal lama yang tersimpan dalam state.
+- Tanggal record WO sebagai tanggal hari ini.
+- Tanggal pembuatan WO sebagai pengganti appointment date.
+- Konversi UTC yang menyebabkan pergeseran tanggal.
+- Nilai cache yang tidak diperbarui.
+
+Pada 29 Oktober 2026, hasil yang benar:
+
+- Hari Ini: 29 Oktober 2026.
+- Besok: 30 Oktober 2026.
+
+Pastikan tanggal mengikuti pergantian hari secara otomatis.
+
+Audit sumber masalah, termasuk nilai default, state React, cache, inisialisasi komponen, perbedaan zona waktu, dan konversi timestamp.
+
+Gunakan implementasi yang kompatibel dengan framework dan versi JavaScript pada proyek aktual.
+
+6. Perbaiki tombol dan dropdown tanggal
+
+Pastikan:
+
+1. Saat dashboard dibuka, tanggal default menggunakan tanggal lokal hari ini.
+2. Tombol Hari Ini menampilkan WO yang appointment date-nya jatuh pada hari lokal saat ini.
+3. Tombol Besok menampilkan WO untuk hari kalender berikutnya.
+4. Dropdown tanggal manual menampilkan tanggal yang benar.
+5. Tombol Aktifkan Filter Jadwal menggunakan tanggal yang dipilih.
+6. Tombol Semua Tanggal menghapus filter tanggal saja.
+7. Aturan status WO yang sudah berlaku tidak berubah ketika filter tanggal dihapus.
+8. Filter tetap benar setelah refresh dan pergantian menu.
+9. Pergantian hari tidak mempertahankan tanggal lama.
+10. Filter tidak mengubah data tanggal di Firestore.
+
+7. Perbaiki pemrosesan appointment date
+
+Identifikasi field appointment date yang benar-benar digunakan database.
+
+Tangani format aktual yang ditemukan, seperti Firebase Timestamp, ISO date string, atau format lain yang memang didukung.
+
+- Normalisasikan tanggal kalender secara konsisten berdasarkan "Asia/Jakarta".
+- Hindari membandingkan tanggal lokal dengan string UTC yang belum dinormalisasi.
+- Hindari mengubah tanggal hanya untuk menyesuaikan tampilan.
+- WO tanpa tanggal appointment valid tidak boleh otomatis masuk ke Hari Ini atau Besok.
+- Bedakan tanggal appointment, tanggal pembuatan, tanggal impor, dan tanggal pembaruan.
+- Jangan menebak field tanggal jika ada beberapa field dengan arti berbeda.
+
+Gunakan rentang waktu lokal yang benar untuk pemfilteran timestamp bila sesuai dengan tipe data yang digunakan.
+
+8. Konsistensi dashboard
+
+Gunakan sumber dataset dan filter yang konsisten untuk:
+
+- Tombol Hari Ini dan Besok.
+- Dropdown tanggal.
+- Daftar WO.
+- Total WO.
+- Statistik status.
+- Rekap per kontraktor.
+- Distribusi beban area.
+- Tampilan dispatch yang memang menggunakan filter jadwal.
+
+Hindari kondisi ketika daftar WO menunjukkan jumlah berbeda dari kartu statistik akibat perbedaan filter atau perhitungan.
+
+---
+
+BAGIAN C — PERBAIKAN BUG DOUBLE WO
+
+9. Audit seluruh jalur pembuatan WO
+
+Periksa semua fungsi yang dapat membuat atau menyimpan WO:
+
+- Import Excel.
+- Import CSV.
+- Import Google Sheets.
+- Sinkronisasi ulang Google Sheets.
+- Import ulang file yang sama.
+- Form tambah WO.
+- Proses retry.
+- Listener Firebase.
+- Pemanggilan fungsi asynchronous.
+- Jalur backend atau Cloud Functions jika tersedia.
+- Proses lain yang benar-benar digunakan proyek.
+
+Identifikasi field identitas WO aktual, struktur koleksi Firestore, ID dokumen, dan relasi yang sudah ada.
+
+Jangan hanya menyembunyikan WO duplikat pada tampilan. Perbaiki akar masalah di jalur penyimpanan.
+
+10. Identitas WO yang konsisten
+
+Gunakan nomor WO sebagai identitas bisnis utama berdasarkan field aktual aplikasi, misalnya "woNumber", "wo_no", atau "workOrderNumber".
+
+- Pangkas spasi di awal dan akhir.
+- Terapkan normalisasi huruf besar/kecil sesuai aturan bisnis.
+- Jangan menggunakan teknisi, tanggal, deskripsi, atau status sebagai identitas unik.
+- Jika nomor WO kosong atau tidak valid, tolak baris dan laporkan alasannya.
+- Jika diperlukan identitas alternatif, gunakan hanya kombinasi yang benar-benar diakui aturan bisnis.
+- Jangan menyamakan dua WO berbeda hanya karena memiliki tanggal, teknisi, atau deskripsi yang sama.
+
+Gunakan fungsi normalisasi identitas bersama untuk seluruh jalur import.
+
+11. Validasi sebelum import
+
+Untuk setiap baris:
+
+1. Validasi dan normalisasi nomor WO.
+2. Periksa identitas terhadap database aktual.
+3. Periksa apakah nomor yang sama telah ditemukan pada file yang sedang diproses.
+4. Jika belum ada, proses pembuatan WO baru secara aman.
+5. Jika sudah ada dan datanya sama, lewati tanpa membuat record kedua.
+6. Jika nomor sama tetapi data berbeda, laporkan konflik.
+7. Jangan menimpa status, jadwal, teknisi, deskripsi, atau data lama secara otomatis.
+8. Catat nomor baris sumber jika tersedia.
+9. Pastikan hasil operasi penyimpanan benar-benar diketahui sebelum melaporkan keberhasilan.
+
+Jika hasil operasi tidak diketahui akibat gangguan jaringan, periksa keberadaan WO pada database sebelum mencoba kembali.
+
+12. Cegah duplikasi secara atomik
+
+Pemeriksaan frontend saja tidak cukup untuk melindungi dua proses import yang berjalan bersamaan.
+
+Jika database aktual adalah Firebase Cloud Firestore:
+
+- Evaluasi ID dokumen deterministik berdasarkan identitas WO yang dinormalisasi.
+- Periksa apakah perubahan ID dokumen aman bagi dokumen lama dan seluruh relasi.
+- Jangan mengganti ID dokumen produksi secara massal.
+- Jika ID dokumen tidak dapat diubah dengan aman, gunakan mekanisme indeks identitas WO yang konsisten dan aman terhadap konkurensi.
+- Gunakan transaksi Firestore atau mekanisme penulisan bersyarat yang sesuai.
+- Pastikan dua proses bersamaan tidak dapat membuat dua WO untuk identitas bisnis yang sama.
+- Gunakan "create()" atau pemeriksaan transaksi yang memastikan dokumen belum ada jika pola dokumennya memungkinkan.
+- Jangan mengandalkan "setDoc()" biasa dengan ID acak sebagai perlindungan duplikasi.
+- Jangan mengandalkan query sebelum write tanpa mekanisme atomik yang mencegah race condition.
+
+Jika menggunakan koleksi indeks identitas WO, rancang pembentukan indeks dan kompatibilitas terhadap data lama terlebih dahulu. Jangan mengasumsikan bahwa field nomor WO unik hanya karena biasanya unik.
+
+Jika diperlukan migrasi, jelaskan rencana, dampak, validasi benturan, dan langkah pemulihan sebelum menjalankannya.
+
+Jangan melakukan migrasi destruktif otomatis.
+
+13. Satukan mekanisme semua jalur import
+
+Semua sumber data harus menggunakan mekanisme validasi, normalisasi, deteksi duplikat, pemeriksaan konflik, dan penyimpanan yang konsisten.
+
+Termasuk:
+
+- Excel.
+- CSV.
+- Google Sheets.
+- Sinkronisasi ulang.
+- Retry.
+- Import file yang sama.
+- Form atau fungsi lain yang membuat WO baru.
+
+Jangan biarkan jalur alternatif melewati perlindungan anti-duplikasi.
+
+Periksa apakah Google Sheets hanya menjadi sumber impor atau juga menjadi tujuan penulisan. Pertahankan perilaku integrasi yang benar-benar digunakan aplikasi.
+
+Jangan membuat duplikat ketika listener Firebase berjalan ulang, halaman di-refresh, atau pengguna login kembali.
+
+14. Laporan import yang akurat
+
+Setelah import selesai, tampilkan hasil aktual:
+
+- Total baris sumber.
+- WO baru berhasil disimpan.
+- WO dilewati karena sudah ada.
+- Duplikat dalam file yang sama.
+- Konflik nomor WO dengan data berbeda.
+- Baris gagal validasi.
+- Kegagalan penyimpanan.
+- Hasil yang belum dapat dipastikan.
+
+Sediakan detail nomor baris, nomor WO, kategori masalah, dan alasan jika tersedia.
+
+Hitung berdasarkan hasil nyata operasi setiap baris, bukan perkiraan.
+
+Jangan menyatakan WO berhasil disimpan jika database menolak operasi atau hasilnya belum dapat dipastikan.
+
+---
+
+BAGIAN D — PENYIMPANAN PERMANEN FIREBASE FIRESTORE
+
+15. Audit seluruh penyimpanan aplikasi
+
+Audit semua sumber data dan konfigurasi:
+
+- React state.
+- Variabel lokal.
+- "localStorage".
+- "sessionStorage".
+- Cache browser.
+- Konstanta hardcoded.
+- Default state.
+- File konfigurasi frontend.
+- Firestore.
+- Google Sheets.
+- Backend atau Cloud Functions jika tersedia.
+
+Kelompokkan data menjadi:
+
+A. Data operasional bersama:
+
+- Work Order.
+- Jadwal.
+- Status pekerjaan.
+- Data import.
+- Catatan dan pembaruan.
+- Data operasional lainnya.
+
+B. Konfigurasi bersama:
+
+- Pengaturan operasional global.
+- Konfigurasi aplikasi yang berlaku untuk seluruh pengguna.
+- Preferensi default global yang memang disepakati.
+
+C. Preferensi pribadi:
+
+- Filter pribadi.
+- Preferensi tampilan individual.
+- Pengaturan khusus akun.
+
+D. Konfigurasi rahasia:
+
+- Private key.
+- Token akses.
+- Kredensial administrator.
+- Secret server.
+
+Jangan mencampur seluruh kategori ke satu dokumen atau memberikan akses yang sama untuk semua kategori.
+
+16. Firestore sebagai sumber data utama
+
+Gunakan Firebase Cloud Firestore pada project yang sudah terhubung.
+
+Untuk data bersama:
+
+- Pastikan operasi create, read, update, dan delete benar-benar menuju Firestore.
+- Setelah aplikasi dibuka, muat data tersimpan dari database.
+- Jangan menggunakan state atau penyimpanan lokal sebagai satu-satunya sumber data.
+- Pertahankan ID dokumen lama.
+- Gunakan "serverTimestamp()" untuk waktu pencatatan atau pembaruan yang membutuhkan waktu server.
+- Tangani error database dengan jelas.
+- Jangan menampilkan status berhasil sebelum operasi penyimpanan mendapatkan konfirmasi yang sesuai.
+- Jangan membuat koleksi baru jika struktur lama masih dapat digunakan.
+
+Jika aplikasi memiliki mekanisme fallback lokal, jangan mengunggah data lokal lama secara otomatis dan menimpa data Firestore yang lebih baru.
+
+17. Penyimpanan konfigurasi permanen
+
+Audit semua konfigurasi yang kembali ke nilai awal setelah refresh, login ulang, pergantian perangkat, atau pergantian menu.
+
+Jika belum ada struktur yang sesuai, pertimbangkan:
+
+"appSettings/global"
+
+Gunakan field Firestore terstruktur, bukan satu string JSON besar jika tidak diperlukan.
+
+Simpan hanya konfigurasi yang memang bersifat global, seperti:
+
+- Pengaturan operasional global.
+- Preferensi default aplikasi.
+- Versi skema konfigurasi.
+- Waktu pembaruan.
+- Identitas pengguna pengubah jika sesuai kebijakan privasi.
+
+Gunakan "setDoc()" dengan "merge: true", "updateDoc()", atau mekanisme yang sesuai dengan pola aplikasi.
+
+Pastikan pembaruan satu field tidak menghapus konfigurasi lain yang tidak terkait.
+
+Untuk preferensi pribadi, gunakan struktur yang sesuai dengan autentikasi, misalnya:
+
+"users/{uid}/preferences/settings"
+
+Jangan membuat dokumen global menimpa preferensi pribadi.
+
+18. Perbaiki proses inisialisasi aplikasi
+
+Urutan pemuatan aplikasi harus aman:
+
+1. Inisialisasi Firebase dengan konfigurasi yang sudah ada.
+2. Tunggu autentikasi siap jika dibutuhkan.
+3. Ambil konfigurasi tersimpan dari Firestore.
+4. Ambil data operasional yang dibutuhkan.
+5. Isi state dari hasil database.
+6. Tampilkan loading saat data penting belum siap.
+7. Tampilkan error yang jelas jika pemuatan gagal.
+8. Gunakan default hanya jika konfigurasi memang belum tersedia.
+9. Jangan melakukan reset otomatis ketika data gagal dimuat.
+10. Jangan menimpa konfigurasi tersimpan dengan default saat startup.
+
+Jangan membuat ulang konfigurasi hanya karena React melakukan render ulang, pengguna berpindah menu, halaman di-refresh, atau pengguna login kembali.
+
+19. Sinkronisasi lintas pengguna dan perangkat
+
+Untuk data bersama:
+
+- Gunakan "onSnapshot()" jika sinkronisasi real-time diperlukan.
+- Bersihkan listener saat komponen dilepas.
+- Hindari listener ganda.
+- Hindari pembaruan state berulang tanpa akhir.
+- Pastikan perubahan antarperangkat terlihat sesuai hak akses.
+- Tangani konflik perubahan berdasarkan kebutuhan bisnis.
+- Gunakan "updatedAt", transaksi, atau mekanisme konflik yang sesuai.
+- Jangan mengunggah ulang data lokal lama setelah aplikasi dibuka.
+
+Untuk preferensi pribadi, sinkronkan hanya data pemiliknya.
+
+20. Perbaikan penghapusan permanen
+
+Pastikan semua fitur penghapusan:
+
+- Menghapus dokumen yang benar dari Firestore.
+- Tidak hanya menghapus data dari state lokal.
+- Tidak menghapus dokumen lain yang tidak dipilih.
+- Memperbarui tampilan setelah penghapusan berhasil.
+- Menampilkan error jika penghapusan gagal.
+- Memperhatikan subkoleksi atau data turunan yang memang terkait.
+- Tidak menyebabkan data muncul kembali akibat import atau sinkronisasi ulang.
+
+Audit khusus penghapusan WO, data import, tiket, konfigurasi, dan entitas lain yang memang tersedia.
+
+Jika suatu data telah dihapus, jangan membuatnya kembali secara otomatis dari cache atau sumber sinkronisasi lama tanpa aturan pemulihan yang eksplisit.
+
+Jangan melakukan penghapusan massal data lama sebagai bagian dari perbaikan.
+
+21. Keamanan Firebase
+
+- Pertahankan sistem autentikasi yang ada.
+- Audit Firebase Security Rules.
+- Batasi akses berdasarkan UID, peran, dan kebutuhan bisnis.
+- Pastikan hanya pihak berwenang yang dapat mengubah konfigurasi global.
+- Lindungi preferensi pribadi setiap pengguna.
+- Jangan menggunakan aturan terbuka yang mengizinkan seluruh pengguna membaca dan menulis seluruh database.
+- Jangan menaruh Firebase Admin SDK, service account private key, atau secret server dalam frontend.
+- Jangan menganggap "FIREBASE_API_KEY" sebagai pengganti autentikasi atau otorisasi.
+- Jika menggunakan backend atau Cloud Functions, validasi hak akses di sisi server.
+
+Jangan memberikan hak administrator kepada seluruh pengguna hanya untuk mengatasi error izin.
+
+Jika perubahan Security Rules diperlukan, jelaskan aturan yang terdampak dan uji akses baca, tulis, serta penghapusan sesuai peran yang berlaku.
+
+Jangan menampilkan atau meminta pengguna membagikan token rahasia maupun private key.
+
+22. Status penyimpanan dan error
+
+Terapkan status yang sesuai dengan arsitektur aktual, seperti:
+
+- Memuat data.
+- Menyimpan perubahan.
+- Tersimpan di server.
+- Belum tersinkronisasi.
+- Gagal menyimpan.
+- Tidak memiliki izin.
+- Konfigurasi belum tersedia.
+
+Gunakan penanganan error yang benar.
+
+Jangan menelan error secara diam-diam dan jangan menampilkan data yang belum dikonfirmasi tersimpan sebagai data permanen.
+
+Pertahankan desain aplikasi dan tambahkan indikator seperlunya.
+
+---
+
+BAGIAN E — KONSISTENSI SELURUH APLIKASI
+
+23. Audit fitur yang saling berhubungan
+
+Pastikan perbaikan tidak merusak:
+
+- Dashboard Monitoring.
+- TICKET MYREPUBLIC.
+- Dispatch.
+- Schedule Appointment Date.
+- Daftar dan detail WO.
+- Import Excel dan CSV.
+- Sinkronisasi Google Sheets.
+- Firebase Authentication.
+- Firebase Cloud Firestore.
+- Pencarian dan filter.
+- Rekap kontraktor.
+- Distribusi beban area.
+- Pengaturan aplikasi.
+- Hak akses pengguna.
+- Navigasi desktop dan mobile.
+
+Periksa apakah perubahan konfigurasi perlu disimpan di Firestore dan apakah menu dikendalikan oleh konfigurasi global atau kode frontend.
+
+Jangan memindahkan pengaturan ke database jika pengaturan tersebut seharusnya menjadi konfigurasi teknis saat build.
+
+24. Konsistensi perhitungan
+
+- Total WO tidak boleh bertambah akibat import ulang.
+- Statistik status harus konsisten dengan sumber data.
+- Setiap WO harus dihitung sesuai identitas dan aturan bisnis yang berlaku.
+- Filter tanggal tidak boleh mengubah identitas WO.
+- Rekap kontraktor dan area tidak boleh menghitung satu WO lebih dari sekali akibat duplikasi.
+- Data yang sudah dihapus tidak boleh muncul kembali tanpa proses pemulihan yang sah.
+- Perubahan konfigurasi harus bertahan setelah refresh.
+- Menu yang namanya berubah harus tetap memiliki route dan hak akses yang benar.
+
+Jangan mengubah definisi status atau aturan perhitungan yang tidak terkait dengan akar masalah.
+
+---
+
+BAGIAN F — PENGUJIAN WAJIB
+
+25. Pengujian tanggal
+
+Uji:
+
+1. Pada 29 Oktober 2026, Hari Ini menunjukkan 29 Oktober 2026.
+2. Besok menunjukkan 30 Oktober 2026.
+3. WO tanggal 29 Oktober masuk ke Hari Ini.
+4. WO tanggal 30 Oktober tidak masuk ke Hari Ini.
+5. WO tanggal 28 Oktober tidak masuk ke Hari Ini.
+6. Dropdown tanggal manual menghasilkan data yang sesuai.
+7. Semua Tanggal menghapus filter tanggal saja.
+8. Pergantian hari tidak mempertahankan tanggal lama.
+9. Daftar WO dan statistik konsisten.
+10. Filter tidak mengubah data Firestore.
+
+26. Pengujian anti-duplikasi
+
+Uji:
+
+1. WO baru berhasil disimpan satu kali.
+2. Import ulang file yang sama tidak membuat record tambahan.
+3. Nomor sama dengan data berbeda menghasilkan konflik, bukan overwrite.
+4. Nomor WO berulang dalam satu file hanya membuat satu record.
+5. Dua proses import bersamaan tidak membuat dua record.
+6. Google Sheets lalu Excel/CSV tidak menggandakan WO yang sama.
+7. Refresh dan login dari perangkat lain tidak membuat duplikat.
+8. Nomor WO kosong ditolak dengan alasan yang jelas.
+9. Retry setelah gangguan jaringan tidak membuat duplikat.
+10. Dashboard dan seluruh rekap tetap konsisten.
+
+27. Pengujian persistensi Firebase
+
+Uji:
+
+1. Tambah WO dan pastikan dokumen tersimpan.
+2. Refresh dan pastikan WO tetap ada.
+3. Tutup dan buka kembali aplikasi.
+4. Ubah konfigurasi global yang aman.
+5. Pastikan konfigurasi tersimpan dan tidak kembali ke default.
+6. Uji perubahan dari dua sesi pengguna yang berwenang.
+7. Pastikan preferensi pribadi tidak bocor ke pengguna lain.
+8. Hapus satu record dan pastikan penghapusan bertahan setelah refresh.
+9. Uji koneksi internet terputus dan pulih kembali.
+10. Uji operasi yang ditolak oleh Security Rules.
+11. Pastikan operasi yang gagal tidak ditampilkan sebagai keberhasilan.
+12. Pastikan sinkronisasi tidak memulihkan data yang telah dihapus secara tidak sengaja.
+
+28. Pengujian menu
+
+Uji:
+
+1. MONITORING DISPATCH berubah menjadi TICKET MYREPUBLIC.
+2. Ikon TICKET MYREPUBLIC berbeda dari DASHBOARD MONITORING.
+3. Menu membuka halaman yang tepat.
+4. Route dan breadcrumb tidak error.
+5. Hak akses tetap berfungsi.
+6. Tampilan HP Android tidak rusak.
+7. Fitur halaman yang memang masih diperlukan tetap berjalan.
+
+29. Build, tes, dan regresi
+
+Setelah perubahan:
+
+- Jalankan build yang tersedia.
+- Jalankan tes unit dan integrasi yang tersedia.
+- Periksa error TypeScript atau JavaScript.
+- Periksa fungsi CRUD dan seluruh jalur import.
+- Periksa listener Firebase.
+- Periksa kompatibilitas data lama.
+- Periksa navigasi dan tampilan mobile.
+- Uji perlindungan duplikasi saat operasi bersamaan jika lingkungan mendukung.
+- Uji Firestore dan Security Rules jika akses pengujian tersedia.
+
+Jangan menyatakan tes lulus jika belum dijalankan.
+
+Jika tidak dapat menguji database produksi atau konkurensi secara langsung, nyatakan batasannya secara jelas dan berikan langkah verifikasi yang masih dibutuhkan.
+
+---
+
+BAGIAN G — URUTAN IMPLEMENTASI
+
+Laksanakan pekerjaan secara berurutan:
+
+1. Audit struktur proyek dan file yang relevan.
+2. Identifikasi framework, versi SDK, database, dan pola penyimpanan aktual.
+3. Catat akar penyebab bug tanggal, Double WO, persistensi, dan masalah menu.
+4. Buat perlindungan terhadap perubahan destruktif dan pertahankan data lama.
+5. Perbaiki logika tanggal Asia/Jakarta.
+6. Perbaiki filter tanggal dan konsistensi statistik.
+7. Satukan validasi dan mekanisme anti-duplikasi seluruh jalur WO.
+8. Terapkan perlindungan penyimpanan atomik yang kompatibel dengan database aktual.
+9. Perbaiki persistensi data dan konfigurasi Firebase.
+10. Perbaiki inisialisasi, sinkronisasi, penghapusan, dan penanganan error.
+11. Ubah menu MONITORING DISPATCH menjadi TICKET MYREPUBLIC.
+12. Bedakan ikon TICKET MYREPUBLIC dari DASHBOARD MONITORING.
+13. Pastikan route, hak akses, dan fungsi halaman tetap sesuai.
+14. Jalankan build dan pengujian yang tersedia.
+15. Periksa regresi dan kompatibilitas data lama.
+16. Laporkan perubahan yang benar-benar dilakukan.
+
+Jangan melakukan migrasi skema, mengganti ID dokumen, menghapus data duplikat lama, atau mengubah Security Rules produksi secara destruktif tanpa strategi dan persetujuan yang diperlukan.
+
+---
+
+BAGIAN H — FORMAT LAPORAN AKHIR
+
+Setelah implementasi, berikan laporan yang mencakup:
+
+1. Ringkasan perubahan
+
+- Bug yang berhasil diperbaiki.
+- Menu yang diperbaiki.
+- Perubahan persistensi Firebase.
+- Perubahan perlindungan duplikasi.
+
+2. Akar masalah
+
+- Penyebab bug tanggal.
+- Penyebab Double WO.
+- Penyebab konfigurasi kembali ke default.
+- Penyebab penghapusan atau sinkronisasi tidak konsisten.
+- Penyebab ketidaksesuaian menu jika ditemukan.
+
+3. File yang berubah
+
+Sebutkan nama file dan tujuan setiap perubahan berdasarkan kode aktual.
+
+4. Perubahan database
+
+- Koleksi dan dokumen yang digunakan.
+- Mekanisme identitas WO.
+- Perlindungan penyimpanan bersamaan.
+- Perubahan konfigurasi dan Security Rules.
+- Migrasi yang diperlukan atau tidak diperlukan, berdasarkan pemeriksaan aktual.
+
+5. Hasil pengujian
+
+Gunakan status yang jujur:
+
+- LULUS — benar-benar diuji dan berhasil.
+- GAGAL — diuji tetapi tidak berhasil.
+- BELUM DIUJI — belum dijalankan atau lingkungan tidak mendukung.
+
+Sertakan hasil build dan tes yang benar-benar dilakukan.
+
+6. Risiko dan langkah berikutnya
+
+Jelaskan perubahan yang masih membutuhkan persetujuan, konfigurasi manual, pengujian Firebase, atau pemeriksaan pemilik proyek.
+
+KRITERIA KEBERHASILAN AKHIR
+
+Perbaikan dinyatakan berhasil hanya apabila:
+
+- Tanggal jadwal mengikuti "Asia/Jakarta".
+- Satu identitas WO tidak menghasilkan record ganda.
+- Semua jalur import menggunakan perlindungan yang sama.
+- Operasi bersamaan terlindungi pada lapisan penyimpanan.
+- Data lama tidak tertimpa atau terhapus secara tidak sengaja.
+- Data dan konfigurasi yang perlu dipertahankan tersimpan secara permanen di Firestore.
+- Penghapusan, sinkronisasi, dan penanganan error bekerja secara konsisten.
+- Hak akses dan Security Rules tetap aman.
+- Menu berubah menjadi TICKET MYREPUBLIC dengan ikon berbeda dari DASHBOARD MONITORING.
+- Route, navigasi mobile, dan fitur lama tetap berfungsi.
+- Build dan pengujian dilaporkan berdasarkan hasil aktual.
+
+MULAI SEKARANG DENGAN MENGAUDIT KODE PROYEK YANG SUDAH ADA. IDENTIFIKASI AKAR MASALAH BERDASARKAN KODE AKTUAL, LAKUKAN PERBAIKAN TERARAH, PERTAHANKAN DATA PRODUKSI, DAN VERIFIKASI SETIAP PERUBAHAN. JANGAN MEMBANGUN ULANG APLIKASI DAN JANGAN MENGKLAIM SELESAI SEBELUM PERUBAHAN BENAR-BENAR DIUJI.

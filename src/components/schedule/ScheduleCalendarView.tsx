@@ -19,7 +19,13 @@ import {
   Phone,
   RotateCcw
 } from 'lucide-react';
-import { formatAppointmentDateDisplay, parseAppointmentDate } from '../../services/appointmentDateParser';
+import {
+  formatAppointmentDateDisplay,
+  parseAppointmentDate,
+  getJakartaDateString,
+  getJakartaDateParts,
+  getTicketAppointmentDate
+} from '../../services/appointmentDateParser';
 import { StatusInstallerBadge, StatusAgentBadge } from '../common/Badge';
 
 interface ScheduleCalendarViewProps {
@@ -34,7 +40,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
   const { tickets, contractors, users, currentUser } = useApp();
 
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month' | 'list'>('day');
-  const [selectedDate, setSelectedDate] = useState<string>(() => '2026-10-28');
+  const [selectedDate, setSelectedDate] = useState<string>(() => getJakartaDateString(0));
   const [slotFilter, setSlotFilter] = useState('ALL');
   const [areaFilter, setAreaFilter] = useState('ALL');
   const [contractorFilter, setContractorFilter] = useState('ALL');
@@ -51,15 +57,15 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
 
   // Scoped tickets based on user role
   const scopedTickets = useMemo(() => {
-    return tickets.filter(t => {
-      if (t.isArchived || t.isDeleted) return false;
-      if (currentUser.role === 'super_admin' || currentUser.role === 'dispatch') return true;
-      if (currentUser.role === 'leader') {
-        const cName = t.contactorName || t.contractorName || '';
-        return !currentUser.contractor || cName.toLowerCase() === currentUser.contractor.toLowerCase();
+    return (tickets || []).filter(t => {
+      if (!t || t.isArchived || t.isDeleted) return false;
+      if (currentUser?.role === 'super_admin' || currentUser?.role === 'dispatch') return true;
+      if (currentUser?.role === 'leader') {
+        const cName = (t.contactorName || t.contractorName || '').toLowerCase();
+        return !currentUser.contractor || cName === (currentUser.contractor || '').toLowerCase();
       }
-      if (currentUser.role === 'installer') {
-        return (t.installerName || '').toLowerCase() === currentUser.name.toLowerCase();
+      if (currentUser?.role === 'installer') {
+        return (t.installerName || '').toLowerCase() === (currentUser?.name || '').toLowerCase();
       }
       return true;
     });
@@ -68,13 +74,14 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
   // Unique areas
   const areas = useMemo(() => {
     const set = new Set<string>();
-    scopedTickets.forEach(t => { if (t.area) set.add(t.area); });
+    scopedTickets.forEach(t => { if (t?.area) set.add(t.area); });
     return Array.from(set);
   }, [scopedTickets]);
 
   // Filtered tickets
   const filteredTickets = useMemo(() => {
-    return scopedTickets.filter(t => {
+    return (scopedTickets || []).filter(t => {
+      if (!t) return false;
       if (slotFilter !== 'ALL' && !(t.slotTime || '').includes(slotFilter.slice(0, 5))) return false;
       if (areaFilter !== 'ALL' && t.area !== areaFilter) return false;
       if (contractorFilter !== 'ALL') {
@@ -87,10 +94,10 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
       if (statusFilter !== 'ALL') {
         if (t.statusWOInstaller !== statusFilter && t.statusWOAgent !== statusFilter) return false;
       }
-      if (searchQuery.trim()) {
+      if (searchQuery && typeof searchQuery === 'string' && searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const m1 = t.woNumber.toLowerCase().includes(q);
-        const m2 = t.customerName.toLowerCase().includes(q);
+        const m1 = (t.woNumber ? String(t.woNumber).toLowerCase() : '').includes(q);
+        const m2 = (t.customerName ? String(t.customerName).toLowerCase() : '').includes(q);
         const m3 = (t.idCustomer || t.customerId || '').toLowerCase().includes(q);
         const m4 = (t.installerName || '').toLowerCase().includes(q);
         if (!m1 && !m2 && !m3 && !m4) return false;
@@ -125,7 +132,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
     if (!d) return false;
     const isCompleted = t.statusWOInstaller === 'Completed' || t.statusWOAgent === 'Closed' || t.statusWOAgent === 'Resolved';
     if (isCompleted) return false;
-    return d < '2026-10-28';
+    return d < getJakartaDateString(0);
   };
 
   const handlePrevDay = () => {
@@ -231,24 +238,36 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setSelectedDate('2026-10-28')}
-              className="px-2.5 py-1 text-xs font-semibold bg-[#E9E1FF] dark:bg-[#3B1D78] text-[#3B1D78] dark:text-[#E9E1FF] rounded-lg cursor-pointer"
+              onClick={() => setSelectedDate(getJakartaDateString(0))}
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg cursor-pointer transition-colors ${
+                selectedDate === getJakartaDateString(0)
+                  ? 'bg-[#5B35B1] text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+              }`}
             >
-              28 Okt (Hari Ini)
+              Hari Ini ({getJakartaDateParts(0).labelShort})
             </button>
             <button
               type="button"
-              onClick={() => setSelectedDate('2026-10-29')}
-              className="px-2.5 py-1 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg cursor-pointer"
+              onClick={() => setSelectedDate(getJakartaDateString(1))}
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg cursor-pointer transition-colors ${
+                selectedDate === getJakartaDateString(1)
+                  ? 'bg-[#5B35B1] text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+              }`}
             >
-              29 Okt (Besok)
+              Besok ({getJakartaDateParts(1).labelShort})
             </button>
             <button
               type="button"
-              onClick={() => setSelectedDate('2026-10-30')}
-              className="px-2.5 py-1 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg cursor-pointer"
+              onClick={() => setSelectedDate(getJakartaDateString(2))}
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg cursor-pointer transition-colors ${
+                selectedDate === getJakartaDateString(2)
+                  ? 'bg-[#5B35B1] text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+              }`}
             >
-              30 Okt
+              Lusa ({getJakartaDateParts(2).labelShort})
             </button>
           </div>
           <div className="flex items-center gap-2">
