@@ -122,7 +122,7 @@ interface AppContextType {
   workResultsList: string[];
   updateRootCauseCategories: (categories: RootCauseCategory[]) => void;
   saveTechnicalReport: (ticketId: string, report: Omit<TechnicalReport, 'id' | 'ticketId' | 'submittedAt' | 'submittedBy'>) => { success: boolean; error?: string };
-  saveProgressReport: (ticketId: string, data: { reportStatus: string; reasonReport: string; rootCause: string; remarksReport: string }) => { success: boolean; error?: string; report?: ProgressReportEntry };
+  saveProgressReport: (ticketId: string, data: { reportStatus: string; reasonReport: string; rootCause: string; remarksReport: string }) => Promise<{ success: boolean; error?: string; report?: ProgressReportEntry }>;
   verifyTechnicalReport: (ticketId: string) => void;
 
   // Ticket Operations
@@ -1691,10 +1691,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  const saveProgressReport = (
+  const saveProgressReport = async (
     ticketId: string,
     data: { reportStatus: string; reasonReport: string; rootCause: string; remarksReport: string }
-  ) => {
+  ): Promise<{ success: boolean; error?: string; report?: ProgressReportEntry }> => {
     const ticket = getTicketById(ticketId);
     if (!ticket) return { success: false, error: 'Tiket tidak ditemukan.' };
 
@@ -1790,17 +1790,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Persist progress report to Cloud Firestore (Confirmed Write)
-    saveTicketToFirestore(updatedWithProgress)
-      .then(() => {
+    try {
+      if (isOnline) {
+        await saveTicketToFirestore(updatedWithProgress);
         toast.success(`Progress report WO ${ticket.woNumber} berhasil disimpan ke Cloud Firestore.`, 'Progress Report Tersimpan');
-      })
-      .catch(err => {
-        if (!isOnline) {
-          toast.warning(`Progress report WO ${ticket.woNumber} tersimpan offline di IndexedDB lokal.`, 'Laporan Offline');
-        } else {
-          toast.error('Gagal menyimpan progress report ke Cloud Firestore: ' + (err?.message || err), 'Penyimpanan Gagal');
-        }
-      });
+      } else {
+        await saveTicketsOffline([updatedWithProgress]);
+        toast.warning(`Progress report WO ${ticket.woNumber} tersimpan offline di IndexedDB lokal.`, 'Laporan Offline');
+      }
+    } catch (err: any) {
+      console.error('Failed writing progress report to Firestore:', err);
+      toast.error('Gagal menyimpan progress report ke Cloud Firestore: ' + (err?.message || err), 'Penyimpanan Gagal');
+      return { success: false, error: err?.message || 'Gagal menyimpan ke Cloud Firestore' };
+    }
 
     fetch(`/api/tickets/${ticketId}/progress-report`, {
       method: 'POST',

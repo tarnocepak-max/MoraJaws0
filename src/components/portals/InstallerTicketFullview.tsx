@@ -37,6 +37,7 @@ import {
   Info
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
+import { useAnimation } from '../../context/AnimationContext';
 
 interface InstallerTicketFullviewProps {
   ticket: Ticket;
@@ -60,6 +61,7 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
     markTicketMessagesAsRead
   } = useApp();
   const { toast } = useToast();
+  const { showGlobalError, startLoading, stopLoading } = useAnimation();
 
   // Keep ticket state fresh from context whenever tickets update
   const activeTicket = useMemo(() => {
@@ -68,6 +70,16 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
 
   // UI helpers
   const [copiedAddress, setCopiedAddress] = useState(false);
+
+  // Success Confirmation Alert Modal State
+  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [savedReportSnapshot, setSavedReportSnapshot] = useState<{
+    status: string;
+    reason: string;
+    rootCause: string;
+    remarks: string;
+  } | null>(null);
 
   // -------------------------------------------------------------
   // FORM REPORT STATE (Report Status Pembaruan)
@@ -124,11 +136,12 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
     toast.info('Perubahan formulir laporan dibatalkan.', 'Dibatalkan');
   };
 
-  // Save report submission
-  const handleSaveReport = (e?: React.FormEvent) => {
+  // Save report submission with strict Firestore write confirmation
+  const handleSaveReport = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isSubmittingReport) return;
 
+    // 1. Validasi formulir
     if (!reportStatus) {
       setReportError('Silakan pilih Report Status.');
       return;
@@ -148,9 +161,15 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
 
     setReportError(null);
     setIsSubmittingReport(true);
+    startLoading({
+      title: 'MENYIMPAN REPORT KE FIRESTORE...',
+      subtitle: 'Memverifikasi dan menulis progress report ke database Cloud Firestore'
+    });
 
     try {
-      const res = saveProgressReport(activeTicket.id, {
+      // 2. Simpan laporan ke Firebase Cloud Firestore
+      // 3. Tunggu sampai penyimpanan benar-benar berhasil
+      const res = await saveProgressReport(activeTicket.id, {
         reportStatus,
         reasonReport,
         rootCause,
@@ -158,21 +177,62 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
       });
 
       if (res.success) {
+        // Snapshot detail laporan yang berhasil disimpan
+        setSavedReportSnapshot({
+          status: reportStatus,
+          reason: reasonReport,
+          rootCause,
+          remarks: remarksReport.trim()
+        });
+
+        // 4 & 5. Tampilkan animasi SUCCESS ALERT dan tombol KONFIRMASI
+        // 6. Menunggu tindakan pengguna (TIDAK melakukan redirect otomatis)
+        setShowSuccessAlert(true);
         toast.success(
-          `Laporan status "${reportStatus}" berhasil disimpan dan dicatat ke riwayat.`,
-          'Laporan Berhasil Disimpan'
+          `Laporan status "${reportStatus}" berhasil disimpan ke Cloud Firestore.`,
+          'REPORT TERSIMPAN'
         );
       } else {
-        setReportError(res.error || 'Gagal menyimpan laporan.');
-        toast.error(res.error || 'Gagal menyimpan laporan.', 'Gagal');
+        // 5. JIKA SAVE REPORT GAGAL
+        const errMsg = res.error || 'Gagal menyimpan laporan ke Cloud Firestore.';
+        setReportError(errMsg);
+        showGlobalError({
+          errorCode: 'MJ-FS-002',
+          module: 'Firestore',
+          operation: 'Save Progress Report',
+          description: 'Gagal menyimpan data laporan.',
+          message: errMsg,
+          technicalDetails: errMsg,
+          severity: 'HIGH',
+          onRetry: () => handleSaveReport()
+        });
       }
     } catch (err: any) {
-      const msg = err?.message || 'Terjadi kesalahan sistem saat menyimpan laporan.';
-      setReportError(msg);
-      toast.error(msg, 'Kesalahan');
+      const errMsg = err?.message || 'Terjadi kesalahan sistem saat menyimpan laporan.';
+      setReportError(errMsg);
+      showGlobalError({
+        errorCode: 'MJ-FS-002',
+        module: 'Firestore',
+        operation: 'Save Progress Report Exception',
+        description: 'Terjadi kegagalan komunikasi dengan database Firestore.',
+        message: errMsg,
+        technicalDetails: errMsg,
+        severity: 'HIGH',
+        onRetry: () => handleSaveReport()
+      });
     } finally {
       setIsSubmittingReport(false);
+      stopLoading();
     }
+  };
+
+  // Navigasi konfirmasi teknisi ke Dashboard Installer
+  const handleConfirmRedirect = () => {
+    if (isRedirecting) return;
+    setIsRedirecting(true);
+    setShowSuccessAlert(false);
+    // Redirect ke halaman Dashboard Installer
+    onBack();
   };
 
   // -------------------------------------------------------------
@@ -1089,6 +1149,110 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
           )}
         </div>
       </div>
+
+      {/* ============================================================== */}
+      {/* MORAJAWS SUCCESS ALERT MODAL WITH CONFIRMATION BUTTON           */}
+      {/* ============================================================== */}
+      {showSuccessAlert && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#160D29]/85 backdrop-blur-md animate-in fade-in duration-200"
+        >
+          <div
+            className="w-full max-w-md bg-[#160D29] rounded-3xl border border-[#D8B4FE]/50 p-6 sm:p-7 shadow-[0_0_50px_rgba(113,53,181,0.6)] relative overflow-hidden animate-in zoom-in-95 duration-200 text-center"
+            style={{
+              backgroundImage: 'radial-gradient(circle at 50% 0%, rgba(113, 53, 181, 0.45) 0%, rgba(22, 13, 41, 0.98) 75%)'
+            }}
+          >
+            {/* Top Gloss Highlight Sweep */}
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-[#D8B4FE] to-transparent" />
+
+            {/* 3D Glossy Check Icon with Rotating Lilac Orbital Ring */}
+            <div className="relative w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full bg-emerald-500/20 blur-xl animate-pulse" />
+              <svg className="absolute inset-0 w-full h-full animate-spin" style={{ animationDuration: '6s' }} viewBox="0 0 100 100">
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="44"
+                  fill="none"
+                  stroke="#D8B4FE"
+                  strokeWidth="2.5"
+                  strokeDasharray="25 15"
+                  strokeLinecap="round"
+                  opacity="0.8"
+                />
+              </svg>
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#35105E] to-[#160D29] border border-[#D8B4FE]/60 flex items-center justify-center shadow-[0_0_20px_rgba(52,211,153,0.4)] relative z-10">
+                <CheckCircle2 className="w-9 h-9 text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+              </div>
+            </div>
+
+            {/* Badge Status */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-[#35105E] text-[#D8B4FE] border border-[#D8B4FE]/40 mb-3 shadow-[0_0_12px_rgba(168,85,247,0.3)]">
+              <Sparkles className="w-3.5 h-3.5 text-[#D8B4FE]" />
+              <span>REPORT TERSIMPAN</span>
+            </div>
+
+            {/* Title */}
+            <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+              Laporan Berhasil Disimpan!
+            </h3>
+
+            <p className="text-xs sm:text-sm text-[#E9D5FF]/90 mt-2 leading-relaxed">
+              Pembaruan status pengerjaan untuk WO{' '}
+              <span className="font-mono font-bold text-white bg-[#35105E]/80 px-2 py-0.5 rounded-md border border-[#D8B4FE]/30">
+                {activeTicket.woNumber}
+              </span>{' '}
+              telah diverifikasi dan tersimpan secara permanen di database Cloud Firestore.
+            </p>
+
+            {/* Snapshot Summary Box */}
+            <div className="my-5 p-3.5 rounded-2xl bg-[#35105E]/40 border border-[#D8B4FE]/25 text-left text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[#D8B4FE]/70">Status WO Baru:</span>
+                <span className="font-bold text-white bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-md border border-emerald-400/30">
+                  {savedReportSnapshot?.status || reportStatus}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#D8B4FE]/70">Reason Report:</span>
+                <span className="font-semibold text-[#E9D5FF] truncate max-w-[210px]" title={savedReportSnapshot?.reason || reasonReport}>
+                  {savedReportSnapshot?.reason || reasonReport}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#D8B4FE]/70">Rootcause:</span>
+                <span className="font-semibold text-[#E9D5FF] truncate max-w-[210px]" title={savedReportSnapshot?.rootCause || rootCause}>
+                  {savedReportSnapshot?.rootCause || rootCause}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-[#D8B4FE]/15">
+                <span className="text-[#D8B4FE]/70">Teknisi Pelapor:</span>
+                <span className="font-bold text-white">{currentUser.name}</span>
+              </div>
+            </div>
+
+            {/* Confirmation Button with specified Dark Purple Gloss & Lilac Luxury Design */}
+            <button
+              type="button"
+              disabled={isRedirecting}
+              onClick={handleConfirmRedirect}
+              className="w-full py-3.5 px-5 bg-gradient-to-r from-[#7135B5] to-[#A855F7] hover:from-[#7E3CC7] hover:to-[#B666FE] text-white font-extrabold text-xs sm:text-sm tracking-wide rounded-[14px] shadow-[0_0_24px_rgba(168,85,247,0.55)] border border-[#E9D5FF]/40 flex items-center justify-center gap-2.5 transition-all transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed group relative overflow-hidden"
+              title="Konfirmasi & Lanjut ke Dashboard Installer"
+            >
+              {/* Glossy sweep effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 pointer-events-none" />
+
+              <CheckCircle2 className="w-5 h-5 text-white shrink-0 drop-shadow-[0_0_6px_rgba(255,255,255,0.8)]" />
+              <span className="relative z-10">
+                {isRedirecting ? 'MENGALIHKAN KE DASHBOARD...' : 'KONFIRMASI & LANJUT KE DASHBOARD'}
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ============================================================== */}
       {/* LIGHTBOX MODAL: FULLSIZE IMAGE VIEW                            */}
