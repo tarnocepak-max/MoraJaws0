@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import fs from 'fs';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // ==============================================================================
@@ -7,56 +6,24 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 // Provides a singleton client for trusted server-side execution.
 // Strictly requires SUPABASE_SERVICE_ROLE_KEY for administrative backend access.
 // Service Role Key is NEVER exposed to the frontend browser or API responses.
+// Credentials are exclusively loaded from server process.env (no /proc scanning).
 // ==============================================================================
 
 /**
- * Resolves Supabase credentials from runtime environment, supporting Google AI Studio
- * secret injection patterns, aliases, and origin normalization.
+ * Resolves Supabase credentials strictly from server environment variables.
+ * Disallows /proc filesystem reading.
  */
 function resolveRuntimeSupabaseEnv(): void {
-  // 1. Fallback: Check if secrets are present in active processes (/proc) if missing from current process.env
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    try {
-      if (fs.existsSync('/proc')) {
-        const pids = fs.readdirSync('/proc').filter(p => /^\d+$/.test(p));
-        for (const pid of pids) {
-          try {
-            const environ = fs.readFileSync(`/proc/${pid}/environ`, 'utf-8');
-            if (environ.includes('SUPABASE_URL=') || environ.includes('SUPABASE_SERVICE_ROLE_KEY=')) {
-              for (const entry of environ.split('\0')) {
-                const eqIdx = entry.indexOf('=');
-                if (eqIdx > 0) {
-                  const key = entry.slice(0, eqIdx).trim();
-                  const val = entry.slice(eqIdx + 1).trim();
-                  if (!process.env[key] && (key.startsWith('SUPABASE_') || key.startsWith('FIREBASE_'))) {
-                    process.env[key] = val;
-                  }
-                }
-              }
-              if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) break;
-            }
-          } catch {}
-        }
-      }
-    } catch {}
-  }
-
-  // 2. Handle aliases if primary keys are still absent
-  if (!process.env.SUPABASE_URL && process.env.VITE_SUPABASE_URL) {
-    process.env.SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-  }
+  // 1. Handle standard server-side aliases without exposing secrets
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SECRET_KEY) {
     process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SECRET_KEY;
   }
-  if (!process.env.SUPABASE_ANON_KEY && process.env.VITE_SUPABASE_ANON_KEY) {
-    process.env.SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
-  }
 
-  // 3. Normalize SUPABASE_URL to origin (strip trailing /rest/v1 or subpaths)
+  // 2. Normalize SUPABASE_URL to origin (strip trailing /rest/v1 or subpaths)
   if (process.env.SUPABASE_URL) {
     try {
       const parsed = new URL(process.env.SUPABASE_URL.trim());
-      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+      if (parsed.protocol === 'https:' || (process.env.NODE_ENV !== 'production' && parsed.protocol === 'http:')) {
         process.env.SUPABASE_URL = parsed.origin;
       }
     } catch {}

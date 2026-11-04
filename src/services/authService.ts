@@ -178,6 +178,7 @@ export function getRoleDisplayName(role: UserRole): string {
 /**
  * Returns authenticated HTTP headers including Authorization: Bearer <sessionToken>
  * sourced from official stored session in localStorage.
+ * Custom spoofable headers (x-user-id, x-user-role, x-username) are strictly omitted.
  */
 export function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
@@ -190,21 +191,10 @@ export function getAuthHeaders(): Record<string, string> {
       if (sess?.token) {
         headers['Authorization'] = `Bearer ${sess.token}`;
       }
-      const userId = sess?.user?.id || sess?.userId;
-      if (userId) {
-        headers['x-user-id'] = String(userId);
-      }
-      const userRole = sess?.user?.role || sess?.role;
-      if (userRole) {
-        headers['x-user-role'] = String(userRole);
-      }
-      const username = sess?.user?.username || sess?.username;
-      if (username) {
-        headers['x-username'] = String(username);
-      }
     }
   } catch (err) {
     console.warn('[authService] Failed to read auth session headers:', err);
   }
   return headers;
 }
+

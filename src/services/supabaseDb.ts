@@ -1,14 +1,13 @@
 import { Ticket, User, Contractor, CoverageArea, TicketMessage, AuditLog } from '../types';
-import { getClientSupabaseInstance } from './supabaseClient';
+import { getAuthHeaders } from './authService';
 
 // ==============================================================================
-// MORAJAWS SUPABASE REPOSITORY LAYER (PHASE 6 ADAPTER CONTRACT)
-// Provides unified CRUD, Archive, Restore, Batch, and Realtime interfaces.
-// Adheres strictly to the Fase 6 Constitution:
-// - Sandbox testing is completely isolated.
-// - Production remains on Firebase Cloud Firestore.
-// - No production dual-write.
-// - Backend-proxy routes are utilized for authenticated mutations.
+// MORAJAWS SUPABASE REPOSITORY LAYER (SECURE BACKEND PROXY ADAPTER)
+// Strictly eliminates all direct browser-to-Supabase connections.
+// Every database operation routes through the Express backend proxy:
+// - Authorization: Bearer <token> is strictly attached to all requests.
+// - Realtime subscriptions use Server-Sent Events (SSE) via /api/supabase/realtime/stream.
+// - Backend enforces all RBAC, role scopes, and data sanitization.
 // ==============================================================================
 
 export interface SupabaseResponse<T = any> {
@@ -37,14 +36,14 @@ export interface WorkOrderFilterOptions {
 }
 
 export interface RealtimeSubscriptionOptions {
-  table?: 'work_orders' | 'ticket_messages' | 'audit_logs';
+  table?: 'work_orders' | 'ticket_messages' | 'audit_logs' | 'users';
   event?: 'INSERT' | 'UPDATE' | 'DELETE' | '*';
   filter?: string;
   onPayload: (payload: any) => void;
   onError?: (error: any) => void;
 }
 
-// In-Memory Sandbox Mock Store for isolated contract testing when Supabase remote is standby
+// In-Memory Sandbox Mock Store for isolated local testing
 const SANDBOX_STORE = {
   workOrders: new Map<string, Ticket>(),
   messages: new Map<string, TicketMessage>(),
@@ -64,15 +63,14 @@ export class SupabaseRepository {
   }
 
   // ---------------------------------------------------------------------------
-  // WORK ORDER OPERATIONS
+  // WORK ORDER OPERATIONS VIA EXPRESS BACKEND PROXY
   // ---------------------------------------------------------------------------
 
   /**
-   * CREATE: Insert a work order into Supabase (or sandbox namespace)
+   * CREATE: Insert a work order via Express Backend Proxy
    */
   async createWorkOrder(ticket: Ticket, isSandbox = false): Promise<SupabaseResponse<Ticket>> {
     if (isSandbox || ticket.id?.startsWith('migration_sandbox') || ticket.woNumber?.startsWith('SANDBOX-')) {
-      // Isolated sandbox execution
       const id = ticket.id || `migration_sandbox_${Date.now()}`;
       if (Array.from(SANDBOX_STORE.workOrders.values()).some(t => t.woNumber.toUpperCase() === ticket.woNumber.toUpperCase())) {
         return {
@@ -94,11 +92,10 @@ export class SupabaseRepository {
       return { success: true, data: newTicket };
     }
 
-    // Remote backend proxy to avoid exposing secret key
     try {
       const res = await fetch('/api/supabase/work-orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(ticket)
       });
       const json = await res.json();
@@ -112,7 +109,7 @@ export class SupabaseRepository {
   }
 
   /**
-   * GET BY ID: Retrieve single work order
+   * GET BY ID: Retrieve single work order via Express Backend Proxy
    */
   async getWorkOrderById(id: string, isSandbox = false): Promise<SupabaseResponse<Ticket | null>> {
     if (isSandbox || id.startsWith('migration_sandbox')) {
@@ -127,7 +124,9 @@ export class SupabaseRepository {
     }
 
     try {
-      const res = await fetch(`/api/supabase/work-orders/${encodeURIComponent(id)}`);
+      const res = await fetch(`/api/supabase/work-orders/${encodeURIComponent(id)}`, {
+        headers: getAuthHeaders()
+      });
       const json = await res.json();
       return json;
     } catch (err: any) {
@@ -139,7 +138,7 @@ export class SupabaseRepository {
   }
 
   /**
-   * GET LIST: Retrieve work orders with filtering
+   * GET LIST: Retrieve work orders with server-side RBAC scoping
    */
   async getWorkOrders(options: WorkOrderFilterOptions = {}, isSandbox = false): Promise<SupabaseResponse<Ticket[]>> {
     if (isSandbox) {
@@ -154,7 +153,9 @@ export class SupabaseRepository {
 
     try {
       const query = new URLSearchParams(options as any).toString();
-      const res = await fetch(`/api/supabase/work-orders?${query}`);
+      const res = await fetch(`/api/supabase/work-orders?${query}`, {
+        headers: getAuthHeaders()
+      });
       const json = await res.json();
       return json;
     } catch (err: any) {
@@ -166,7 +167,7 @@ export class SupabaseRepository {
   }
 
   /**
-   * UPDATE: Partial update of a work order
+   * UPDATE: Partial update of a work order via Express Backend Proxy
    */
   async updateWorkOrder(id: string, updates: Partial<Ticket>, isSandbox = false): Promise<SupabaseResponse<Ticket>> {
     if (isSandbox || id.startsWith('migration_sandbox')) {
@@ -189,7 +190,7 @@ export class SupabaseRepository {
     try {
       const res = await fetch(`/api/supabase/work-orders/${encodeURIComponent(id)}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(updates)
       });
       return await res.json();
@@ -202,7 +203,7 @@ export class SupabaseRepository {
   }
 
   /**
-   * SOFT DELETE: Mark work order as deleted
+   * SOFT DELETE: Mark work order as deleted (Restricted to Management Data)
    */
   async deleteWorkOrder(id: string, reason?: string, deletedBy?: string, isSandbox = false): Promise<SupabaseResponse<Ticket>> {
     if (isSandbox || id.startsWith('migration_sandbox')) {
@@ -227,7 +228,7 @@ export class SupabaseRepository {
     try {
       const res = await fetch(`/api/supabase/work-orders/${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ reason, deletedBy })
       });
       return await res.json();
@@ -240,7 +241,7 @@ export class SupabaseRepository {
   }
 
   /**
-   * ARCHIVE: Move work order to archive
+   * ARCHIVE: Move work order to archive via Express Backend Proxy
    */
   async archiveWorkOrder(id: string, archivedBy?: string, isSandbox = false): Promise<SupabaseResponse<Ticket>> {
     if (isSandbox || id.startsWith('migration_sandbox')) {
@@ -264,20 +265,20 @@ export class SupabaseRepository {
     try {
       const res = await fetch(`/api/supabase/work-orders/${encodeURIComponent(id)}/archive`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ archivedBy })
       });
       return await res.json();
     } catch (err: any) {
       return {
         success: false,
-        error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal mengarsipkan data' }
+        error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal mengarsipkan data di Supabase proxy' }
       };
     }
   }
 
   /**
-   * RESTORE: Restore an archived or soft-deleted work order
+   * RESTORE: Restore an archived or soft-deleted work order via Express Backend Proxy
    */
   async restoreWorkOrder(id: string, restoredBy?: string, isSandbox = false): Promise<SupabaseResponse<Ticket>> {
     if (isSandbox || id.startsWith('migration_sandbox')) {
@@ -303,14 +304,14 @@ export class SupabaseRepository {
     try {
       const res = await fetch(`/api/supabase/work-orders/${encodeURIComponent(id)}/restore`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ restoredBy })
       });
       return await res.json();
     } catch (err: any) {
       return {
         success: false,
-        error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal memulihkan data' }
+        error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal memulihkan data di Supabase proxy' }
       };
     }
   }
@@ -360,63 +361,233 @@ export class SupabaseRepository {
     try {
       const res = await fetch('/api/supabase/work-orders/bulk-import', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ tickets, batchId })
       });
       return await res.json();
     } catch (err: any) {
       return {
         success: false,
-        error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal batch import' }
+        error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal batch import di Supabase proxy' }
       };
     }
   }
 
   // ---------------------------------------------------------------------------
-  // REALTIME SUBSCRIPTION PROTOTYPE
+  // USER MANAGEMENT VIA EXPRESS BACKEND PROXY
+  // ---------------------------------------------------------------------------
+
+  async getUsers(includeDeleted = false): Promise<SupabaseResponse<User[]>> {
+    try {
+      const res = await fetch(`/api/supabase/users?includeDeleted=${includeDeleted}`, {
+        headers: getAuthHeaders()
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal memuat pengguna' } };
+    }
+  }
+
+  async getUserById(id: string): Promise<SupabaseResponse<User | null>> {
+    try {
+      const res = await fetch(`/api/supabase/users/${encodeURIComponent(id)}`, {
+        headers: getAuthHeaders()
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal memuat detail pengguna' } };
+    }
+  }
+
+  async createUser(user: Partial<User>): Promise<SupabaseResponse<User>> {
+    try {
+      const res = await fetch('/api/supabase/users', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(user)
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal membuat pengguna' } };
+    }
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<SupabaseResponse<User>> {
+    try {
+      const res = await fetch(`/api/supabase/users/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(updates)
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal memperbarui pengguna' } };
+    }
+  }
+
+  async deleteUser(id: string, reason: string): Promise<SupabaseResponse<any>> {
+    try {
+      const res = await fetch(`/api/supabase/users/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ reason })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal menghapus pengguna' } };
+    }
+  }
+
+  async resetUserPassword(id: string): Promise<SupabaseResponse<any>> {
+    try {
+      const res = await fetch(`/api/supabase/users/${encodeURIComponent(id)}/reset-password`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal reset password pengguna' } };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // CONTRACTORS & COVERAGE AREAS VIA EXPRESS BACKEND PROXY
+  // ---------------------------------------------------------------------------
+
+  async getContractors(): Promise<SupabaseResponse<Contractor[]>> {
+    try {
+      const res = await fetch('/api/supabase/contractors', {
+        headers: getAuthHeaders()
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal memuat kontraktor' } };
+    }
+  }
+
+  async getCoverageAreas(): Promise<SupabaseResponse<CoverageArea[]>> {
+    try {
+      const res = await fetch('/api/supabase/coverage-areas', {
+        headers: getAuthHeaders()
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal memuat area coverage' } };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // APP CONFIGURATION & AUDIT LOGS VIA EXPRESS BACKEND PROXY
+  // ---------------------------------------------------------------------------
+
+  async getAppSetting(key: string): Promise<SupabaseResponse<any>> {
+    try {
+      const res = await fetch(`/api/supabase/settings/${encodeURIComponent(key)}`, {
+        headers: getAuthHeaders()
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal memuat setting' } };
+    }
+  }
+
+  async saveAppSetting(key: string, value: any, description?: string): Promise<SupabaseResponse<boolean>> {
+    try {
+      const res = await fetch(`/api/supabase/settings/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ value, description })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal menyimpan setting' } };
+    }
+  }
+
+  async getAuditLogs(limit = 100): Promise<SupabaseResponse<AuditLog[]>> {
+    try {
+      const res = await fetch(`/api/supabase/audit-logs?limit=${limit}`, {
+        headers: getAuthHeaders()
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: { code: 'NETWORK_ERROR', message: err?.message || 'Gagal memuat audit log' } };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // SECURE REALTIME SUBSCRIPTION VIA BACKEND SERVER-SENT EVENTS (SSE)
   // ---------------------------------------------------------------------------
 
   /**
-   * Subscribe to Supabase Realtime changes on tables
+   * Subscribes to real-time events via backend SSE stream.
+   * Completely avoids browser direct connection to Supabase database.
+   * Backend enforces all authentication, role permissions, and scoped event filtering.
    */
   subscribeToChanges(options: RealtimeSubscriptionOptions): () => void {
-    const client = getClientSupabaseInstance();
-    if (!client) {
-      // In standby mode, return a harmless no-op unsubscriber
-      console.info('[Supabase Repository] Realtime is in standby mode (client unconfigured).');
-      return () => {};
-    }
+    let isAborted = false;
+    let abortController = new AbortController();
 
-    try {
-      const channelName = `realtime-${options.table || 'work_orders'}-${Date.now()}`;
-      const channel = client.channel(channelName);
+    const connectSse = async () => {
+      try {
+        const authHeaders = getAuthHeaders();
+        const response = await fetch('/api/supabase/realtime/stream', {
+          headers: {
+            ...authHeaders,
+            Accept: 'text/event-stream'
+          },
+          signal: abortController.signal
+        });
 
-      channel.on(
-        'postgres_changes',
-        {
-          event: options.event || '*',
-          schema: 'public',
-          table: options.table || 'work_orders',
-          filter: options.filter
-        },
-        (payload) => {
-          options.onPayload(payload);
+        if (!response.ok || !response.body) {
+          options.onError?.(new Error(`Koneksi SSE ditolak oleh server (Status: ${response.status})`));
+          return;
         }
-      );
 
-      channel.subscribe((status, err) => {
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          options.onError?.(err || new Error(`Channel subscription status: ${status}`));
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (!isAborted) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
+
+          for (const block of lines) {
+            const dataMatch = block.match(/data:\s*(.+)/);
+            if (dataMatch) {
+              try {
+                const eventPayload = JSON.parse(dataMatch[1]);
+                if (
+                  (!options.table || eventPayload.table === options.table || eventPayload.entity === options.table) &&
+                  (!options.event || options.event === '*' || eventPayload.eventType === options.event)
+                ) {
+                  options.onPayload(eventPayload);
+                }
+              } catch {}
+            }
+          }
         }
-      });
+      } catch (err: any) {
+        if (!isAborted) {
+          options.onError?.(err);
+          // Safe exponential backoff reconnection attempt
+          setTimeout(() => {
+            if (!isAborted) connectSse();
+          }, 5000);
+        }
+      }
+    };
 
-      return () => {
-        client.removeChannel(channel).catch(() => {});
-      };
-    } catch (err) {
-      options.onError?.(err);
-      return () => {};
-    }
+    connectSse();
+
+    return () => {
+      isAborted = true;
+      abortController.abort();
+    };
   }
 }
 
