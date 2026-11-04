@@ -6,7 +6,13 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
-import { getSupabaseBackendClient, checkSupabaseConnection, getLastSupabaseHealthStatus } from './server/supabaseClient.ts';
+import {
+  getSupabaseBackendClient,
+  checkSupabaseConnection,
+  getLastSupabaseHealthStatus,
+  isSupabaseConfigured,
+  isLocalJsonModeAllowed
+} from './server/supabaseClient.ts';
 import { checkFirebaseAdminHealth, verifyFirebaseIdToken } from './server/firebaseAdmin.ts';
 import {
   findUserInSupabase,
@@ -38,7 +44,8 @@ import {
   insertAuditLogToSupabase,
   deleteSandboxWorkOrderHardFromSupabase,
   toDateOnlyString,
-  canonicalWoKey
+  canonicalWoKey,
+  normalizeWoNumber
 } from './server/supabaseAdapter.ts';
 import { runPhase8ShadowDryRunSuite } from './server/supabaseShadowService.ts';
 import { realtimeSandboxHub, requireSandboxSuperAdmin, getSandboxSuperAdminAllowlist } from './server/realtimeHub.ts';
@@ -129,6 +136,30 @@ export function verifyUserPassword(password: string, storedHash?: string): boole
   }
   // Safe verification for legacy accounts in transit
   return hashPasswordLegacy(password) === storedHash;
+}
+
+/**
+ * Generates a cryptographically random, unique temporary password (Phase 10 Hardening)
+ * Eliminates all shared default passwords such as '12345678'.
+ */
+export function generateSecureTemporaryPassword(): string {
+  const bytes = crypto.randomBytes(9);
+  return 'Mj!' + bytes.toString('base64url');
+}
+
+/**
+ * Checks whether Supabase is configured and operating as the primary database.
+ */
+export function isSupabaseMode(): boolean {
+  return isSupabaseConfigured();
+}
+
+/**
+ * Checks whether local JSON mode is explicitly permitted as development fallback.
+ * Strictly prohibited if Supabase credentials are configured or if ALLOW_LOCAL_JSON_MODE !== 'true'.
+ */
+export function isLocalJsonAllowed(): boolean {
+  return isLocalJsonModeAllowed();
 }
 
 // Standalone appointment date parser for backend normalization
@@ -1353,23 +1384,16 @@ export function isLeaderAllowedToManageInstaller(leader: ServerUser, installer: 
   if (leader.role !== 'leader') return false;
   if (installer.role !== 'installer') return false;
 
-  const leaderCid = resolveUserContractorId(leader);
-  const instCid = resolveUserContractorId(installer);
+  const leaderCid = (leader.contractorId || resolveUserContractorId(leader) || '').trim();
+  const instCid = (installer.contractorId || resolveUserContractorId(installer) || '').trim();
 
-  if (leaderCid && instCid) {
-    return leaderCid === instCid;
-  }
-
-  const leaderContr = (leader.contractor || '').trim().toLowerCase();
-  const instContr = (installer.contractor || '').trim().toLowerCase();
-
-  // If contractor name is blank on either, identity cannot be confirmed -> reject
-  if (!leaderContr || !instContr) {
+  // Sesuai Ketentuan 5: Jika contractor_id tidak tersedia atau tidak dapat diverifikasi, tolak akses.
+  if (!leaderCid || !instCid) {
     return false;
   }
 
-  // Strict exact match on normalized contractor name
-  return leaderContr === instContr;
+  // Strictly enforce contractor_id match between Leader and Installer
+  return leaderCid === instCid;
 }
 
 function scopeTicketsForUser(tickets: any[], user: ServerUser): any[] {
@@ -1380,23 +1404,23 @@ function scopeTicketsForUser(tickets: any[], user: ServerUser): any[] {
       return true;
     }
 
-    const ticketContractor = (t.contactorName || t.contractorName || '').toLowerCase().trim();
-    const ticketContractorId = (t.contractorId || t.contractor_id || '').trim();
-    const ticketArea = (t.area || '').toLowerCase().trim();
-
     if (user.role === 'leader') {
-      const leaderCid = resolveUserContractorId(user);
-      const leaderContr = (user.contractor || '').toLowerCase().trim();
-      const leaderArea = (user.area || '').toLowerCase().trim();
+      const leaderCid = (user.contractorId || resolveUserContractorId(user) || '').trim();
+      const ticketContractorId = (t.contractorId || t.contractor_id || '').trim();
 
-      if (leaderCid && ticketContractorId) {
-        if (leaderCid !== ticketContractorId) return false;
-      } else {
-        if (!leaderContr) return false;
-        const matchContr = ticketContractor === leaderContr || ticketContractor.includes(leaderContr) || leaderContr.includes(ticketContractor);
-        if (!matchContr) return false;
+      if (!leaderCid) return false;
+      if (ticketContractorId && leaderCid !== ticketContractorId) return false;
+
+      const leaderContr = (user.contractor || '').toLowerCase().trim();
+      const ticketContractor = (t.contactorName || t.contractorName || '').toLowerCase().trim();
+      if (!ticketContractorId) {
+        if (!leaderContr || !ticketContractor || (leaderContr !== ticketContractor && !ticketContractor.includes(leaderContr) && !leaderContr.includes(ticketContractor))) {
+          return false;
+        }
       }
 
+      const leaderArea = (user.area || '').toLowerCase().trim();
+      const ticketArea = (t.area || '').toLowerCase().trim();
       const matchArea = !leaderArea || ticketArea === leaderArea || ticketArea.includes(leaderArea) || leaderArea.includes(ticketArea);
       return matchArea;
     }
@@ -1447,11 +1471,49 @@ function getBackendTicketWODate(t: any): string | null {
   return null;
 }
 
+async function bootstrapSupabaseBaselineData(): Promise<void> {
+  if (!isSupabaseMode()) return;
+  const sbClient = getSupabaseBackendClient();
+  if (!sbClient) return;
+
+  try {
+    // 1. Check and bootstrap contractors if table is empty
+    const { count: cCount, error: cErr } = await sbClient.from('contractors').select('*', { count: 'exact', head: true });
+    if (!cErr && (cCount === 0 || cCount === null) && db.contractors.length > 0) {
+      console.log(`[Supabase DAL] Bootstrapping ${db.contractors.length} baseline contractors into Supabase...`);
+      for (const c of db.contractors) {
+        await insertContractorToSupabase(c);
+      }
+    }
+
+    // 2. Check and bootstrap coverage areas if table is empty
+    const { count: aCount, error: aErr } = await sbClient.from('coverage_areas').select('*', { count: 'exact', head: true });
+    if (!aErr && (aCount === 0 || aCount === null) && db.coverageAreas.length > 0) {
+      console.log(`[Supabase DAL] Bootstrapping ${db.coverageAreas.length} baseline coverage areas into Supabase...`);
+      for (const a of db.coverageAreas) {
+        await insertCoverageAreaToSupabase(a);
+      }
+    }
+
+    // 3. Check and bootstrap users if table is empty
+    const { count: uCount, error: uErr } = await sbClient.from('users').select('*', { count: 'exact', head: true });
+    if (!uErr && (uCount === 0 || uCount === null) && db.users.length > 0) {
+      console.log(`[Supabase DAL] Bootstrapping ${db.users.length} baseline users into Supabase...`);
+      for (const u of db.users) {
+        await insertUserToSupabase(u);
+      }
+    }
+  } catch (err: any) {
+    console.error('[Supabase DAL] Error during Supabase baseline bootstrapping:', err.message);
+  }
+}
+
 async function startServer() {
   loadDatabaseFromDisk();
+  await bootstrapSupabaseBaselineData();
 
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+  const PORT = 3000;
 
   // Production CORS & Security Headers (Section F: Explicit production allowlist, no wildcard regex)
   const configuredCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS || process.env.ALLOWED_ORIGINS || '')
@@ -3092,7 +3154,9 @@ async function startServer() {
     const assignedContractorId = req.user!.role === 'leader' ? resolveUserContractorId(req.user!) : contractorId;
     const assignedArea = req.user!.role === 'leader' ? req.user!.area : area;
 
-    const initialPassword = 'password' in req.body ? req.body.password : '12345678';
+    const initialPassword = (typeof req.body?.password === 'string' && req.body.password.trim().length >= 8)
+      ? req.body.password.trim()
+      : generateSecureTemporaryPassword();
     const secureHash = hashPasswordSecure(initialPassword);
 
     const newUser: ServerUser = {
@@ -3129,7 +3193,7 @@ async function startServer() {
     logServerAudit('User Created', 'auth', newUser.id, `User ${req.user!.name} membuat akun: ${newUser.name} (@${newUser.username}) [${newUser.role}]`, req.user);
 
     const { passwordHash: _, ...safeUser } = newUser;
-    res.status(201).json({ success: true, user: safeUser });
+    res.status(201).json({ success: true, user: safeUser, temporaryPassword: initialPassword });
   });
 
   // Edit/Update User Profile (Super Admin or Leader updating own installer)
@@ -3278,7 +3342,8 @@ async function startServer() {
     const user = db.users.find(u => u.id === id);
     if (!user) return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
 
-    const secureResetHash = hashPasswordSecure('12345678');
+    const temporaryPassword = generateSecureTemporaryPassword();
+    const secureResetHash = hashPasswordSecure(temporaryPassword);
     const sbClient = getSupabaseBackendClient();
     if (sbClient) {
       const sbRes = await updateUserInSupabase(id, {
@@ -3301,9 +3366,9 @@ async function startServer() {
       }
     });
     saveDatabaseToDisk();
-    logServerAudit('User Password Reset', 'auth', id, `Password akun ${user.name} di-reset ke default oleh Super Admin`, req.user);
+    logServerAudit('User Password Reset', 'auth', id, `Password akun ${user.name} di-reset oleh Super Admin`, req.user);
 
-    res.json({ success: true, message: 'Password berhasil di-reset ke default.' });
+    res.json({ success: true, message: 'Password berhasil di-reset ke password sementara baru.', temporaryPassword });
   });
 
   app.delete('/api/users/:id', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
@@ -4867,9 +4932,16 @@ async function startServer() {
     id: string;
     res: Response;
     user: ServerUser;
+    session?: ServerSession;
   }
 
   const activeBackendSseClients = new Map<string, BackendSseClient>();
+
+  function sanitizeRealtimePayload(data: any): any {
+    if (!data || typeof data !== 'object') return data;
+    const { passwordHash, password, token, serviceRoleKey, ...safe } = data;
+    return safe;
+  }
 
   function broadcastBackendRealtimeEvent(
     table: string,
@@ -4877,12 +4949,14 @@ async function startServer() {
     record: any,
     oldRecord?: any
   ) {
+    const cleanRecord = sanitizeRealtimePayload(record);
+    const cleanOldRecord = sanitizeRealtimePayload(oldRecord);
     const payload = {
       table,
       entity: table,
       eventType,
-      data: record,
-      oldData: oldRecord,
+      data: cleanRecord,
+      oldData: cleanOldRecord,
       timestamp: new Date().toISOString()
     };
 
@@ -4890,23 +4964,23 @@ async function startServer() {
 
     for (const [clientId, client] of activeBackendSseClients.entries()) {
       try {
+        const u = client.user;
+        // Eviction check: if session revoked or user deactivated/deleted, terminate stream
+        const isSessionRevoked = client.session && client.session.status !== 'active';
+        if (!u.active || u.isDeleted || isSessionRevoked) {
+          try {
+            client.res.write(`data: ${JSON.stringify({ eventType: 'SESSION_REVOKED', message: 'Sesi login telah dicabut atau akun dinonaktifkan.' })}\n\n`);
+            client.res.end();
+          } catch {}
+          activeBackendSseClients.delete(clientId);
+          continue;
+        }
+
         if (table === 'work_orders' || table === 'tickets') {
-          const u = client.user;
           if (u.role === 'leader') {
-            const leaderCid = resolveUserContractorId(u);
-            const recCid = record?.contractorId || record?.contractor_id;
-            if (leaderCid && recCid) {
-              if (leaderCid !== recCid) continue;
-            } else {
-              const leaderContr = (u.contractor || '').toLowerCase().trim();
-              const recContr = (record?.contactorName || record?.contractorName || '').toLowerCase().trim();
-              if (leaderContr && (!recContr.includes(leaderContr) && !leaderContr.includes(recContr))) {
-                continue;
-              }
-            }
-            const leaderArea = (u.area || '').toLowerCase().trim();
-            const recArea = (record?.area || '').toLowerCase().trim();
-            if (leaderArea && (!recArea.includes(leaderArea) && !leaderArea.includes(recArea))) {
+            const leaderCid = (u.contractorId || resolveUserContractorId(u) || '').trim();
+            const recCid = (record?.contractorId || record?.contractor_id || '').trim();
+            if (!leaderCid || !recCid || leaderCid !== recCid) {
               continue;
             }
           } else if (u.role === 'installer') {
@@ -4915,16 +4989,17 @@ async function startServer() {
             const recInst = (record?.installerName || '').toLowerCase().trim();
             const recPhone = (record?.installerContact || '').replace(/\D/g, '');
             const myPhone = (u.phone || '').replace(/\D/g, '');
-            const matchesName = recInst && (recInst.includes(cleanMyName) || cleanMyName.includes(recInst));
+            const matchesName = recInst && (recInst === cleanMyName || recInst.includes(cleanMyName) || cleanMyName.includes(recInst));
             const matchesPhone = myPhone && recPhone && recPhone === myPhone;
             if (!matchesName && !matchesPhone) {
               continue;
             }
+          } else if (u.role === 'it_support') {
+            continue; // IT support does not receive operational ticket updates
           }
         }
 
         if (table === 'users') {
-          const u = client.user;
           if (u.role === 'leader') {
             if (record?.role !== 'installer' || !isLeaderAllowedToManageInstaller(u, record)) {
               continue;
@@ -4933,8 +5008,13 @@ async function startServer() {
             if (record?.id !== u.id) {
               continue;
             }
+          } else if (u.role === 'dispatch') {
+            if (record?.id !== u.id) {
+              continue;
+            }
           }
         }
+
         client.res.write(serialized);
       } catch {
         activeBackendSseClients.delete(clientId);
@@ -4958,9 +5038,15 @@ async function startServer() {
       const offset = req.query.offset ? Math.max(parseInt(String(req.query.offset), 10) || 0, 0) : undefined;
 
       let tickets: any[] = [];
-      const sbClient = getSupabaseBackendClient();
 
-      if (sbClient) {
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
+        }
         const sbResult = await getWorkOrdersFromSupabase({
           area,
           contractorId,
@@ -4973,13 +5059,23 @@ async function startServer() {
           limit,
           offset
         });
-        if (sbResult.success && Array.isArray(sbResult.data)) {
-          tickets = sbResult.data;
-        } else {
-          tickets = [...db.tickets];
+        if (!sbResult.success || !Array.isArray(sbResult.data)) {
+          return res.status(sbResult.error?.isConnectionError ? 503 : 500).json({
+            success: false,
+            error: {
+              code: sbResult.error?.code || 'FETCH_ERROR',
+              message: sbResult.error?.message || 'Gagal mengambil data Work Order dari backend Supabase.'
+            }
+          });
         }
-      } else {
+        tickets = sbResult.data;
+      } else if (isLocalJsonAllowed()) {
         tickets = [...db.tickets];
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
 
       // Enforce server-side role scoping
@@ -5014,38 +5110,19 @@ async function startServer() {
       const user = req.user!;
       const body = req.body;
       const rawWo = body.woNumber || body.workOrderNumber;
-      if (!rawWo || typeof rawWo !== 'string' || !rawWo.trim()) {
+      if (!rawWo || typeof rawWo !== 'string' || !rawWo.trim() || rawWo.trim().length < 3) {
         return res.status(400).json({
           success: false,
-          error: { code: 'INVALID_INPUT', message: 'Nomor Work Order (woNumber) wajib diisi.' }
+          error: { code: 'INVALID_INPUT', message: 'Nomor Work Order (woNumber) wajib diisi dan minimal 3 karakter.' }
         });
       }
 
-      const cleanWo = String(rawWo).trim().toUpperCase();
-      const existingInLocal = db.tickets.some(t => !t.isDeleted && (t.woNumber?.toUpperCase() === cleanWo || t.workOrderNumber?.toUpperCase() === cleanWo));
-      if (existingInLocal) {
-        return res.status(409).json({
-          success: false,
-          error: { code: '23505', isDuplicate: true, message: `Duplikasi terdeteksi: Nomor WO "${cleanWo}" sudah terdaftar.` }
-        });
-      }
-
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
-        const existingInSb = await getWorkOrderByWoNumberFromSupabase(cleanWo);
-        if (existingInSb.success && existingInSb.data) {
-          return res.status(409).json({
-            success: false,
-            error: { code: '23505', isDuplicate: true, message: `Duplikasi terdeteksi di database: Nomor WO "${cleanWo}" sudah ada.` }
-          });
-        }
-      }
-
+      const cleanWo = normalizeWoNumber(rawWo);
       const ticketId = body.id || `wo_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
       const nowIso = new Date().toISOString();
       const appDate = toDateOnlyString(body.appointmentDate || body.date) || body.appointmentDate || '';
 
-      const newTicket = {
+      let newTicket = {
         ...body,
         id: ticketId,
         woNumber: cleanWo,
@@ -5059,11 +5136,28 @@ async function startServer() {
         isDeleted: false
       };
 
-      if (sbClient) {
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
+        }
+
+        // Atomic check: search in Supabase for existing WO
+        const existingInSb = await getWorkOrderByWoNumberFromSupabase(cleanWo);
+        if (existingInSb.success && existingInSb.data) {
+          return res.status(409).json({
+            success: false,
+            error: { code: '23505', isDuplicate: true, message: `Duplikasi terdeteksi di database: Nomor WO "${cleanWo}" sudah ada.` }
+          });
+        }
+
         const sbRes = await insertWorkOrderToSupabase(newTicket);
         if (!sbRes.success) {
           const isDup = sbRes.error?.isDuplicate || sbRes.error?.code === '23505';
-          return res.status(isDup ? 409 : 500).json({
+          return res.status(isDup ? 409 : (sbRes.error?.isConnectionError ? 503 : 500)).json({
             success: false,
             error: {
               code: sbRes.error?.code || 'CREATE_ERROR',
@@ -5072,10 +5166,25 @@ async function startServer() {
             }
           });
         }
+        if (sbRes.data) {
+          newTicket = sbRes.data;
+        }
+      } else if (isLocalJsonAllowed()) {
+        const existingInLocal = db.tickets.some(t => !t.isDeleted && canonicalWoKey(t.woNumber || t.workOrderNumber) === canonicalWoKey(cleanWo));
+        if (existingInLocal) {
+          return res.status(409).json({
+            success: false,
+            error: { code: '23505', isDuplicate: true, message: `Duplikasi terdeteksi: Nomor WO "${cleanWo}" sudah terdaftar.` }
+          });
+        }
+        db.tickets.unshift(newTicket);
+        saveDatabaseToDisk();
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
-
-      db.tickets.unshift(newTicket);
-      saveDatabaseToDisk();
 
       logServerAudit('Create Work Order (Supabase API)', 'work_orders', cleanWo, `User ${user.name} (${user.role}) membuat Work Order baru ${cleanWo}`, user);
       broadcastBackendRealtimeEvent('work_orders', 'INSERT', newTicket);
@@ -5099,22 +5208,53 @@ async function startServer() {
       const user = req.user!;
       let ticket: any = null;
 
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
-        const sbResult = await getWorkOrderByIdFromSupabase(id);
-        if (sbResult.success && sbResult.data) {
-          ticket = sbResult.data;
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
         }
-      }
-
-      if (!ticket) {
+        const sbResult = await getWorkOrderByIdFromSupabase(id);
+        if (!sbResult.success || !sbResult.data) {
+          if (sbResult.error?.isNotFound || !sbResult.data) {
+            return res.status(404).json({
+              success: false,
+              error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+            });
+          }
+          return res.status(sbResult.error?.isConnectionError ? 503 : 500).json({
+            success: false,
+            error: { code: sbResult.error?.code || 'FETCH_ERROR', message: sbResult.error?.message || 'Gagal memuat detail Work Order dari Supabase.' }
+          });
+        }
+        ticket = sbResult.data;
+      } else if (isLocalJsonAllowed()) {
         ticket = db.tickets.find(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
+        if (!ticket) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+          });
+        }
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
 
-      if (!ticket) {
+      if (ticket.isDeleted) {
+        if (user.role === 'super_admin' || user.role === 'management_data') {
+          return res.json({
+            success: true,
+            data: ticket
+          });
+        }
         return res.status(404).json({
           success: false,
-          error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+          error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} telah dihapus.` }
         });
       }
 
@@ -5144,21 +5284,36 @@ async function startServer() {
       const user = req.user!;
       const updates = req.body || {};
 
-      let ticketIndex = db.tickets.findIndex(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
-      let existingTicket = ticketIndex !== -1 ? db.tickets[ticketIndex] : null;
+      let existingTicket: any = null;
 
-      const sbClient = getSupabaseBackendClient();
-      if (!existingTicket && sbClient) {
-        const sbResult = await getWorkOrderByIdFromSupabase(id);
-        if (sbResult.success && sbResult.data) {
-          existingTicket = sbResult.data;
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
         }
-      }
-
-      if (!existingTicket) {
-        return res.status(404).json({
+        const sbResult = await getWorkOrderByIdFromSupabase(id);
+        if (!sbResult.success || !sbResult.data) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+          });
+        }
+        existingTicket = sbResult.data;
+      } else if (isLocalJsonAllowed()) {
+        existingTicket = db.tickets.find(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
+        if (!existingTicket) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+          });
+        }
+      } else {
+        return res.status(503).json({
           success: false,
-          error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
         });
       }
 
@@ -5189,9 +5344,17 @@ async function startServer() {
       if (user.role === 'super_admin' || user.role === 'dispatch' || user.role === 'management_data') {
         allowedKeys = allowedKeysAdmin;
       } else if (user.role === 'leader') {
+        const leaderCid = (user.contractorId || resolveUserContractorId(user) || '').trim();
+        const ticketCid = (existingTicket.contractorId || existingTicket.contractor_id || '').trim();
+        if (leaderCid && ticketCid && leaderCid !== ticketCid) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'FORBIDDEN_SCOPE', message: 'Akses Ditolak: Leader hanya berhak memperbarui WO kontraktornya sendiri.' }
+          });
+        }
         const leaderContr = (user.contractor || '').toLowerCase().trim();
         const ticketContr = (existingTicket.contactorName || existingTicket.contractorName || '').toLowerCase().trim();
-        if (leaderContr && !ticketContr.includes(leaderContr) && !leaderContr.includes(ticketContr)) {
+        if (!ticketCid && leaderContr && ticketContr && leaderContr !== ticketContr && !ticketContr.includes(leaderContr) && !leaderContr.includes(ticketContr)) {
           return res.status(403).json({
             success: false,
             error: { code: 'FORBIDDEN_SCOPE', message: 'Akses Ditolak: Leader hanya berhak memperbarui WO kontraktornya sendiri.' }
@@ -5203,7 +5366,7 @@ async function startServer() {
         const cleanMyName = myName.replace(/\(.*?\)/g, '').trim();
         const ticketInst = (existingTicket.installerName || '').toLowerCase().trim();
         const phoneMatch = user.phone && existingTicket.installerContact && existingTicket.installerContact.replace(/\D/g, '') === user.phone.replace(/\D/g, '');
-        const nameMatch = ticketInst && (ticketInst.includes(cleanMyName) || cleanMyName.includes(ticketInst));
+        const nameMatch = ticketInst && (ticketInst === cleanMyName || ticketInst.includes(cleanMyName) || cleanMyName.includes(ticketInst));
         if (!nameMatch && !phoneMatch) {
           return res.status(403).json({
             success: false,
@@ -5236,13 +5399,13 @@ async function startServer() {
       sanitizedUpdates.updatedAt = new Date().toISOString();
       sanitizedUpdates.updatedBy = user.name;
 
-      const updatedTicket = { ...existingTicket, ...sanitizedUpdates };
+      let updatedTicket = { ...existingTicket, ...sanitizedUpdates };
 
-      if (sbClient) {
+      if (isSupabaseMode()) {
         const sbRes = await updateWorkOrderInSupabase(existingTicket.id, sanitizedUpdates);
         if (!sbRes.success) {
           const isNotFound = sbRes.error?.isNotFound || sbRes.error?.code === 'PGRST116';
-          return res.status(isNotFound ? 404 : 500).json({
+          return res.status(isNotFound ? 404 : (sbRes.error?.isConnectionError ? 503 : 500)).json({
             success: false,
             error: {
               code: sbRes.error?.code || 'UPDATE_ERROR',
@@ -5251,14 +5414,16 @@ async function startServer() {
             }
           });
         }
+        if (sbRes.data) {
+          updatedTicket = sbRes.data;
+        }
+      } else if (isLocalJsonAllowed()) {
+        const ticketIndex = db.tickets.findIndex(t => t.id === existingTicket.id);
+        if (ticketIndex !== -1) {
+          db.tickets[ticketIndex] = updatedTicket;
+          saveDatabaseToDisk();
+        }
       }
-
-      if (ticketIndex !== -1) {
-        db.tickets[ticketIndex] = updatedTicket;
-      } else {
-        db.tickets.unshift(updatedTicket);
-      }
-      saveDatabaseToDisk();
 
       logServerAudit('Update Work Order (Supabase API)', 'work_orders', existingTicket.woNumber, `User ${user.name} (${user.role}) memperbarui Work Order ${existingTicket.woNumber}`, user);
       broadcastBackendRealtimeEvent('work_orders', 'UPDATE', updatedTicket, existingTicket);
@@ -5279,38 +5444,27 @@ async function startServer() {
     try {
       const { id } = req.params;
       const user = req.user!;
-      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : 'Soft deleted via Management Data portal';
+      const rawReason = req.body?.reason;
 
-      let ticketIndex = db.tickets.findIndex(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
-      let existing = ticketIndex !== -1 ? db.tickets[ticketIndex] : null;
-
-      const sbClient = getSupabaseBackendClient();
-      if (!existing && sbClient) {
-        const sbResult = await getWorkOrderByIdFromSupabase(id);
-        if (sbResult.success && sbResult.data) {
-          existing = sbResult.data;
-        }
-      }
-
-      if (!existing) {
-        return res.status(404).json({
+      if (!rawReason || typeof rawReason !== 'string' || rawReason.trim().length < 5) {
+        return res.status(400).json({
           success: false,
-          error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+          error: { code: 'INVALID_REASON', message: 'Alasan penghapusan Work Order wajib diisi minimal 5 karakter.' }
         });
       }
+      const reason = rawReason.trim();
 
-      const nowIso = new Date().toISOString();
-      const deletedTicket = {
-        ...existing,
-        isDeleted: true,
-        deletedAt: nowIso,
-        deletedBy: user.name,
-        deletionReason: reason,
-        updatedAt: nowIso,
-        updatedBy: user.name
-      };
+      let existing: any = null;
+      if (isSupabaseMode()) {
+        const sbResult = await getWorkOrderByIdFromSupabase(id);
+        if (!sbResult.success || !sbResult.data) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+          });
+        }
+        existing = sbResult.data;
 
-      if (sbClient) {
         const sbRes = await deleteWorkOrderFromSupabase(existing.id, reason, user.name);
         if (!sbRes.success) {
           return res.status(sbRes.error?.isNotFound ? 404 : 500).json({
@@ -5321,14 +5475,34 @@ async function startServer() {
             }
           });
         }
+      } else if (isLocalJsonAllowed()) {
+        existing = db.tickets.find(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
+        if (!existing) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+          });
+        }
+        existing.isDeleted = true;
+        existing.deletedAt = new Date().toISOString();
+        existing.deletedBy = user.name;
+        existing.deletionReason = reason;
+        saveDatabaseToDisk();
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
 
-      if (ticketIndex !== -1) {
-        db.tickets[ticketIndex] = deletedTicket;
-      } else {
-        db.tickets.unshift(deletedTicket);
-      }
-      saveDatabaseToDisk();
+      const nowIso = new Date().toISOString();
+      const deletedTicket = {
+        ...existing,
+        isDeleted: true,
+        deletedAt: nowIso,
+        deletedBy: user.name,
+        deletionReason: reason
+      };
 
       logServerAudit('Delete Work Order (Supabase API)', 'work_orders', existing.woNumber, `Management Data ${user.name} melakukan soft delete WO ${existing.woNumber}: ${reason}`, user);
       broadcastBackendRealtimeEvent('work_orders', 'DELETE', deletedTicket);
@@ -5357,17 +5531,22 @@ async function startServer() {
         });
       }
 
-      const ticketIndex = db.tickets.findIndex(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
-      if (ticketIndex === -1) {
-        return res.status(404).json({
-          success: false,
-          error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
-        });
-      }
-
-      const nowIso = new Date().toISOString();
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
+      let ticket: any = null;
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
+        }
+        const checkRes = await getWorkOrderByIdFromSupabase(id);
+        if (!checkRes.success || !checkRes.data) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+          });
+        }
         const sbRes = await archiveWorkOrderInSupabase(id, user.name);
         if (!sbRes.success) {
           return res.status(sbRes.error?.isNotFound ? 404 : 500).json({
@@ -5378,19 +5557,34 @@ async function startServer() {
             }
           });
         }
+        ticket = sbRes.data;
+      } else if (isLocalJsonAllowed()) {
+        const ticketIndex = db.tickets.findIndex(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
+        if (ticketIndex === -1) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+          });
+        }
+        const nowIso = new Date().toISOString();
+        db.tickets[ticketIndex].isArchived = true;
+        db.tickets[ticketIndex].archivedAt = nowIso;
+        db.tickets[ticketIndex].archivedBy = user.name;
+        saveDatabaseToDisk();
+        ticket = db.tickets[ticketIndex];
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
 
-      db.tickets[ticketIndex].isArchived = true;
-      db.tickets[ticketIndex].archivedAt = nowIso;
-      db.tickets[ticketIndex].archivedBy = user.name;
-      saveDatabaseToDisk();
-
-      logServerAudit('Archive Work Order', 'work_orders', db.tickets[ticketIndex].woNumber, `User ${user.name} mengarsipkan WO ${db.tickets[ticketIndex].woNumber}`, user);
-      broadcastBackendRealtimeEvent('work_orders', 'ARCHIVE', db.tickets[ticketIndex]);
+      logServerAudit('Archive Work Order', 'work_orders', ticket.woNumber, `User ${user.name} mengarsipkan WO ${ticket.woNumber}`, user);
+      broadcastBackendRealtimeEvent('work_orders', 'ARCHIVE', ticket);
 
       res.json({
         success: true,
-        data: db.tickets[ticketIndex]
+        data: ticket
       });
     } catch (err: any) {
       res.status(500).json({
@@ -5411,16 +5605,22 @@ async function startServer() {
         });
       }
 
-      const ticketIndex = db.tickets.findIndex(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
-      if (ticketIndex === -1) {
-        return res.status(404).json({
-          success: false,
-          error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
-        });
-      }
-
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
+      let ticket: any = null;
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
+        }
+        const checkRes = await getWorkOrderByIdFromSupabase(id);
+        if (!checkRes.success || !checkRes.data) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+          });
+        }
         const sbRes = await restoreWorkOrderInSupabase(id, user.name);
         if (!sbRes.success) {
           return res.status(sbRes.error?.isNotFound ? 404 : 500).json({
@@ -5431,22 +5631,36 @@ async function startServer() {
             }
           });
         }
+        ticket = sbRes.data;
+      } else if (isLocalJsonAllowed()) {
+        const ticketIndex = db.tickets.findIndex(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
+        if (ticketIndex === -1) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+          });
+        }
+        db.tickets[ticketIndex].isArchived = false;
+        db.tickets[ticketIndex].isDeleted = false;
+        delete db.tickets[ticketIndex].archivedAt;
+        delete db.tickets[ticketIndex].archivedBy;
+        delete db.tickets[ticketIndex].deletedAt;
+        delete db.tickets[ticketIndex].deletedBy;
+        saveDatabaseToDisk();
+        ticket = db.tickets[ticketIndex];
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
 
-      db.tickets[ticketIndex].isArchived = false;
-      db.tickets[ticketIndex].isDeleted = false;
-      delete db.tickets[ticketIndex].archivedAt;
-      delete db.tickets[ticketIndex].archivedBy;
-      delete db.tickets[ticketIndex].deletedAt;
-      delete db.tickets[ticketIndex].deletedBy;
-      saveDatabaseToDisk();
-
-      logServerAudit('Restore Work Order', 'work_orders', db.tickets[ticketIndex].woNumber, `User ${user.name} memulihkan WO ${db.tickets[ticketIndex].woNumber}`, user);
-      broadcastBackendRealtimeEvent('work_orders', 'RESTORE', db.tickets[ticketIndex]);
+      logServerAudit('Restore Work Order', 'work_orders', ticket.woNumber, `User ${user.name} memulihkan WO ${ticket.woNumber}`, user);
+      broadcastBackendRealtimeEvent('work_orders', 'RESTORE', ticket);
 
       res.json({
         success: true,
-        data: db.tickets[ticketIndex]
+        data: ticket
       });
     } catch (err: any) {
       res.status(500).json({
@@ -5475,116 +5689,131 @@ async function startServer() {
         });
       }
 
-      const summary = {
-        totalSubmitted: tickets.length,
-        imported: 0,
-        skippedDuplicates: 0,
-        duplicateInFile: [] as string[],
-        duplicateExisting: [] as string[]
-      };
-
-      const seenInBatch = new Set<string>();
-      const validToImport: any[] = [];
       const currentBatchId = batchId || `batch_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      const nowIso = new Date().toISOString();
 
-      // Collect existing keys from in-memory database
-      const existingKeys = new Set<string>();
-      db.tickets.forEach(t => {
-        if (!t.isDeleted) {
-          const k = canonicalWoKey(t.woNumber || t.workOrderNumber);
-          if (k) existingKeys.add(k);
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
         }
-      });
-
-      for (const t of tickets) {
-        const rawWo = t.woNumber || t.workOrderNumber;
-        const norm = canonicalWoKey(rawWo);
-        if (!norm) continue;
-
-        // 1. In-File Deduplication
-        if (seenInBatch.has(norm)) {
-          summary.skippedDuplicates++;
-          summary.duplicateInFile.push(norm);
-          continue;
-        }
-        seenInBatch.add(norm);
-
-        // 2. Database Existing Deduplication
-        if (existingKeys.has(norm)) {
-          summary.skippedDuplicates++;
-          summary.duplicateExisting.push(norm);
-          continue;
+        const sbRes = await bulkImportWorkOrdersToSupabase(tickets, currentBatchId, user.name);
+        if (!sbRes.success && !sbRes.data) {
+          console.error('[Bulk Import Error]', sbRes.error);
+          return res.status(500).json({
+            success: false,
+            error: {
+              code: sbRes.error?.code || 'IMPORT_ERROR',
+              message: sbRes.error?.message || 'Gagal menyimpan bulk import Work Orders ke Supabase.'
+            }
+          });
         }
 
-        const dateNorm = toDateOnlyString(t.appointmentDate || t.date) || t.appointmentDate || '';
-        const ticketId = t.id || `wo_imp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-
-        const cleanTicket = {
-          ...t,
-          id: ticketId,
-          woNumber: t.woNumber || t.workOrderNumber || norm,
-          workOrderNumber: t.workOrderNumber || t.woNumber || norm,
-          appointmentDate: dateNorm,
-          date: dateNorm,
-          importBatchId: currentBatchId,
-          createdAt: t.createdAt || nowIso,
-          updatedAt: nowIso,
-          updatedBy: user.name,
-          isArchived: false,
-          isDeleted: false
+        const report = {
+          totalSubmitted: sbRes.data?.totalSubmitted ?? tickets.length,
+          imported: sbRes.data?.imported ?? 0,
+          skippedDuplicates: sbRes.data?.skippedDuplicates ?? 0,
+          duplicateInFile: sbRes.data?.duplicateInFileWoNumbers ?? [],
+          duplicateExisting: sbRes.data?.duplicateExistingWoNumbers ?? [],
+          invalidCount: sbRes.data?.invalidCount ?? 0,
+          invalidRows: sbRes.data?.invalidRows ?? [],
+          failedCount: sbRes.data?.failedCount ?? 0,
+          failedErrors: sbRes.data?.failedErrors ?? []
         };
 
-        validToImport.push(cleanTicket);
-        existingKeys.add(norm);
-      }
+        logServerAudit('Bulk Import Work Orders (Supabase API)', 'work_orders', currentBatchId, `User ${user.name} mengimpor ${report.imported} WO baru (Dilewati: ${report.skippedDuplicates} duplikat, Tidak valid: ${report.invalidCount})`, user);
+        broadcastBackendRealtimeEvent('work_orders', 'INSERT', { batchId: currentBatchId, count: report.imported });
 
-      if (validToImport.length > 0) {
-        const sbClient = getSupabaseBackendClient();
-        if (sbClient) {
-          const sbRes = await bulkImportWorkOrdersToSupabase(validToImport, currentBatchId, user.name);
-          if (!sbRes.success && (!sbRes.data || (sbRes.data.imported === 0 && sbRes.data.failedCount > 0))) {
-            return res.status(500).json({
-              success: false,
-              error: {
-                code: sbRes.error?.code || 'IMPORT_ERROR',
-                message: sbRes.error?.message || 'Gagal menyimpan bulk import Work Orders ke Supabase.'
-              }
-            });
+        return res.json({
+          success: true,
+          data: report
+        });
+      } else if (isLocalJsonAllowed()) {
+        const summary = {
+          totalSubmitted: tickets.length,
+          imported: 0,
+          skippedDuplicates: 0,
+          duplicateInFile: [] as string[],
+          duplicateExisting: [] as string[],
+          invalidCount: 0,
+          invalidRows: [] as { index: number; reason: string }[],
+          failedCount: 0,
+          failedErrors: [] as string[]
+        };
+
+        const seenInBatch = new Set<string>();
+        const validToImport: any[] = [];
+        const nowIso = new Date().toISOString();
+
+        const existingKeys = new Set<string>();
+        db.tickets.forEach(t => {
+          if (!t.isDeleted) {
+            const k = canonicalWoKey(t.woNumber || t.workOrderNumber);
+            if (k) existingKeys.add(k);
+          }
+        });
+
+        tickets.forEach((t, idx) => {
+          const rawWo = t?.woNumber || t?.workOrderNumber;
+          const norm = canonicalWoKey(rawWo);
+          if (!norm || norm.length < 3) {
+            summary.invalidCount++;
+            summary.invalidRows.push({ index: idx + 1, reason: 'Nomor WO kosong atau kurang dari 3 karakter.' });
+            return;
           }
 
-          if (sbRes.data) {
-            summary.imported = sbRes.data.imported;
-            summary.skippedDuplicates += sbRes.data.skippedDuplicates;
-            if (Array.isArray(sbRes.data.duplicateInFileWoNumbers)) {
-              summary.duplicateInFile.push(...sbRes.data.duplicateInFileWoNumbers);
-            }
-            if (Array.isArray(sbRes.data.duplicateExistingWoNumbers)) {
-              summary.duplicateExisting.push(...sbRes.data.duplicateExistingWoNumbers);
-            }
-
-            // Exclude tickets rejected by Supabase as existing duplicates
-            const skippedSet = new Set(sbRes.data.duplicateExistingWoNumbers || []);
-            const successfullyImported = validToImport.filter(t => !skippedSet.has(t.woNumber));
-            if (successfullyImported.length > 0) {
-              db.tickets.unshift(...successfullyImported);
-              saveDatabaseToDisk();
-            }
+          if (seenInBatch.has(norm)) {
+            summary.skippedDuplicates++;
+            summary.duplicateInFile.push(norm);
+            return;
           }
-        } else {
-          db.tickets.unshift(...validToImport);
-          saveDatabaseToDisk();
-          summary.imported = validToImport.length;
-        }
+          seenInBatch.add(norm);
 
-        logServerAudit('Bulk Import Work Orders (Supabase API)', 'work_orders', currentBatchId, `User ${user.name} mengimpor ${summary.imported} WO baru (Dilewati: ${summary.skippedDuplicates} duplikat)`, user);
+          if (existingKeys.has(norm)) {
+            summary.skippedDuplicates++;
+            summary.duplicateExisting.push(norm);
+            return;
+          }
+
+          const dateNorm = toDateOnlyString(t.appointmentDate || t.date) || t.appointmentDate || '';
+          const ticketId = t.id || `wo_imp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+          const cleanTicket = {
+            ...t,
+            id: ticketId,
+            woNumber: normalizeWoNumber(rawWo),
+            workOrderNumber: normalizeWoNumber(rawWo),
+            appointmentDate: dateNorm,
+            date: dateNorm,
+            importBatchId: currentBatchId,
+            createdAt: t.createdAt || nowIso,
+            updatedAt: nowIso,
+            updatedBy: user.name,
+            isArchived: false,
+            isDeleted: false
+          };
+          validToImport.push(cleanTicket);
+          existingKeys.add(norm);
+        });
+
+        db.tickets.unshift(...validToImport);
+        saveDatabaseToDisk();
+        summary.imported = validToImport.length;
+
+        logServerAudit('Bulk Import Work Orders (Local API)', 'work_orders', currentBatchId, `User ${user.name} mengimpor ${summary.imported} WO baru (Dilewati: ${summary.skippedDuplicates} duplikat)`, user);
         broadcastBackendRealtimeEvent('work_orders', 'INSERT', { batchId: currentBatchId, count: summary.imported });
-      }
 
-      res.json({
-        success: true,
-        data: summary
-      });
+        return res.json({
+          success: true,
+          data: summary
+        });
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
+      }
     } catch (err: any) {
       res.status(500).json({
         success: false,
@@ -5600,16 +5829,29 @@ async function startServer() {
       const includeDeleted = req.query.includeDeleted === 'true';
 
       let allUsers: ServerUser[] = [];
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
-        const sbRes = await getUsersFromSupabase(includeDeleted);
-        if (sbRes.success && Array.isArray(sbRes.data)) {
-          allUsers = sbRes.data;
-        } else {
-          allUsers = [...db.users];
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
         }
-      } else {
+        const sbRes = await getUsersFromSupabase(includeDeleted);
+        if (!sbRes.success || !Array.isArray(sbRes.data)) {
+          return res.status(500).json({
+            success: false,
+            error: { code: sbRes.error?.code || 'FETCH_ERROR', message: sbRes.error?.message || 'Gagal memuat pengguna dari database Supabase.' }
+          });
+        }
+        allUsers = sbRes.data;
+      } else if (isLocalJsonAllowed()) {
         allUsers = [...db.users];
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
 
       if (!includeDeleted) {
@@ -5651,19 +5893,38 @@ async function startServer() {
       const user = req.user!;
 
       let targetUser: ServerUser | null = null;
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
-        const sbRes = await getUserByIdFromSupabase(id);
-        if (sbRes.success && sbRes.data) {
-          targetUser = sbRes.data;
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
         }
-      }
-
-      if (!targetUser) {
+        const sbRes = await getUserByIdFromSupabase(id);
+        if (!sbRes.success) {
+          if (sbRes.error?.isNotFound || sbRes.error?.code === 'PGRST116') {
+            return res.status(404).json({
+              success: false,
+              error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
+            });
+          }
+          return res.status(500).json({
+            success: false,
+            error: { code: sbRes.error?.code || 'FETCH_ERROR', message: sbRes.error?.message || 'Gagal memuat detail pengguna dari Supabase.' }
+          });
+        }
+        targetUser = sbRes.data;
+      } else if (isLocalJsonAllowed()) {
         targetUser = db.users.find(u => u.id === id) || null;
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
 
-      if (!targetUser) {
+      if (!targetUser || targetUser.isDeleted) {
         return res.status(404).json({
           success: false,
           error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
@@ -5709,39 +5970,41 @@ async function startServer() {
         });
       }
 
-      if (actor.role !== 'super_admin') {
-        if (actor.role === 'leader' && role === 'installer') {
-          // Leader allowed to create installer in their own contractor
-        } else {
-          return res.status(403).json({
-            success: false,
-            error: { code: 'FORBIDDEN', message: 'Akses Ditolak: Anda tidak memiliki wewenang untuk membuat akun ini.' }
-          });
-        }
+      if (actor.role !== 'super_admin' && actor.role !== 'leader') {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Akses Ditolak: Anda tidak memiliki wewenang untuk membuat akun ini.' }
+        });
       }
 
       const cleanUsername = String(username).trim().toLowerCase().replace(/\s+/g, '');
       const cleanName = String(name).trim();
 
-      const exists = db.users.some(u => !u.isDeleted && (u.username.toLowerCase() === cleanUsername || u.name.toLowerCase() === cleanName.toLowerCase()));
-      if (exists) {
-        return res.status(409).json({
-          success: false,
-          error: { code: 'ACCOUNT_EXISTS', message: 'Nama pengguna atau nama akun sudah terdaftar.' }
-        });
+      // Check uniqueness in local cache if local mode
+      if (isLocalJsonAllowed()) {
+        const exists = db.users.some(u => !u.isDeleted && (u.username.toLowerCase() === cleanUsername || u.name.toLowerCase() === cleanName.toLowerCase()));
+        if (exists) {
+          return res.status(409).json({
+            success: false,
+            error: { code: 'ACCOUNT_EXISTS', message: 'Nama pengguna atau nama akun sudah terdaftar.' }
+          });
+        }
       }
 
-      const initialPassword = password || '12345678';
+      // Generate secure unique temporary password (NO static '12345678')
+      const initialPassword = (typeof password === 'string' && password.trim().length >= 8) 
+        ? password.trim() 
+        : generateSecureTemporaryPassword();
       const secureHash = hashPasswordSecure(initialPassword);
       const nowIso = new Date().toISOString();
 
       const assignedRole = actor.role === 'leader' ? 'installer' : role;
+      const assignedContractorId = actor.role === 'leader' ? resolveUserContractorId(actor) : (contractorId || resolveUserContractorId({ contractor, contractorId }));
       const assignedContractor = actor.role === 'leader' ? actor.contractor : contractor;
-      const assignedContractorId = actor.role === 'leader' ? resolveUserContractorId(actor) : contractorId;
       const assignedArea = actor.role === 'leader' ? actor.area : area;
 
       const newUser: ServerUser = {
-        id: `u-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        id: `u-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
         name: cleanName,
         username: cleanUsername,
         email: email ? String(email).trim().toLowerCase() : `${cleanUsername}@morajaws.net`,
@@ -5756,31 +6019,64 @@ async function startServer() {
         createdAt: nowIso
       };
 
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
+        }
         const sbRes = await insertUserToSupabase(newUser);
         if (!sbRes.success) {
           const isDup = sbRes.error?.code === '23505' || sbRes.error?.isDuplicate;
           return res.status(isDup ? 409 : 500).json({
             success: false,
             error: {
-              code: sbRes.error?.code || 'CREATE_ERROR',
+              code: isDup ? 'ACCOUNT_EXISTS' : (sbRes.error?.code || 'CREATE_ERROR'),
               message: sbRes.error?.message || 'Gagal membuat akun pengguna di database Supabase.'
             }
           });
         }
+
+        // Keep local memory synced if present
+        const existingIdx = db.users.findIndex(u => u.id === newUser.id);
+        if (existingIdx !== -1) {
+          db.users[existingIdx] = newUser;
+        } else {
+          db.users.push(newUser);
+        }
+
+        logServerAudit('Create User (Supabase API)', 'users', newUser.id, `User ${actor.name} membuat akun baru: ${newUser.username} (${newUser.role})`, actor);
+
+        const { passwordHash: _, ...safe } = newUser;
+        return res.status(201).json({
+          success: true,
+          data: {
+            ...safe,
+            temporaryPassword: initialPassword
+          }
+        });
+      } else if (isLocalJsonAllowed()) {
+        db.users.push(newUser);
+        saveDatabaseToDisk();
+
+        logServerAudit('Create User (Local API)', 'users', newUser.id, `User ${actor.name} membuat akun baru: ${newUser.username} (${newUser.role})`, actor);
+
+        const { passwordHash: _, ...safe } = newUser;
+        return res.status(201).json({
+          success: true,
+          data: {
+            ...safe,
+            temporaryPassword: initialPassword
+          }
+        });
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
-
-      db.users.push(newUser);
-      saveDatabaseToDisk();
-
-      logServerAudit('Create User (Supabase API)', 'users', newUser.id, `User ${actor.name} membuat akun baru: ${newUser.username} (${newUser.role})`, actor);
-
-      const { passwordHash: _, ...safe } = newUser;
-      res.status(201).json({
-        success: true,
-        data: safe
-      });
     } catch (err: any) {
       res.status(500).json({
         success: false,
@@ -5796,16 +6092,36 @@ async function startServer() {
       const updates = req.body || {};
 
       let targetUser: ServerUser | null = null;
-      let userIndex = db.users.findIndex(u => u.id === id);
-      if (userIndex !== -1) {
-        targetUser = db.users[userIndex];
-      }
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
-        const sbRes = await getUserByIdFromSupabase(id);
-        if (sbRes.success && sbRes.data) {
-          targetUser = sbRes.data;
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
         }
+        const sbRes = await getUserByIdFromSupabase(id);
+        if (!sbRes.success || !sbRes.data) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
+          });
+        }
+        targetUser = sbRes.data;
+      } else if (isLocalJsonAllowed()) {
+        const u = db.users.find(x => x.id === id);
+        if (!u) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
+          });
+        }
+        targetUser = u;
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
 
       if (!targetUser || targetUser.isDeleted) {
@@ -5818,12 +6134,19 @@ async function startServer() {
       // Role check & Mass Assignment Protection
       if (actor.role !== 'super_admin') {
         if (actor.id === id) {
-          // Self update: only phone and name allowed, NEVER role, contractor, or permissions
-          delete updates.role;
-          delete updates.permissions;
-          delete updates.contractor;
-          delete updates.contractorId;
-          delete updates.active;
+          // Self update: forbidden to modify security attributes (return 403)
+          if (updates.role !== undefined && updates.role !== actor.role) {
+            return res.status(403).json({
+              success: false,
+              error: { code: 'FORBIDDEN', message: 'Akses Ditolak: Anda tidak dapat mengubah peran akun Anda sendiri.' }
+            });
+          }
+          if (updates.permissions !== undefined || updates.contractor !== undefined || updates.contractorId !== undefined || updates.active !== undefined) {
+            return res.status(403).json({
+              success: false,
+              error: { code: 'FORBIDDEN', message: 'Akses Ditolak: Anda tidak memiliki wewenang untuk mengubah atribut keamanan akun.' }
+            });
+          }
           delete updates.passwordHash;
           delete updates.id;
         } else if (actor.role === 'leader') {
@@ -5834,10 +6157,12 @@ async function startServer() {
               error: { code: 'FORBIDDEN_CONTRACTOR_SCOPE', message: 'Akses Ditolak: Leader hanya berhak mengedit akun Installer milik kontraktornya sendiri.' }
             });
           }
-          delete updates.role;
-          delete updates.permissions;
-          delete updates.contractor;
-          delete updates.contractorId;
+          if (updates.role !== undefined || updates.contractor !== undefined || updates.contractorId !== undefined || updates.permissions !== undefined) {
+            return res.status(403).json({
+              success: false,
+              error: { code: 'FORBIDDEN', message: 'Akses Ditolak: Leader tidak berhak mengubah role, permissions, atau kontraktor installer.' }
+            });
+          }
           delete updates.id;
           delete updates.username;
           delete updates.passwordHash;
@@ -5858,7 +6183,14 @@ async function startServer() {
         }
       }
 
-      if (sbClient) {
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
+        }
         const sbRes = await updateUserInSupabase(id, sanitizedUpdates);
         if (!sbRes.success) {
           const isNotFound = sbRes.error?.isNotFound || sbRes.error?.code === 'PGRST116';
@@ -5870,25 +6202,43 @@ async function startServer() {
             }
           });
         }
+
+        const localIdx = db.users.findIndex(u => u.id === id);
+        if (localIdx !== -1) {
+          Object.assign(db.users[localIdx], sanitizedUpdates);
+          targetUser = db.users[localIdx];
+        } else {
+          targetUser = { ...targetUser, ...sanitizedUpdates };
+        }
+      } else if (isLocalJsonAllowed()) {
+        const localIdx = db.users.findIndex(u => u.id === id);
+        if (localIdx !== -1) {
+          Object.assign(db.users[localIdx], sanitizedUpdates);
+          targetUser = db.users[localIdx];
+        } else {
+          targetUser = { ...targetUser, ...sanitizedUpdates };
+          db.users.push(targetUser);
+        }
+        saveDatabaseToDisk();
       }
 
-      if (userIndex !== -1) {
-        Object.assign(db.users[userIndex], sanitizedUpdates);
-        targetUser = db.users[userIndex];
-      } else {
-        targetUser = { ...targetUser, ...sanitizedUpdates };
-        db.users.push(targetUser);
-      }
-
+      // Session revocation if deactivated or role changed
       if (sanitizedUpdates.active === false || (sanitizedUpdates.role && sanitizedUpdates.role !== targetUser.role)) {
         SERVER_SESSIONS.forEach(s => {
           if (s.userId === id && s.status === 'active') {
             s.status = 'revoked';
           }
         });
+        activeBackendSseClients.forEach((client, cid) => {
+          if (client.user.id === id) {
+            try {
+              client.res.write(`data: ${JSON.stringify({ eventType: 'SESSION_REVOKED', message: 'Session has been revoked due to account change' })}\n\n`);
+              client.res.end();
+            } catch {}
+            activeBackendSseClients.delete(cid);
+          }
+        });
       }
-
-      saveDatabaseToDisk();
 
       logServerAudit('Update User (Supabase API)', 'users', targetUser.id, `User ${actor.name} memperbarui data akun ${targetUser.username}`, actor);
 
@@ -5918,18 +6268,24 @@ async function startServer() {
         });
       }
 
-      const target = db.users.find(u => u.id === id);
-      if (!target) {
-        return res.status(404).json({
-          success: false,
-          error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
-        });
-      }
+      let target: ServerUser | null = null;
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
+        }
+        const userRes = await getUserByIdFromSupabase(id);
+        if (!userRes.success || !userRes.data) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
+          });
+        }
+        target = userRes.data;
 
-      const nowIso = new Date().toISOString();
-
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
         const sbRes = await deleteUserInSupabase(id, reason, actor.name);
         if (!sbRes.success) {
           return res.status(sbRes.error?.isNotFound ? 404 : 500).json({
@@ -5940,22 +6296,51 @@ async function startServer() {
             }
           });
         }
+
+        const localUser = db.users.find(u => u.id === id);
+        if (localUser) {
+          localUser.isDeleted = true;
+          localUser.active = false;
+          localUser.deletedAt = new Date().toISOString();
+          localUser.deletedBy = actor.name;
+          localUser.deletionReason = reason;
+        }
+      } else if (isLocalJsonAllowed()) {
+        target = db.users.find(u => u.id === id) || null;
+        if (!target) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
+          });
+        }
+        target.isDeleted = true;
+        target.active = false;
+        target.deletedAt = new Date().toISOString();
+        target.deletedBy = actor.name;
+        target.deletionReason = reason;
+        saveDatabaseToDisk();
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
 
-      target.isDeleted = true;
-      target.active = false;
-      target.deletedAt = nowIso;
-      target.deletedBy = actor.name;
-      target.deletionReason = reason;
-
-      // Revoke any active sessions for deleted user
+      // Revoke any active sessions and SSE connections for deleted user
       SERVER_SESSIONS.forEach(s => {
         if (s.userId === id && s.status === 'active') {
           s.status = 'revoked';
         }
       });
-
-      saveDatabaseToDisk();
+      activeBackendSseClients.forEach((client, cid) => {
+        if (client.user.id === id) {
+          try {
+            client.res.write(`data: ${JSON.stringify({ eventType: 'SESSION_REVOKED', message: 'Account deleted' })}\n\n`);
+            client.res.end();
+          } catch {}
+          activeBackendSseClients.delete(cid);
+        }
+      });
 
       logServerAudit('Delete User (Supabase API)', 'users', target.id, `Super Admin ${actor.name} menghapus akun ${target.username}: ${reason}`, actor);
 
@@ -5976,17 +6361,28 @@ async function startServer() {
       const actor = req.user!;
       const { id } = req.params;
 
-      const target = db.users.find(u => u.id === id);
-      if (!target) {
-        return res.status(404).json({
-          success: false,
-          error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
-        });
-      }
+      let target: ServerUser | null = null;
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
+        }
+        const userRes = await getUserByIdFromSupabase(id);
+        if (!userRes.success || !userRes.data) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
+          });
+        }
+        target = userRes.data;
 
-      const secureResetHash = hashPasswordSecure('12345678');
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
+        // Generate unique high-entropy temporary password
+        const temporaryPassword = generateSecureTemporaryPassword();
+        const secureResetHash = hashPasswordSecure(temporaryPassword);
+
         const sbRes = await updateUserInSupabase(id, {
           passwordHash: secureResetHash,
           mustChangePassword: true
@@ -6000,47 +6396,107 @@ async function startServer() {
             }
           });
         }
-      }
 
-      target.passwordHash = secureResetHash;
-      target.mustChangePassword = true;
-
-      // Revoke previous sessions
-      SERVER_SESSIONS.forEach(s => {
-        if (s.userId === id && s.status === 'active') {
-          s.status = 'revoked';
+        const localUser = db.users.find(u => u.id === id);
+        if (localUser) {
+          localUser.passwordHash = secureResetHash;
+          localUser.mustChangePassword = true;
         }
-      });
 
-      saveDatabaseToDisk();
+        // Revoke active sessions and SSE
+        SERVER_SESSIONS.forEach(s => {
+          if (s.userId === id && s.status === 'active') {
+            s.status = 'revoked';
+          }
+        });
+        activeBackendSseClients.forEach((client, cid) => {
+          if (client.user.id === id) {
+            try {
+              client.res.write(`data: ${JSON.stringify({ eventType: 'SESSION_REVOKED', message: 'Password reset' })}\n\n`);
+              client.res.end();
+            } catch {}
+            activeBackendSseClients.delete(cid);
+          }
+        });
 
-      logServerAudit('Reset User Password (Supabase API)', 'users', target.id, `Super Admin ${actor.name} mereset password akun ${target.username}`, actor);
+        // Audit log MUST NOT log the cleartext temporary password
+        logServerAudit('Reset User Password (Supabase API)', 'users', target.id, `Super Admin ${actor.name} mereset password akun ${target.username}`, actor);
 
-      res.json({
-        success: true,
-        message: `Kata sandi untuk @${target.username} berhasil direset ke password sementara default.`
-      });
+        return res.json({
+          success: true,
+          message: `Kata sandi untuk @${target.username} berhasil direset.`,
+          temporaryPassword
+        });
+      } else if (isLocalJsonAllowed()) {
+        target = db.users.find(u => u.id === id) || null;
+        if (!target) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
+          });
+        }
+
+        const temporaryPassword = generateSecureTemporaryPassword();
+        const secureResetHash = hashPasswordSecure(temporaryPassword);
+
+        target.passwordHash = secureResetHash;
+        target.mustChangePassword = true;
+
+        SERVER_SESSIONS.forEach(s => {
+          if (s.userId === id && s.status === 'active') {
+            s.status = 'revoked';
+          }
+        });
+        saveDatabaseToDisk();
+
+        logServerAudit('Reset User Password (Local API)', 'users', target.id, `Super Admin ${actor.name} mereset password akun ${target.username}`, actor);
+
+        return res.json({
+          success: true,
+          message: `Kata sandi untuk @${target.username} berhasil direset.`,
+          temporaryPassword
+        });
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
+      }
     } catch (err: any) {
       res.status(500).json({
         success: false,
         error: { code: 'RESET_ERROR', message: 'Gagal mereset kata sandi pengguna.' }
       });
+    }
   });
 
   // 6. Contractors & Coverage Areas Endpoints
   app.get('/api/supabase/contractors', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
     try {
       let contractors: any[] = [];
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
-        const sbRes = await getContractorsFromSupabase();
-        if (sbRes.success && Array.isArray(sbRes.data)) {
-          contractors = sbRes.data;
-        } else {
-          contractors = db.contractors || [];
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
         }
-      } else {
+        const sbRes = await getContractorsFromSupabase();
+        if (!sbRes.success || !Array.isArray(sbRes.data)) {
+          return res.status(500).json({
+            success: false,
+            error: { code: sbRes.error?.code || 'FETCH_ERROR', message: sbRes.error?.message || 'Gagal memuat data kontraktor dari Supabase.' }
+          });
+        }
+        contractors = sbRes.data;
+      } else if (isLocalJsonAllowed()) {
         contractors = db.contractors || [];
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
 
       res.json({
@@ -6058,16 +6514,29 @@ async function startServer() {
   app.get('/api/supabase/coverage-areas', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
     try {
       let areas: any[] = [];
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
-        const sbRes = await getCoverageAreasFromSupabase();
-        if (sbRes.success && Array.isArray(sbRes.data)) {
-          areas = sbRes.data;
-        } else {
-          areas = db.coverageAreas || [];
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
         }
-      } else {
+        const sbRes = await getCoverageAreasFromSupabase();
+        if (!sbRes.success || !Array.isArray(sbRes.data)) {
+          return res.status(500).json({
+            success: false,
+            error: { code: sbRes.error?.code || 'FETCH_ERROR', message: sbRes.error?.message || 'Gagal memuat data coverage area dari Supabase.' }
+          });
+        }
+        areas = sbRes.data;
+      } else if (isLocalJsonAllowed()) {
         areas = db.coverageAreas || [];
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
 
       res.json({
@@ -6092,16 +6561,29 @@ async function startServer() {
       }
 
       let settingValue: any = null;
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
-        const sbRes = await getAppSettingFromSupabase(cleanKey);
-        if (sbRes.success && sbRes.data !== undefined) {
-          settingValue = sbRes.data;
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
         }
-      }
-
-      if (settingValue === null && db.globalConfig) {
-        settingValue = db.globalConfig[cleanKey] ?? null;
+        const sbRes = await getAppSettingFromSupabase(cleanKey);
+        if (!sbRes.success) {
+          return res.status(500).json({
+            success: false,
+            error: { code: sbRes.error?.code || 'FETCH_ERROR', message: sbRes.error?.message || 'Gagal memuat setting dari Supabase.' }
+          });
+        }
+        settingValue = sbRes.data !== undefined ? sbRes.data : null;
+      } else if (isLocalJsonAllowed()) {
+        settingValue = db.globalConfig ? (db.globalConfig[cleanKey] ?? null) : null;
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
 
       res.json({
@@ -6125,8 +6607,14 @@ async function startServer() {
         return res.status(400).json({ success: false, error: { code: 'INVALID_KEY', message: 'Format key setting tidak valid.' } });
       }
 
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
+        }
         const sbRes = await saveAppSettingToSupabase(cleanKey, value, description, req.user!.name);
         if (!sbRes.success) {
           return res.status(500).json({
@@ -6137,11 +6625,20 @@ async function startServer() {
             }
           });
         }
-      }
 
-      if (!db.globalConfig) db.globalConfig = {};
-      db.globalConfig[cleanKey] = value;
-      saveDatabaseToDisk();
+        if (db.globalConfig) {
+          db.globalConfig[cleanKey] = value;
+        }
+      } else if (isLocalJsonAllowed()) {
+        if (!db.globalConfig) db.globalConfig = {};
+        db.globalConfig[cleanKey] = value;
+        saveDatabaseToDisk();
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
+      }
 
       logServerAudit('Save App Setting (Supabase API)', 'settings', cleanKey, `Super Admin ${req.user!.name} memperbarui setting "${cleanKey}"`, req.user);
 
@@ -6163,16 +6660,29 @@ async function startServer() {
       const limit = Math.min(parseInt(String(req.query.limit || 100), 10) || 100, 500);
       let logs: any[] = [];
 
-      const sbClient = getSupabaseBackendClient();
-      if (sbClient) {
-        const sbRes = await getAuditLogsFromSupabase(limit);
-        if (sbRes.success && Array.isArray(sbRes.data)) {
-          logs = sbRes.data;
-        } else {
-          logs = (db.auditLogs || []).slice(0, limit);
+      if (isSupabaseMode()) {
+        const sbClient = getSupabaseBackendClient();
+        if (!sbClient) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke database Supabase tidak tersedia.' }
+          });
         }
-      } else {
+        const sbRes = await getAuditLogsFromSupabase(limit);
+        if (!sbRes.success || !Array.isArray(sbRes.data)) {
+          return res.status(500).json({
+            success: false,
+            error: { code: sbRes.error?.code || 'FETCH_ERROR', message: sbRes.error?.message || 'Gagal memuat log audit dari Supabase.' }
+          });
+        }
+        logs = sbRes.data;
+      } else if (isLocalJsonAllowed()) {
         logs = (db.auditLogs || []).slice(0, limit);
+      } else {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Layanan database Supabase belum dikonfigurasi pada environment.' }
+        });
       }
 
       res.json({
@@ -6201,7 +6711,8 @@ async function startServer() {
     const client: BackendSseClient = {
       id: clientId,
       res,
-      user: req.user!
+      user: req.user!,
+      session: req.session
     };
     activeBackendSseClients.set(clientId, client);
 

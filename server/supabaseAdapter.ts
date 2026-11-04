@@ -360,11 +360,13 @@ export function ticketToPostgresRow(ticket: any): Record<string, any> {
 
   const contractorVal = ticket.contractorName ?? ticket.contactorName ?? null;
   const contactorVal = ticket.contactorName ?? ticket.contractorName ?? null;
+  const rawWoCandidate = ticket.woNumber || ticket.workOrderNumber || '';
+  const cleanWoNumber = normalizeWoNumber(rawWoCandidate);
 
   return {
     id: ticket.id,
-    wo_number: ticket.woNumber || ticket.workOrderNumber,
-    work_order_number: ticket.workOrderNumber || ticket.woNumber || null,
+    wo_number: cleanWoNumber || rawWoCandidate,
+    work_order_number: cleanWoNumber || rawWoCandidate || null,
     id_customer: ticket.idCustomer || ticket.customerId || null,
     customer_id: ticket.customerId || ticket.idCustomer || null,
     ticket_number: ticket.ticketNumber || null,
@@ -2374,7 +2376,13 @@ export async function getAppSettingFromSupabase(key: string): Promise<SupabaseOp
       return { success: false, error: classified };
     }
 
-    return { success: true, data: data ? data.setting_value : null };
+    if (data && data.setting_value !== undefined) {
+      const sv = data.setting_value;
+      const unwrap = (typeof sv === 'object' && sv !== null && 'value' in sv && Object.keys(sv).length === 1) ? sv.value : sv;
+      return { success: true, data: unwrap };
+    }
+
+    return { success: true, data: null };
   } catch (err: any) {
     const classified = classifySupabaseError(err);
     return { success: false, error: classified };

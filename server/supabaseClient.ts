@@ -61,6 +61,29 @@ let lastCheckStatus: SupabaseHealthResult = {
 };
 
 /**
+ * Checks whether Supabase credentials are configured and validated for server backend.
+ */
+export function isSupabaseConfigured(): boolean {
+  const url = process.env.SUPABASE_URL?.trim();
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)?.trim();
+  return Boolean(url && key && isValidSupabaseUrl(url) && isValidSupabaseSecretKey(key));
+}
+
+/**
+ * Checks whether local JSON mode is explicitly permitted as development/staging fallback.
+ * Strictly prohibited if Supabase credentials are configured (Fail-Closed).
+ */
+export function isLocalJsonModeAllowed(): boolean {
+  if (isSupabaseConfigured()) {
+    return false;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.ALLOW_LOCAL_JSON_MODE === 'true';
+  }
+  return true;
+}
+
+/**
  * Safely decodes a JWT payload without external libraries.
  * Does not expose or leak token contents.
  */
