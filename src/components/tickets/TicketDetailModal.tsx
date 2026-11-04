@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Ticket } from '../../types/index.ts';
 import { useApp } from '../../context/AppContext';
-import { StatusAgentBadge, StatusInstallerBadge, StatusWhatsAppBadge } from '../common/Badge';
+import { StatusAgentBadge, StatusInstallerBadge, StatusWhatsAppBadge, StatusApprovalBadge } from '../common/Badge';
 import { TicketLiveChat } from '../chat/TicketLiveChat';
 import { TechnicalReportForm } from './TechnicalReportForm';
 import {
@@ -27,9 +27,12 @@ import {
   Cpu,
   Wifi,
   FileText,
-  AlertCircle
+  AlertCircle,
+  ThumbsUp,
+  ThumbsDown,
+  Sparkles
 } from 'lucide-react';
-import { SuperAdminDeleteModal } from '../common/SuperAdminDeleteModal';
+import { ManagementDataDeleteModal } from '../portals/ManagementDataDeleteModal';
 import { formatAppointmentDateDisplay } from '../../services/appointmentDateParser';
 import { History } from 'lucide-react';
 
@@ -37,6 +40,7 @@ interface TicketDetailModalProps {
   ticket: Ticket | null;
   isOpen: boolean;
   onClose: () => void;
+  onApprovedAndClosed?: () => void;
   onOpenWhatsApp: (ticket: Ticket) => void;
   defaultTab?: 'overview' | 'report' | 'chat' | 'history';
 }
@@ -45,6 +49,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
   ticket,
   isOpen,
   onClose,
+  onApprovedAndClosed,
   onOpenWhatsApp,
   defaultTab = 'overview'
 }) => {
@@ -57,13 +62,23 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
     archiveTicket,
     restoreTicket,
     leadersList,
-    installersList
+    installersList,
+    approveProgressReport,
+    rejectProgressReport
   } = useApp();
 
   const [isEditing, setIsEditing] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<Ticket>>({});
   const [selectedLeader, setSelectedLeader] = useState('');
   const [selectedInstaller, setSelectedInstaller] = useState('');
+
+  // Dispatch Approval state
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [approvalNotes, setApprovalNotes] = useState('');
+  const [isApproving, setIsApproving] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [isRejecting, setIsRejecting] = useState(false);
 
   // Close ticket modal state
   const [showCloseModal, setShowCloseModal] = useState(false);
@@ -143,8 +158,33 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
     if (reopenReason.trim()) {
       reopenTicket(ticket.id, reopenReason.trim());
       setShowReopenModal(false);
-      setReopenReason('');
+      setRejectReason('');
     }
+  };
+
+  const handleConfirmApprove = async () => {
+    if (isApproving) return;
+    if (ticket.approvalStatus !== 'BUTUH APPROVAL') {
+      return;
+    }
+    setIsApproving(true);
+    const result = await approveProgressReport(ticket.id, approvalNotes);
+    setIsApproving(false);
+    if (result && result.success) {
+      setShowApprovalModal(false);
+      setApprovalNotes('');
+      onClose();
+      onApprovedAndClosed?.();
+    }
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectReason.trim()) return;
+    setIsRejecting(true);
+    await rejectProgressReport(ticket.id, rejectReason.trim());
+    setIsRejecting(false);
+    setShowRejectModal(false);
+    setRejectReason('');
   };
 
   // Helper: Strictly verify if a field has real, non-empty data
@@ -178,6 +218,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
             <div className="flex items-center gap-1.5 ml-1">
               <StatusAgentBadge status={ticket.statusWOAgent} />
               <StatusInstallerBadge status={ticket.statusWOInstaller} />
+              <StatusApprovalBadge status={ticket.approvalStatus} />
               <StatusWhatsAppBadge status={ticket.statusWhatsApp} />
             </div>
             {ticket.isArchived && (
@@ -269,12 +310,12 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
               <Archive className="w-4 h-4" />
             </button>
 
-            {/* Super Admin Delete */}
-            {currentUser.role === 'super_admin' && (
+            {/* Management Data Exclusive Delete */}
+            {currentUser.role === 'management_data' && (
               <button
                 onClick={() => setShowDeleteConfirm(true)}
                 className="px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:text-white hover:bg-rose-600 dark:hover:bg-rose-600 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-900 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                title="Hapus Work Order (Super Admin Only)"
+                title="Hapus Work Order (Khusus Management Data)"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Hapus WO</span>
@@ -364,10 +405,184 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
           </div>
         )}
 
+        {/* Approve Report Modal Banner */}
+        {showApprovalModal && (
+          <div className="p-4 bg-emerald-50 dark:bg-emerald-950/80 border-b border-emerald-200 dark:border-emerald-900 text-xs space-y-3 shrink-0 animate-in fade-in">
+            <div className="font-bold text-emerald-950 dark:text-emerald-200 flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Verifikasi & Setujui Laporan Teknisi (Approve WO: {ticket.woNumber})</span>
+            </div>
+            <p className="text-slate-600 dark:text-slate-300 text-[11px]">
+              Ketika laporan disetujui Dispatch, status tiket WO otomatis menjadi <strong className="text-emerald-700 dark:text-emerald-300">CLOSED</strong> dan status approval menjadi <strong className="text-emerald-700 dark:text-emerald-300">APPROVED</strong>.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <input
+                type="text"
+                placeholder="Catatan approval Dispatch (opsional, contoh: Hasil redaman terverifikasi oke)..."
+                value={approvalNotes}
+                onChange={e => setApprovalNotes(e.target.value)}
+                className="w-full sm:flex-1 px-3 py-2 border border-emerald-300 dark:border-emerald-800 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs"
+              />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => setShowApprovalModal(false)}
+                  className="px-3 py-2 bg-slate-200 dark:bg-slate-800 rounded-lg font-medium text-xs cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleConfirmApprove}
+                  disabled={isApproving}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <ThumbsUp className="w-3.5 h-3.5" />
+                  <span>{isApproving ? 'Memproses...' : 'Konfirmasi Setujui'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reject Report Modal Banner */}
+        {showRejectModal && (
+          <div className="p-4 bg-rose-50 dark:bg-rose-950/80 border-b border-rose-200 dark:border-rose-900 text-xs space-y-3 shrink-0 animate-in fade-in">
+            <div className="font-bold text-rose-950 dark:text-rose-200 flex items-center gap-1.5">
+              <AlertCircle className="w-4 h-4 text-rose-600" />
+              <span>Tolak / Minta Revisi Laporan Teknisi (WO: {ticket.woNumber})</span>
+            </div>
+            <p className="text-slate-600 dark:text-slate-300 text-[11px]">
+              Status approval akan berubah menjadi REJECTED dan teknisi diminta merevisi laporan atau bukti penanganan.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <input
+                type="text"
+                placeholder="Alasan penolakan / instruksi revisi (wajib diisi, contoh: foto ODP belum jelas)..."
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                className="w-full sm:flex-1 px-3 py-2 border border-rose-300 dark:border-rose-800 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs"
+              />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => setShowRejectModal(false)}
+                  className="px-3 py-2 bg-slate-200 dark:bg-slate-800 rounded-lg font-medium text-xs cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleConfirmReject}
+                  disabled={isRejecting || !rejectReason.trim()}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <ThumbsDown className="w-3.5 h-3.5" />
+                  <span>{isRejecting ? 'Memproses...' : 'Kirim Penolakan'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ============================================================ */}
         {/* CONTINUOUS SCROLLABLE FULL BODY                              */}
         {/* ============================================================ */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 text-xs">
+
+          {/* DISPATCH APPROVAL & PENGERJAAN TEKNISI HUB */}
+          <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-indigo-500" />
+                <span className="font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wide">
+                  Status Alur Kerja & Verifikasi Dispatch
+                </span>
+                <StatusApprovalBadge status={ticket.approvalStatus} />
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                <span>Mulai Pengerjaan:</span>
+                <strong className="text-slate-700 dark:text-slate-300 font-mono">
+                  {ticket.workStartedAt ? new Date(ticket.workStartedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : 'Belum Dimulai'}
+                </strong>
+                {ticket.workStartedBy && <span>({ticket.workStartedBy})</span>}
+              </div>
+            </div>
+
+            {/* Approval specific state banner */}
+            {ticket.approvalStatus === 'BUTUH APPROVAL' && (
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-pulse">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-bold text-xs">
+                    <Clock className="w-4 h-4 text-amber-600" />
+                    <span>Laporan Teknisi Siap Diperiksa & Membutuhkan Approval Dispatch</span>
+                  </div>
+                  <div className="text-[11px] text-amber-800 dark:text-amber-300">
+                    Report Status: <strong className="font-bold underline">{ticket.progressReports?.[ticket.progressReports.length - 1]?.reportStatus || ticket.statusWOInstaller}</strong>
+                    {ticket.progressReports?.[ticket.progressReports.length - 1]?.reasonReport && <span> · Reason: {ticket.progressReports[ticket.progressReports.length - 1].reasonReport}</span>}
+                    {ticket.progressReports?.[ticket.progressReports.length - 1]?.rootCause && <span> · Rootcause: {ticket.progressReports[ticket.progressReports.length - 1].rootCause}</span>}
+                  </div>
+                  {ticket.progressReports?.[ticket.progressReports.length - 1]?.remarksReport && (
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300 italic bg-amber-100/50 dark:bg-amber-900/30 p-2 rounded-lg">
+                      "{ticket.progressReports[ticket.progressReports.length - 1].remarksReport}"
+                    </div>
+                  )}
+                </div>
+
+                {(currentUser.role === 'dispatch' || currentUser.role === 'super_admin') && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowApprovalModal(true)}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    >
+                      <ThumbsUp className="w-3.5 h-3.5" />
+                      <span>Setujui (Approve)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowRejectModal(true)}
+                      className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    >
+                      <ThumbsDown className="w-3.5 h-3.5" />
+                      <span>Tolak / Revisi</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {ticket.approvalStatus === 'APPROVED' && (
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between text-xs text-emerald-800 dark:text-emerald-200">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>
+                    Laporan telah <strong>DISETUJUI (APPROVED)</strong> oleh <strong>{ticket.approvedBy || 'Dispatch'}</strong>
+                    {ticket.approvedAt && ` pada ${new Date(ticket.approvedAt).toLocaleString('id-ID')}`}, dan status tiket <strong>RESMI CLOSED</strong>.
+                    {ticket.approvalNotes && ` Catatan: "${ticket.approvalNotes}"`}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {ticket.approvalStatus === 'REJECTED' && (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-rose-800 dark:text-rose-200">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>
+                    Laporan <strong>DITOLAK / PERLU REVISI</strong> oleh <strong>{ticket.rejectedBy || 'Dispatch'}</strong>
+                    {ticket.rejectedAt && ` pada ${new Date(ticket.rejectedAt).toLocaleString('id-ID')}`}.
+                    {ticket.rejectionReason && ` Alasan: "${ticket.rejectionReason}"`}
+                  </span>
+                </div>
+                {(currentUser.role === 'dispatch' || currentUser.role === 'super_admin') && (
+                  <button
+                    type="button"
+                    onClick={() => setShowApprovalModal(true)}
+                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold shrink-0 self-end sm:self-auto cursor-pointer"
+                  >
+                    Re-evaluasi & Setujui
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           
           {/* SECTION 1: HIGHLIGHT SUMMARY CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -840,20 +1055,12 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
         </div>
       </div>
 
-      {/* Super Admin Delete Modal Guard */}
-      {showDeleteConfirm && (
-        <SuperAdminDeleteModal
+      {/* Management Data Delete Modal Guard */}
+      {showDeleteConfirm && currentUser.role === 'management_data' && (
+        <ManagementDataDeleteModal
           isOpen={showDeleteConfirm}
           onClose={() => setShowDeleteConfirm(false)}
-          targetType="ticket"
-          targetId={ticket.id}
-          targetLabel={`WO: ${ticket.woNumber} (ID Pelanggan: ${ticket.idCustomer})`}
-          targetDetails={[
-            { label: 'Pelanggan', value: ticket.customerName },
-            { label: 'Area / Cluster', value: `${ticket.area || '-'} / ${ticket.clusterName || '-'}` },
-            { label: 'Mitra Kontraktor', value: ticket.contactorName || '-' },
-            { label: 'Status', value: `${ticket.statusWOAgent} / ${ticket.statusWOInstaller}` }
-          ]}
+          ticket={ticket}
           onSuccess={() => {
             setShowDeleteConfirm(false);
             onClose();

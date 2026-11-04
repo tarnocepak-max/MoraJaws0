@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useUIConfig } from '../../context/UIConfigContext';
 import { MoraJawsLogo } from '../common/MoraJawsLogo';
@@ -7,34 +7,35 @@ import {
   FileSpreadsheet,
   Ticket as TicketIcon,
   Users2,
-  Wrench,
   MessageSquareQuote,
-  GitBranch,
   Sliders,
   History,
-  Settings as SettingsIcon,
-  ChevronLeft,
-  ChevronRight,
-  Minus,
+  ChevronDown,
   X,
-  Maximize2,
-  Users,
   RefreshCw,
   Database,
-  Server,
   KeyRound,
   LogOut,
-  Zap,
-  Radio,
-  BarChart3,
   Calendar,
-  ListFilter,
   Activity,
   MessageSquare,
   ShieldCheck,
   Building2,
+  FileText,
   UserCheck,
-  RotateCcw
+  BarChart3,
+  UserPlus,
+  SlidersHorizontal,
+  FolderTree,
+  Bell,
+  Settings as SettingsIcon,
+  CheckCircle2,
+  ListOrdered,
+  Wrench,
+  Layers,
+  MapPin,
+  HelpCircle,
+  Folder
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -44,389 +45,516 @@ interface SidebarProps {
   onChangeState: (state: 'expanded' | 'minimized' | 'closed') => void;
 }
 
+export const ICON_REGISTRY: Record<string, React.ElementType> = {
+  LayoutDashboard,
+  FileSpreadsheet,
+  Ticket: TicketIcon,
+  TicketIcon,
+  Users2,
+  MessageSquareQuote,
+  Sliders,
+  History,
+  RefreshCw,
+  Database,
+  KeyRound,
+  LogOut,
+  Calendar,
+  Activity,
+  MessageSquare,
+  ShieldCheck,
+  Building2,
+  FileText,
+  UserCheck,
+  BarChart3,
+  UserPlus,
+  SlidersHorizontal,
+  FolderTree,
+  Bell,
+  Settings: SettingsIcon,
+  CheckCircle2,
+  ListOrdered,
+  Wrench,
+  Layers,
+  MapPin,
+  HelpCircle,
+  Folder
+};
+
+export const resolveNavIcon = (iconName?: string): React.ElementType => {
+  if (!iconName) return Folder;
+  return ICON_REGISTRY[iconName] || Folder;
+};
+
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onNavigate,
   sidebarState,
   onChangeState
 }) => {
-  const { currentUser, tickets, googleSheetsConfig, logout, setIsSessionModalOpen } = useApp();
-  const { isMobileView, config, navigationItems, menuCategories } = useUIConfig();
+  const { currentUser, tickets, logout, setIsSessionModalOpen } = useApp();
+  const {
+    isMobileView,
+    config,
+    navCategories,
+    standaloneMenus,
+    submenuItems,
+    accordionSettings
+  } = useUIConfig();
 
-  if (sidebarState === 'closed') {
-    return null;
-  }
-
-  const isMinimized = sidebarState === 'minimized';
-  const totalActiveTickets = tickets.filter(t => !t.isArchived).length;
-  const unassignedCount = tickets.filter(t => !t.installerName && !t.isArchived).length;
-
-  // Base catalog of navigation metadata
-  const itemCatalog: Record<
-    string,
-    {
-      label: string;
-      icon: any;
-      roles: string[];
-      highlight?: boolean;
-      badge?: string | number;
-      badgeColor?: string;
+  // Requirement 1: Ticket indicators strictly calculate WO with Appointment Date = Today (Asia/Jakarta)
+  const todayWIB = useMemo(() => {
+    try {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(new Date());
+    } catch {
+      return new Date().toISOString().split('T')[0];
     }
-  > = {
-    // Dispatch Management Group
-    tickets: {
-      label: 'TICKET MYREPUBLIC',
-      icon: TicketIcon,
-      badge: totalActiveTickets,
-      roles: ['super_admin', 'dispatch']
-    },
-    form_sameday: {
-      label: 'Form Sameday',
-      icon: Zap,
-      badge: 'Express',
-      badgeColor: 'amber',
-      roles: ['dispatch']
-    },
-    report_data_wo: {
-      label: 'Report Data WO',
-      icon: BarChart3,
-      roles: ['super_admin', 'dispatch']
-    },
-    schedule: {
-      label: 'Schedule',
-      icon: Calendar,
-      roles: ['super_admin', 'dispatch', 'leader']
-    },
-    login_logs: {
-      label: 'Login Log',
-      icon: KeyRound,
-      roles: ['super_admin', 'dispatch', 'it_support']
-    },
-    setting_droplist: {
-      label: 'Setting Droplist',
-      icon: ListFilter,
-      roles: ['super_admin', 'dispatch', 'it_support']
-    },
+  }, []);
 
-    // Menu Leader Group
-    leader_portal: {
-      label: 'Dashboard Leader',
-      icon: Users2,
-      badge: unassignedCount > 0 ? `${unassignedCount} unassigned` : undefined,
-      badgeColor: 'amber',
-      roles: ['super_admin', 'leader']
-    },
-    location_basecamp: {
-      label: 'Kontraktor & Basecamp',
-      icon: Building2,
-      roles: ['super_admin', 'leader']
-    },
+  const todayActiveTickets = useMemo(() => {
+    return tickets.filter(t => {
+      if (t.isArchived || t.isDeleted) return false;
+      const raw = t.appointmentDate || t.date;
+      if (!raw) return false;
+      const clean = String(raw).slice(0, 10);
+      return clean === todayWIB || (raw.includes('T') && raw.split('T')[0] === todayWIB);
+    });
+  }, [tickets, todayWIB]);
 
-    // Portal Teknisi Group
-    installer_portal: {
-      label: 'Tugas Saya & Laporan',
-      icon: Wrench,
-      roles: ['super_admin', 'leader', 'installer']
-    },
+  const totalActiveTickets = todayActiveTickets.length;
+  const unassignedCount = todayActiveTickets.filter(t => !t.installerName).length;
+  const userRole = currentUser?.role || 'installer';
+  const isInstaller = userRole === 'installer';
 
-    // Menu Tambahan Group
-    dashboard: {
-      label: 'Dashboard Monitoring',
-      icon: LayoutDashboard,
-      roles: ['super_admin', 'dispatch', 'leader', 'management_data']
-    },
-    contact_centre: {
-      label: 'Contact Centre',
-      icon: MessageSquare,
-      roles: ['super_admin', 'dispatch', 'leader', 'installer']
-    },
-    management_data_portal: {
-      label: 'Management Data Portal',
-      icon: Database,
-      highlight: true,
-      roles: ['super_admin', 'management_data']
-    },
-    database_sync: {
-      label: 'Monitoring Sinkronisasi',
-      icon: RefreshCw,
-      badge: 'Live',
-      badgeColor: 'emerald',
-      roles: ['super_admin', 'management_data']
-    },
-    database_management: {
-      label: 'Database Application',
-      icon: Server,
-      roles: ['super_admin', 'management_data']
-    },
-    import: {
-      label: 'Import Data WO',
-      icon: FileSpreadsheet,
-      roles: ['super_admin', 'dispatch', 'management_data']
-    },
-    sheets_sync: {
-      label: 'Google Sheets Sync',
-      icon: RefreshCw,
-      badge: googleSheetsConfig.enabled ? 'Auto' : undefined,
-      badgeColor: 'emerald',
-      roles: ['super_admin']
-    },
-    users: {
-      label: 'Management User',
-      icon: Users,
-      roles: ['super_admin']
-    },
-    management_role: {
-      label: 'Management Role',
-      icon: ShieldCheck,
-      roles: ['super_admin']
-    },
-    settings: {
-      label: 'Field Mapping',
-      icon: FileSpreadsheet,
-      roles: ['super_admin', 'it_support']
-    },
-    ui_builder: {
-      label: 'UI Configuration Builder',
-      icon: Sliders,
-      highlight: true,
-      roles: ['super_admin', 'it_support']
-    },
-    audit_logs: {
-      label: 'Audit Log & History',
-      icon: History,
-      roles: ['super_admin', 'it_support']
-    },
-    system_health: {
-      label: 'System Health',
-      icon: Activity,
-      badge: 'Healthy',
-      badgeColor: 'emerald',
-      roles: ['super_admin', 'it_support']
-    },
-    templates: {
-      label: 'WhatsApp Templates',
-      icon: MessageSquareQuote,
-      roles: ['super_admin', 'dispatch', 'leader']
-    },
-    workflows: {
-      label: 'Workflow Automation',
-      icon: GitBranch,
-      roles: ['super_admin', 'dispatch']
-    },
-    offline_sync: {
-      label: 'Sinkronisasi Offline',
-      icon: Database,
-      roles: ['super_admin', 'dispatch', 'leader', 'installer']
+  // =========================================================================
+  // 1. STANDALONE MENUS (Menu Mandiri tanpa accordion, tanpa kategori induk)
+  // Untuk Installer: Hanya Dashboard Installer & Tugas Saya
+  // Untuk Non-Installer: 7 Menu Mandiri yang dapat dikonfigurasi
+  // =========================================================================
+  const filteredStandaloneMenus = useMemo(() => {
+    if (isInstaller) {
+      return [
+        {
+          id: 'installer_portal',
+          label: 'Dashboard Installer',
+          icon: 'LayoutDashboard',
+          order: 1,
+          visible: true,
+          roles: ['installer']
+        },
+        {
+          id: 'installer_tasks',
+          label: 'Tugas Saya',
+          icon: 'CheckCircle2',
+          order: 2,
+          visible: true,
+          roles: ['installer']
+        }
+      ];
     }
+
+    const list = Array.isArray(standaloneMenus) ? standaloneMenus : [];
+    return [...list]
+      .filter(item => {
+        if (item.visible === false) return false;
+        if (item.id === 'templates' && userRole !== 'super_admin' && userRole !== 'dispatch') return false;
+        if (item.roles && !item.roles.includes(userRole)) return false;
+        return true;
+      })
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+  }, [isInstaller, standaloneMenus, userRole]);
+
+  // =========================================================================
+  // 2. KATEGORI ACCORDION (3 Kategori Utama: Contractor & Area, Installer, Menu Tambahan)
+  // Khusus Non-Installer (Installer hanya memiliki 2 menu mandiri)
+  // Submenu difilter berdasarkan role & izin akses. Kategori tanpa submenu disembunyikan.
+  // =========================================================================
+  const filteredCategoriesWithSubmenus = useMemo(() => {
+    if (isInstaller) return [];
+
+    const categories = Array.isArray(navCategories) ? navCategories : [];
+    const allSubmenus = Array.isArray(submenuItems) ? submenuItems : [];
+    const isDispatchOrLeader = userRole === 'dispatch' || userRole === 'leader';
+
+    return [...categories]
+      .filter(cat => {
+        if (cat.isActive === false) return false;
+        // Role DISPATCH dan LEADER tidak boleh melihat kategori installer (Hanya super_admin & installer)
+        if ((userRole === 'dispatch' || userRole === 'leader') && 
+            (cat.id === 'cat_installer' || cat.id === 'installer' || (cat.name && cat.name.toLowerCase().includes('installer')))) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+      .map(cat => {
+        const matchingSubmenus = allSubmenus
+          .filter(sub => {
+            if (sub.categoryId !== cat.id) return false;
+            if (sub.visible === false) return false;
+            // Role DISPATCH tidak boleh melihat pendaftaran/menu installer
+            if (userRole === 'dispatch' && (sub.categoryId === 'installer' || sub.id === 'report_installer' || sub.id === 'installer_mgmt')) {
+              return false;
+            }
+            // Role LEADER tidak boleh melihat report installer, hanya pendaftaran akun teknisi
+            if (userRole === 'leader' && sub.id === 'report_installer') {
+              return false;
+            }
+            // Requirement 5: WhatsApp Templates strictly for super_admin and dispatch only
+            if (sub.id === 'templates' && userRole !== 'super_admin' && userRole !== 'dispatch') {
+              return false;
+            }
+            if (sub.roles && !sub.roles.includes(userRole)) return false;
+            return true;
+          })
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+        return {
+          ...cat,
+          submenus: matchingSubmenus
+        };
+      })
+      .filter(cat => cat.submenus.length > 0); // Sembunyikan kategori jika tidak ada submenu yang dapat diakses
+  }, [isInstaller, navCategories, submenuItems, userRole]);
+
+  // =========================================================================
+  // 3. ACCORDION STATE
+  // Mendukung multi-submenu collapse (beberapa kategori terbuka bersamaan)
+  // Kategori dibuka/ditutup secara independen tanpa menutup kategori lain
+  // =========================================================================
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    filteredCategoriesWithSubmenus.forEach(cat => {
+      // Default: check if activeTab is within this category
+      const hasActive = cat.submenus.some(
+        sub =>
+          sub.id === activeTab ||
+          (sub.id === 'contractor_recap' && activeTab === 'rekap_laporan') ||
+          (sub.id === 'setup' && ['setup', 'ui_builder', 'workflows', 'database_sync', 'sheets_sync'].includes(activeTab))
+      );
+      initial[cat.id] = hasActive || cat.mode === 'static';
+    });
+    return initial;
+  });
+
+  // Ensure active category expands when activeTab navigates into it
+  useEffect(() => {
+    filteredCategoriesWithSubmenus.forEach(cat => {
+      const hasActive = cat.submenus.some(
+        sub =>
+          sub.id === activeTab ||
+          (sub.id === 'contractor_recap' && activeTab === 'rekap_laporan') ||
+          (sub.id === 'setup' && ['setup', 'ui_builder', 'workflows', 'database_sync', 'sheets_sync'].includes(activeTab))
+      );
+      if (hasActive) {
+        setOpenGroups(prev => ({
+          ...prev,
+          [cat.id]: true
+        }));
+      }
+    });
+  }, [activeTab, filteredCategoriesWithSubmenus]);
+
+  // Toggle category independent expand/collapse
+  const toggleGroup = (groupId: string, mode?: 'accordion' | 'static') => {
+    if (mode === 'static') return; // Static mode stays open
+    setOpenGroups(prev => {
+      const isCurrentlyOpen = !!prev[groupId];
+      const allowMultiple = accordionSettings?.allowMultipleOpenGroups !== false;
+
+      if (allowMultiple) {
+        // Multi-open mode: keep existing states, toggle clicked category
+        return {
+          ...prev,
+          [groupId]: !isCurrentlyOpen
+        };
+      } else {
+        // Single-open mode
+        const next: Record<string, boolean> = {};
+        // Keep static categories open
+        filteredCategoriesWithSubmenus.forEach(c => {
+          if (c.mode === 'static') next[c.id] = true;
+        });
+        next[groupId] = !isCurrentlyOpen;
+        return next;
+      }
+    });
   };
-
-  // Merge dynamic navigationItems with itemCatalog and filter by user role and visibility
-  const sortedNavItems = [...navigationItems].sort((a, b) => a.order - b.order);
-
-  // Group items by category
-  const categoriesToRender = (menuCategories && menuCategories.length > 0)
-    ? menuCategories
-    : ['Dispatch Management', 'Menu Leader', 'Portal Teknisi', 'Menu Tambahan'];
 
   const handleItemClick = (id: string) => {
     onNavigate(id);
     if (isMobileView || (typeof window !== 'undefined' && window.innerWidth < 768)) {
-      if (config.device?.android?.autoCloseSidebarOnNavigate !== false) {
+      if (config?.device?.android?.autoCloseSidebarOnNavigate !== false) {
         onChangeState('closed');
       }
     }
   };
 
+  // Helper for dynamic badge calculation
+  const getItemBadge = (itemId: string, defaultBadge?: string | number) => {
+    if (itemId === 'wo_assignment' && unassignedCount > 0) {
+      return { text: `${unassignedCount} Belum`, color: 'amber' as const };
+    }
+    if (itemId === 'tickets' && totalActiveTickets > 0) {
+      return { text: totalActiveTickets, color: 'purple' as const };
+    }
+    if (itemId === 'progress_dashboard') {
+      return { text: 'Live', color: 'purple' as const };
+    }
+    if (itemId === 'system_health') {
+      return { text: 'OK', color: 'emerald' as const };
+    }
+    if (itemId === 'setup') {
+      return { text: 'Hub', color: 'purple' as const };
+    }
+    if (defaultBadge !== undefined) {
+      return { text: defaultBadge, color: 'purple' as const };
+    }
+    return null;
+  };
+
+  // KHUSUS ROLE INSTALLER: Sidebar HILANG SEPENUHNYA (Bottom Navigation ONLY)
+  if (sidebarState === 'closed' || isInstaller) {
+    return null;
+  }
+
   return (
     <>
-      {/* Mobile Backdrop when open on mobile */}
+      {/* Mobile Backdrop Overlay */}
       <div
-        className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-45 md:hidden"
+        className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs z-45 md:hidden animate-fadeIn"
         onClick={() => onChangeState('closed')}
       />
 
+      {/* Sidebar Main Frame: Dark Purple Gloss Theme */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 md:relative md:inset-auto md:z-auto bg-[#F5F1FF] dark:bg-[#160D29] border-r border-[#D8CCF3] dark:border-[#35105E] transition-all duration-200 flex flex-col shrink-0 shadow-2xl md:shadow-none h-full ${
-          isMinimized ? 'w-16' : 'w-64'
-        }`}
+        className="fixed inset-y-0 left-0 z-50 md:relative md:inset-auto md:z-auto bg-[#160D29] text-slate-200 border-r border-[#35105E] transition-all duration-300 ease-in-out flex flex-col shrink-0 shadow-2xl md:shadow-none h-full w-64 select-none"
       >
-      {/* Top Header of Sidebar: Menu title with Minimize (-) and Close (X) buttons */}
-      <div className="px-3 py-2.5 border-b border-[#D8CCF3] dark:border-[#35105E] flex items-center justify-between text-xs">
-        {!isMinimized ? (
-          <>
-            <div className="flex items-center gap-2">
-              <MoraJawsLogo size="xs" animated={false} />
-              <span className="font-bold text-[#756B8D] dark:text-[#D8B4FE] uppercase tracking-wider text-[11px]">
+        {/* Top Header with MoraJaws Logo */}
+        <div className="px-4 py-3.5 border-b border-[#35105E] flex items-center justify-between bg-[#110A21]">
+          <div className="flex items-center gap-2.5">
+            <MoraJawsLogo size="xs" animated={false} />
+            <div className="flex flex-col">
+              <span className="font-extrabold text-[#D8B4FE] uppercase tracking-wider text-[11px] leading-tight">
                 Menu Navigasi
               </span>
-            </div>
-            <div className="flex items-center gap-1">
-              {/* Minimize Button */}
-              <button
-                onClick={() => onChangeState('minimized')}
-                className="p-1 text-[#756B8D] hover:text-[#21183A] dark:hover:text-white hover:bg-[#E9E1FF]/60 dark:hover:bg-[#3B1D78] rounded transition-colors cursor-pointer"
-                title="Minimize Menu (Kecilkan ke Ikon)"
-              >
-                <Minus className="w-3.5 h-3.5" />
-              </button>
-              {/* Close Button */}
-              <button
-                onClick={() => onChangeState('closed')}
-                className="p-1 text-[#756B8D] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors cursor-pointer"
-                title="Tutup Menu (Sembunyikan Penuh)"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="w-full flex items-center justify-center gap-1">
-            {/* Expand Button */}
-            <button
-              onClick={() => onChangeState('expanded')}
-              className="p-1 text-[#756B8D] hover:text-[#5B35B1] hover:bg-[#E9E1FF]/60 dark:hover:bg-[#3B1D78] rounded transition-colors cursor-pointer"
-              title="Perbesar Menu (Expand)"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-            {/* Close Button */}
-            <button
-              onClick={() => onChangeState('closed')}
-              className="p-1 text-[#756B8D] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors cursor-pointer"
-              title="Tutup Menu"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Navigation items list grouped by category */}
-      <div className="flex-1 py-2 px-2 space-y-3 overflow-y-auto">
-        {categoriesToRender.map(category => {
-          const categoryItems = sortedNavItems.filter(item => {
-            const catalog = itemCatalog[item.id];
-            if (!catalog) return false;
-            if (!item.visible) return false;
-            if (!catalog.roles.includes(currentUser.role)) return false;
-            return item.category === category;
-          });
-
-          if (categoryItems.length === 0) return null;
-
-          return (
-            <div key={category} className="space-y-1">
-              {!isMinimized ? (
-                <div className="px-3 pt-1.5 pb-0.5 text-[10px] font-bold text-[#8064D9] dark:text-[#b19cf0] uppercase tracking-wider">
-                  {category}
-                </div>
-              ) : (
-                <div className="my-1 border-t border-[#D8CCF3]/70 dark:border-[#3B1D78]" />
-              )}
-
-              {categoryItems.map(item => {
-                const catalog = itemCatalog[item.id] || { label: item.label, icon: TicketIcon, roles: [] };
-                const Icon = catalog.icon;
-                const isActive = activeTab === item.id;
-                const rawLabel = item.label || catalog.label;
-                const label = (item.id === 'leader_portal' && (rawLabel === 'Dashboard Area' || !rawLabel)) ? 'Dashboard Leader' : rawLabel;
-
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleItemClick(item.id)}
-                    title={isMinimized ? label : undefined}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      isActive
-                        ? 'bg-[#3B1D78] text-white shadow-md shadow-[#3B1D78]/25'
-                        : catalog.highlight
-                        ? 'text-[#5B35B1] dark:text-[#E9E1FF] bg-[#E9E1FF]/80 dark:bg-[#3B1D78]/50 hover:bg-[#E9E1FF]'
-                        : 'text-[#756B8D] dark:text-[#D8CCF3] hover:text-[#21183A] dark:hover:text-white hover:bg-[#E9E1FF]/50 dark:hover:bg-[#3B1D78]/40'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    {!isMinimized && (
-                      <div className="flex-1 flex items-center justify-between text-left truncate">
-                        <span className="truncate">{label}</span>
-                        {catalog.badge !== undefined && (
-                          <span
-                            className={`ml-2 px-1.5 py-0.2 text-[10px] font-bold rounded-full ${
-                              isActive
-                                ? 'bg-[#5B35B1] text-white'
-                                : catalog.badgeColor === 'amber'
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                : 'bg-[#E9E1FF] text-[#3B1D78] dark:bg-[#3B1D78] dark:text-[#E9E1FF]'
-                            }`}
-                          >
-                            {catalog.badge}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Footer controls */}
-      <div className="p-2 border-t border-slate-200 dark:border-slate-800 space-y-1.5">
-        {!isMinimized ? (
-          <div className="flex items-center justify-between px-1">
-            <div className="text-[11px] text-slate-400 truncate">
-              Role: <span className="font-semibold text-slate-700 dark:text-slate-300 capitalize">{currentUser.role.replace('_', ' ')}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              {/* Quick toggle between minimized & expanded */}
-              <button
-                onClick={() => onChangeState(isMinimized ? 'expanded' : 'minimized')}
-                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors"
-                title={isMinimized ? 'Expand Menu' : 'Minimize Menu'}
-              >
-                {isMinimized ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-              </button>
+              <span className="text-[9.5px] text-purple-400 font-medium">
+                MoraJaws Operations
+              </span>
             </div>
           </div>
-        ) : (
-          <div className="flex flex-col items-center gap-1.5">
-            <button
-              onClick={() => onChangeState('expanded')}
-              className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors"
-              title="Expand Menu"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {currentUser.role === 'super_admin' && (
           <button
-            onClick={() => setIsSessionModalOpen(true)}
-            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-xs font-semibold transition-colors cursor-pointer ${
-              isMinimized ? 'justify-center' : ''
-            }`}
-            title="Kelola Sesi Staf Aktif & Idle Timeout"
+            type="button"
+            onClick={() => onChangeState('closed')}
+            className="p-1.5 text-purple-300 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+            title="Tutup Menu"
           >
-            <KeyRound className="w-4 h-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
-            {!isMinimized && <span className="truncate">Manajemen Sesi Staf</span>}
+            <X className="w-4 h-4" />
           </button>
-        )}
+        </div>
 
-        {/* Dedicated Logout Action */}
-        <button
-          onClick={logout}
-          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold transition-colors ${
-            isMinimized ? 'justify-center' : ''
-          }`}
-          title="Keluar / Logout dari Aplikasi"
-        >
-          <LogOut className="w-4 h-4 shrink-0" />
-          {!isMinimized && <span>Keluar / Logout</span>}
-        </button>
-      </div>
-    </aside>
+        {/* Scrollable Navigation Body */}
+        <div className="flex-1 py-3 px-2.5 space-y-2 overflow-y-auto scrollbar-thin">
+          {/* ============================================================ */}
+          {/* A. MENU MANDIRI (TANPA KATEGORI INDUK, TANPA ACCORDION)      */}
+          {/* Langsung di bagian atas tanpa label header "MENU UTAMA"      */}
+          {/* ============================================================ */}
+          <div className="space-y-1">
+            {filteredStandaloneMenus.map(item => {
+              const Icon = resolveNavIcon(item.icon);
+              const isActive =
+                activeTab === item.id ||
+                (item.id === 'tickets' && (activeTab === 'tickets' || activeTab === 'wo_management')) ||
+                (item.id === 'installer_portal' && (activeTab === 'installer_portal' || activeTab === 'installer_dashboard'));
+
+              const badgeInfo = getItemBadge(item.id, item.badge);
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleItemClick(item.id)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-gradient-to-r from-[#5B35B1] to-[#7135B5] text-white font-bold shadow-md shadow-[#5B35B1]/40 border-l-4 border-l-[#D8B4FE] border-y border-r border-[#D8B4FE]/30'
+                      : 'text-purple-200 hover:text-white hover:bg-[#35105E]/50 border-l-4 border-l-transparent'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#D8B4FE]' : 'text-purple-300'}`} />
+                  <div className="flex-1 flex items-center justify-between text-left truncate">
+                    <span className="truncate">{item.label}</span>
+                    {badgeInfo && (
+                      <span
+                        className={`ml-2 px-1.5 py-0.2 text-[9.5px] font-bold rounded-full ${
+                          isActive
+                            ? 'bg-white text-[#35105E]'
+                            : badgeInfo.color === 'amber'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            : 'bg-[#5B35B1] text-purple-100'
+                        }`}
+                      >
+                        {badgeInfo.text}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ============================================================ */}
+          {/* B. PEMISAH RAPI (JIKA MEMILIKI KATEGORI ACCORDION)           */}
+          {/* Tanpa judul "KATEGORI MENU" per spesifikasi                  */}
+          {/* ============================================================ */}
+          {filteredCategoriesWithSubmenus.length > 0 && (
+            <div className="my-2.5 border-t border-[#35105E]/60" />
+          )}
+
+          {/* ============================================================ */}
+          {/* C. KATEGORI ACCORDION SUBMENU (Contractor & Area, Installer, Menu Tambahan) */}
+          {/* ============================================================ */}
+          {filteredCategoriesWithSubmenus.map(cat => {
+            const CatIcon = resolveNavIcon(cat.icon);
+            const isAccordionMode = cat.mode !== 'static';
+            const isOpen = isAccordionMode ? !!openGroups[cat.id] : true;
+            const hasActiveChild = cat.submenus.some(
+              sub =>
+                activeTab === sub.id ||
+                (sub.id === 'contractor_recap' && activeTab === 'rekap_laporan') ||
+                (sub.id === 'setup' && ['setup', 'ui_builder', 'workflows', 'database_sync', 'sheets_sync'].includes(activeTab))
+            );
+
+            return (
+              <div
+                key={cat.id}
+                className={`rounded-xl transition-all duration-200 ${
+                  hasActiveChild
+                    ? 'bg-[#251545]/70 border border-[#7135B5]/40 shadow-xs'
+                    : 'bg-[#1C1133]/40 border border-[#35105E]/40'
+                }`}
+              >
+                {/* Category Header Button */}
+                {isAccordionMode ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(cat.id, 'accordion')}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-purple-200 hover:text-white hover:bg-[#35105E]/60 rounded-xl transition-colors cursor-pointer group"
+                    aria-expanded={isOpen}
+                  >
+                    <div className="flex items-center gap-2.5 truncate">
+                      <CatIcon className={`w-4 h-4 shrink-0 ${hasActiveChild ? 'text-[#D8B4FE]' : 'text-purple-400 group-hover:text-purple-300'}`} />
+                      <span className="tracking-wide uppercase text-[11px] font-bold truncate">
+                        {cat.name}
+                      </span>
+                    </div>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 shrink-0 text-purple-400 transition-transform duration-300 ease-in-out ${
+                        isOpen ? 'rotate-180 text-[#D8B4FE]' : 'rotate-0 text-purple-400 group-hover:text-purple-300'
+                      }`}
+                    />
+                  </button>
+                ) : (
+                  <div className="w-full flex items-center justify-between px-3 py-2 text-xs font-extrabold text-purple-300 border-b border-[#35105E]/40">
+                    <div className="flex items-center gap-2.5 truncate">
+                      <CatIcon className={`w-4 h-4 shrink-0 ${hasActiveChild ? 'text-[#D8B4FE]' : 'text-purple-400'}`} />
+                      <span className="tracking-wider uppercase text-[11px] truncate">{cat.name}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Submenu Items with smooth collapse animation */}
+                {isOpen && (
+                  <div className="space-y-1 pl-1.5 pr-1 py-1.5 animate-fadeIn">
+                    {cat.submenus.map(item => {
+                      const SubIcon = resolveNavIcon(item.icon);
+                      const isActive =
+                        activeTab === item.id ||
+                        (item.id === 'contractor_recap' && activeTab === 'rekap_laporan') ||
+                        (item.id === 'setup' &&
+                          ['ui_builder', 'workflows', 'database_sync', 'sheets_sync'].includes(activeTab));
+
+                      const badgeInfo = getItemBadge(item.id, item.badge);
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleItemClick(item.id)}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-gradient-to-r from-[#5B35B1] to-[#7135B5] text-white font-bold shadow-md shadow-[#5B35B1]/40 border-l-4 border-l-[#D8B4FE] border-y border-r border-[#D8B4FE]/30'
+                              : item.highlight
+                              ? 'text-[#E9D5FF] bg-[#35105E]/80 hover:bg-[#5B35B1]/50 border-l-4 border-l-transparent'
+                              : 'text-purple-200 hover:text-white hover:bg-[#35105E]/50 border-l-4 border-l-transparent'
+                          }`}
+                        >
+                          <SubIcon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#D8B4FE]' : 'text-purple-300'}`} />
+                          <div className="flex-1 flex items-center justify-between text-left truncate">
+                            <span className="truncate">{item.label}</span>
+                            {badgeInfo && (
+                              <span
+                                className={`ml-2 px-1.5 py-0.2 text-[9.5px] font-bold rounded-full ${
+                                  isActive
+                                    ? 'bg-white text-[#35105E]'
+                                    : badgeInfo.color === 'amber'
+                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                    : badgeInfo.color === 'emerald'
+                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                    : 'bg-[#5B35B1] text-purple-100'
+                                }`}
+                              >
+                                {badgeInfo.text}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer: User Role Information & Logout */}
+        <div className="p-3 border-t border-[#35105E] bg-[#100921] space-y-2 shrink-0">
+          <div className="flex items-center justify-between px-2 text-[11px] text-purple-300">
+            <span className="truncate">
+              Role: <strong className="text-white capitalize">{userRole.replace('_', ' ')}</strong>
+            </span>
+            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-[#35105E] text-[#D8B4FE] border border-[#7135B5]/40 uppercase tracking-wider">
+              {currentUser?.username || 'user'}
+            </span>
+          </div>
+
+          {userRole === 'super_admin' && (
+            <button
+              type="button"
+              onClick={() => setIsSessionModalOpen(true)}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-purple-200 hover:text-white hover:bg-[#35105E] text-xs font-semibold transition-colors cursor-pointer"
+              title="Kelola Sesi Staf Aktif"
+            >
+              <KeyRound className="w-3.5 h-3.5 shrink-0 text-[#D8B4FE]" />
+              <span className="truncate">Sesi Staf Aktif</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={logout}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 text-xs font-semibold transition-colors cursor-pointer"
+            title="Keluar / Logout"
+          >
+            <LogOut className="w-3.5 h-3.5 shrink-0" />
+            <span>Keluar / Logout</span>
+          </button>
+        </div>
+      </aside>
     </>
   );
 };

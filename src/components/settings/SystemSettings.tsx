@@ -18,12 +18,20 @@ import {
   CheckCircle2,
   Palette,
   Clock,
-  KeyRound
+  KeyRound,
+  ListFilter,
+  Volume2
 } from 'lucide-react';
 import { ShieldAlert } from 'lucide-react';
 import { getJakartaDateString } from '../../services/appointmentDateParser';
+import { DroplistManagementView } from './DroplistManagementView';
+import { SoundSettingsView } from './SoundSettingsView';
 
-export const SystemSettings: React.FC = () => {
+interface SystemSettingsProps {
+  defaultTab?: 'contractors' | 'coverage' | 'root_causes' | 'header_mapping' | 'branding' | 'system_session' | 'report_dropdowns' | 'sound_settings';
+}
+
+export const SystemSettings: React.FC<SystemSettingsProps> = ({ defaultTab = 'contractors' }) => {
   const {
     headerMappings,
     updateHeaderMapping,
@@ -43,7 +51,9 @@ export const SystemSettings: React.FC = () => {
 
   const { config, setGlobalTheme } = useUIConfig();
 
-  const [activeTab, setActiveTab] = useState<'contractors' | 'coverage' | 'root_causes' | 'header_mapping' | 'branding' | 'system_session'>('contractors');
+  const [activeTab, setActiveTab] = useState<
+    'contractors' | 'coverage' | 'root_causes' | 'header_mapping' | 'branding' | 'system_session' | 'report_dropdowns' | 'sound_settings'
+  >(defaultTab);
   const [operationalDateInput, setOperationalDateInput] = useState(operationalDate);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -228,6 +238,32 @@ export const SystemSettings: React.FC = () => {
 
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold overflow-x-auto pb-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab('report_dropdowns')}
+          className={`px-3 py-2 border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer ${
+            activeTab === 'report_dropdowns'
+              ? 'border-[#7135B5] text-[#7135B5] dark:text-[#D8B4FE] font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <ListFilter className="w-4 h-4 text-[#A855F7]" />
+          <span>Kategori Report</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('sound_settings')}
+          className={`px-3 py-2 border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer ${
+            activeTab === 'sound_settings'
+              ? 'border-[#7135B5] text-[#7135B5] dark:text-[#D8B4FE] font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <Volume2 className="w-4 h-4 text-[#A855F7]" />
+          <span>Sound & Notifikasi</span>
+        </button>
+
         <button
           onClick={() => setActiveTab('contractors')}
           className={`px-3 py-2 border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-colors ${
@@ -884,6 +920,16 @@ export const SystemSettings: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* TAB: DROPLIST MANAGEMENT (CONSOLIDATED) */}
+      {activeTab === 'report_dropdowns' && (
+        <DroplistManagementView />
+      )}
+
+      {/* TAB: SOUND & AUDIO NOTIFICATIONS */}
+      {activeTab === 'sound_settings' && (
+        <SoundSettingsView />
       )}
     </div>
   );

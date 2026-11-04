@@ -1,5 +1,7 @@
 export type UserRole = 'super_admin' | 'dispatch' | 'leader' | 'installer' | 'management_data' | 'it_support';
 
+export type DataSyncStatus = 'LOADING' | 'SYNCING' | 'SAVED' | 'OFFLINE' | 'ERROR';
+
 export interface User {
   id: string;
   userId?: string;
@@ -14,11 +16,13 @@ export interface User {
   clusterName?: string;
   active: boolean;
   passwordHash?: string;
+  firebaseUid?: string;
   permissions?: string[];
   mustChangePassword?: boolean;
   lastLoginAt?: string;
   loginCount?: number;
   isArchived?: boolean;
+  isDeleted?: boolean;
   deletedAt?: string;
   deletedBy?: string;
   deletionReason?: string;
@@ -135,6 +139,15 @@ export interface ProgressReportEntry {
   installerName?: string;
   appointmentDate?: string;
   slotTime?: string;
+  reportStatusId?: string;
+  reportStatusLabel?: string;
+  reasonReportId?: string;
+  reasonReportLabel?: string;
+  rootcauseId?: string;
+  rootcauseLabel?: string;
+  approvalStatus?: WOApprovalStatus;
+  approvedAt?: string;
+  approvedBy?: string;
 }
 
 export interface ChatAttachment {
@@ -174,6 +187,7 @@ export type TicketStatusWOAgent =
   | 'Pending'
   | 'Assigned'
   | 'In Progress'
+  | 'PROGRESS'
   | 'Resolved'
   | 'Cancelled'
   | 'Closed';
@@ -183,6 +197,8 @@ export type TicketStatusWOInstaller =
   | 'Assigned'
   | 'En Route'
   | 'On Site'
+  | 'In Progress'
+  | 'PROGRESS'
   | 'Installed'
   | 'Pending Technical'
   | 'Failed / Cancelled'
@@ -195,6 +211,13 @@ export type WODistributionStatus =
   | 'schedule_not_available'
   | 'unmatched_installer'
   | 'pending';
+
+export type WOApprovalStatus =
+  | 'NONE'
+  | 'BUTUH APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'REVISI';
 
 export interface Ticket {
   id: string;
@@ -241,6 +264,8 @@ export interface Ticket {
   oltCode?: string;
   fdtCode?: string;
   fatCode?: string;
+  fat?: string;
+  fdt?: string;
   fatPort?: string;
   dropcoreLength?: string;
   plan?: string;
@@ -271,6 +296,10 @@ export interface Ticket {
   corlapName?: string;
   corlapContact?: string;
   installerName?: string;
+  installerId?: string;
+  installerUid?: string;
+  assignedTo?: string;
+  assignedToUid?: string;
   installerContact?: string;
   installerContact2?: string;
   installerEmail?: string;
@@ -298,10 +327,33 @@ export interface Ticket {
   // --- H. Technical Report & Wi-Fi Root Cause ---
   technicalReport?: TechnicalReport;
   progressReports?: ProgressReportEntry[];
+  reportStatusId?: string;
+  reportStatusLabel?: string;
+  reasonReportId?: string;
+  reasonReportLabel?: string;
+  rootcauseId?: string;
+  rootcauseLabel?: string;
+
+  // --- H.1 Work Start & Execution Tracking (Mulai Kerjakan) ---
+  workStartedAt?: string;
+  workStartedBy?: string;
+  workStartedById?: string;
+
+  // --- H.2 Dispatch Approval Flow (Status Approval) ---
+  approvalStatus?: WOApprovalStatus;
+  approvalNotes?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedById?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
+  rejectedById?: string;
+  rejectionReason?: string;
 
   // --- I. Closure & Completion ---
   closedAt?: string;
   closedBy?: string;
+  closedById?: string;
   closeNotes?: string;
   reopenReason?: string;
 
@@ -309,12 +361,30 @@ export interface Ticket {
   chatMessagesCount?: number;
   lastMessageAt?: string;
   lastMessageSnippet?: string;
+  chatCategory?: string;
 
   // --- K. WhatsApp Tracking ---
   waMessagePreview?: string;
   waGeneratedUrl?: string;
   waLastOpenedAt?: string;
   waConfirmedAt?: string;
+
+  // --- L. Check-in, Check-out & Work Duration ---
+  checkInAt?: string;
+  checkOutAt?: string;
+  workDurationMinutes?: number;
+  workDurationFormatted?: string;
+  workSessionStatus?: 'Belum Check-in' | 'Sedang Dikerjakan' | 'Selesai';
+  workSessions?: {
+    sessionId: string;
+    checkInAt: string;
+    checkOutAt?: string;
+    durationMinutes?: number;
+    durationFormatted?: string;
+    completedAt?: string;
+    savedBy?: string;
+    status?: 'Belum Check-in' | 'Sedang Dikerjakan' | 'Selesai';
+  }[];
   waConfirmedBy?: string;
   waConfirmationNotes?: string;
 
@@ -573,6 +643,123 @@ export interface UIConfiguration {
       multiColumnDetail: boolean;
     };
   };
+
+  // Menu Navigation Mode Configuration
+  navigationSettings?: NavigationSettings;
+}
+
+export type NavigationDisplayMode = 'accordion' | 'static';
+
+export interface CategoryAccordionConfig {
+  accordionEnabled: boolean;
+  title?: string;
+  icon?: string;
+  order?: number;
+}
+
+export interface NavigationSettings {
+  categories: Record<string, CategoryAccordionConfig>;
+  allowMultipleOpenGroups?: boolean;
+  // Legacy fields kept for backward compatibility
+  defaultMode?: NavigationDisplayMode;
+  roleModes?: {
+    super_admin?: NavigationDisplayMode;
+    dispatch?: NavigationDisplayMode;
+    leader?: NavigationDisplayMode;
+    installer?: NavigationDisplayMode;
+    management_data?: NavigationDisplayMode;
+    it_support?: NavigationDisplayMode;
+  };
+  categoryModes?: Record<string, NavigationDisplayMode>;
+}
+
+export interface NavCategoryConfig {
+  id: string;
+  name: string;
+  icon?: string;
+  order: number;
+  isActive: boolean;
+  mode: 'accordion' | 'static';
+  allowMultipleOpen?: boolean;
+}
+
+export interface StandaloneMenuItem {
+  id: string;
+  label: string;
+  icon: string;
+  order: number;
+  visible: boolean;
+  roles: string[];
+  badge?: string | number;
+  badgeColor?: 'purple' | 'amber' | 'emerald' | 'rose';
+}
+
+export interface NavSubmenuItem {
+  id: string;
+  label: string;
+  icon: string;
+  categoryId: string;
+  order: number;
+  visible: boolean;
+  roles: string[];
+  badge?: string | number;
+  badgeColor?: 'purple' | 'amber' | 'emerald' | 'rose';
+  highlight?: boolean;
+}
+
+export interface NavigationFirestoreDoc {
+  categories: NavCategoryConfig[];
+  standaloneMenus: StandaloneMenuItem[];
+  submenuItems: NavSubmenuItem[];
+  accordionSettings: {
+    allowMultipleOpenGroups: boolean;
+  };
+  navigationVersion: number;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+/**
+ * Standardize category IDs to permanent canonical identifiers.
+ * Example: 'Contractor & Area' -> 'contractor_area', 'Installer' -> 'installer', 'Menu Tambahan' -> 'menu_tambahan'
+ */
+export function getCategoryPermanentId(nameOrId: string): string {
+  if (!nameOrId) return '';
+  const clean = nameOrId.trim().toLowerCase().replace(/[\s\-_]+/g, '');
+  if (clean === 'contractorarea' || clean === 'contractor&area' || clean === 'contractor' || clean === 'wocontractor') return 'contractor_area';
+  if (clean === 'installer' || clean === 'taskinstaller') return 'installer';
+  if (clean === 'menutambahan' || clean === 'tambahan' || clean === 'setup' || clean === 'pelanggan' || clean === 'laporan') return 'menu_tambahan';
+  if (clean === 'dashboard') return 'dashboard';
+  return clean;
+}
+
+/**
+ * Determine if a category has Accordion ON (true) or OFF (false / Static Menu)
+ * All 3 categories default to Accordion ON (true)
+ */
+export function isCategoryAccordion(
+  categoryIdOrName: string,
+  navigationSettings?: NavigationSettings
+): boolean {
+  if (!categoryIdOrName) return true;
+  const permId = getCategoryPermanentId(categoryIdOrName);
+
+  // 1. Direct check in navigationSettings.categories
+  if (navigationSettings?.categories) {
+    if (navigationSettings.categories[permId] !== undefined) {
+      return Boolean(navigationSettings.categories[permId].accordionEnabled);
+    }
+    const snakeId = permId.replace(/([A-Z])/g, '_$1').toLowerCase();
+    if (navigationSettings.categories[snakeId] !== undefined) {
+      return Boolean(navigationSettings.categories[snakeId].accordionEnabled);
+    }
+    if (navigationSettings.categories[categoryIdOrName] !== undefined) {
+      return Boolean(navigationSettings.categories[categoryIdOrName].accordionEnabled);
+    }
+  }
+
+  // 2. Default: all 3 main categories are Accordion ON
+  return true;
 }
 
 export interface CanonicalFieldConfig {
@@ -606,11 +793,20 @@ export interface LeaderScheduleSlot {
   tickets: Ticket[];
 }
 
+export type ImportRowStatusType =
+  | 'VALID'
+  | 'DATA KOSONG'
+  | 'HEADER TIDAK DITEMUKAN'
+  | 'FORMAT TIDAK VALID'
+  | 'WO DUPLIKAT';
+
 export interface ParsedRowData {
   rowIndex: number;
   raw: Record<string, string>;
   mapped: Partial<Ticket>;
   isValid: boolean;
+  statusType?: ImportRowStatusType;
+  problematicColumns?: string[];
   validationErrors: string[];
   isDuplicate: boolean;
   unrecognizedColumns: string[];
@@ -642,8 +838,11 @@ export interface TextToTableResult {
   validCount: number;
   problematicCount: number;
   duplicateCount: number;
+  readyToImportCount?: number;
   unrecognizedHeaders: string[];
   detectedHeaders: string[];
+  missingMandatoryHeaders?: string[];
+  headerCheckPassed?: boolean;
   parsedRows: ParsedRowData[];
   detectedContractors?: DetectedImportContractor[];
   newCoverageAreas?: string[];
@@ -737,4 +936,88 @@ export interface SyncMonitoringStatus {
   isSyncing: boolean;
   currentJobId?: string;
 }
+
+export type DropdownCategoryType = 'report_status' | 'reason_report' | 'rootcause';
+
+export interface ReportDropdownCategory {
+  id: string;
+  categoryType: DropdownCategoryType;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt?: string;
+  createdBy?: string;
+  updatedBy?: string;
+  isDeleted?: boolean;
+}
+
+export interface SoundSettings {
+  enabled: boolean;
+  volume: number; // 0 to 100
+  soundLoading: boolean;
+  soundReady: boolean;
+  soundReportSaved: boolean;
+  soundError: boolean;
+  soundSync: boolean;
+}
+
+// -------------------------------------------------------------
+// Contact Center Chat Category Configuration
+// -------------------------------------------------------------
+export interface ChatCategoryConfig {
+  id: string;
+  name: string;
+  description?: string;
+  color: string;
+  order: number;
+  active: boolean;
+  isActive?: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// -------------------------------------------------------------
+// Hierarchical Droplist Management (Status WO -> Reason WO -> Remarks)
+// -------------------------------------------------------------
+export interface HierarchicalRemark {
+  id: string;
+  name: string;
+  text?: string;
+  order: number;
+  active: boolean;
+  isActive?: boolean;
+  reasonId?: string;
+}
+
+export interface HierarchicalReason {
+  id: string;
+  name: string;
+  code?: string;
+  order: number;
+  active: boolean;
+  isActive?: boolean;
+  statusId?: string;
+  remarks: HierarchicalRemark[];
+}
+
+export interface HierarchicalStatus {
+  id: string;
+  name: string;
+  code?: string;
+  order: number;
+  active: boolean;
+  isActive?: boolean;
+  color?: string;
+  reasons: HierarchicalReason[];
+}
+
+export interface HierarchicalDroplistData {
+  statuses: HierarchicalStatus[];
+  updatedAt: string;
+  updatedBy: string;
+}
+
+
 

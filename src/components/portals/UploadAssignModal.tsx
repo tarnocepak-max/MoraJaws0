@@ -142,23 +142,23 @@ export const UploadAssignModal: React.FC<UploadAssignModalProps> = ({
     <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
       <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden text-xs">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/50">
+        <div className="px-5 py-4 border-b border-[#C4B5FD] flex items-center justify-between bg-[#EDE9FE]/50">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 rounded-lg">
+            <div className="p-2 bg-[#EDE9FE] text-[#6D28D9] rounded-lg border border-[#C4B5FD]">
               <FileUp className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                Upload & Batch Assign Work Order
+              <h3 className="font-bold text-sm text-[#4C1D95]">
+                Upload Assign WO
               </h3>
               <p className="text-[11px] text-slate-500">
-                Unggah berkas Excel/CSV atau tempel teks pemetaan (WO Number | Nama Teknisi)
+                Unggah berkas Excel/CSV atau tempel teks pemetaan penugasan teknisi (WO Number | Nama Teknisi)
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="p-1.5 text-slate-400 hover:text-[#4C1D95] rounded-lg hover:bg-[#EDE9FE] cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -167,8 +167,8 @@ export const UploadAssignModal: React.FC<UploadAssignModalProps> = ({
         {/* Body */}
         <div className="p-5 max-h-[65vh] overflow-y-auto space-y-4">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <label className="flex-1 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 rounded-xl p-4 text-center cursor-pointer bg-slate-50/50 dark:bg-slate-800/30 transition-colors">
-              <FileSpreadsheet className="w-6 h-6 text-indigo-500 mx-auto mb-1" />
+            <label className="flex-1 border-2 border-dashed border-[#C4B5FD] hover:border-[#6D28D9] rounded-xl p-4 text-center cursor-pointer bg-[#EDE9FE]/20 transition-colors">
+              <FileSpreadsheet className="w-6 h-6 text-[#6D28D9] mx-auto mb-1" />
               <span className="font-semibold text-slate-800 dark:text-slate-200 block text-xs">
                 Klik untuk unggah Excel (.xlsx, .csv)
               </span>
@@ -239,11 +239,11 @@ export const UploadAssignModal: React.FC<UploadAssignModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 flex items-center justify-between">
+        <div className="px-5 py-3 border-t border-[#C4B5FD] bg-[#EDE9FE]/40 flex items-center justify-between">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 text-slate-600 hover:text-slate-900 font-medium"
+            className="px-4 py-1.5 text-slate-600 hover:text-slate-900 font-medium cursor-pointer"
           >
             Batal
           </button>
@@ -251,10 +251,10 @@ export const UploadAssignModal: React.FC<UploadAssignModalProps> = ({
             type="button"
             onClick={handleConfirm}
             disabled={validCount === 0 || isProcessing}
-            className={`px-5 py-2 rounded-xl font-bold text-white transition-all shadow-sm ${
+            className={`px-5 py-2 rounded-xl font-bold text-white transition-all shadow-sm cursor-pointer ${
               validCount === 0 || isProcessing
                 ? 'bg-slate-300 dark:bg-slate-700 cursor-not-allowed opacity-60'
-                : 'bg-indigo-600 hover:bg-indigo-700'
+                : 'bg-[#6D28D9] hover:bg-[#5B21B6]'
             }`}
           >
             {isProcessing ? 'Memproses...' : `Tugaskan ${validCount} WO Sekarang`}

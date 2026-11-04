@@ -22,11 +22,14 @@ import {
   FileCheck,
   BarChart3,
   Building2,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { parseAppointmentDate, formatAppointmentDateDisplay, getOperationalTodayDate, matchesScheduleDateFilter, ScheduleDateFilterMode } from '../../services/appointmentDateParser';
 import { StatusAgentBadge, StatusInstallerBadge } from '../common/Badge';
+import { ManagementDataDeleteModal } from './ManagementDataDeleteModal';
+import { downloadProductionBackup } from '../../services/backupDownloadService';
 
 interface ManagementDataPortalProps {
   onSelectTicket?: (ticket: Ticket, defaultTab?: 'overview' | 'report' | 'chat' | 'history') => void;
@@ -62,12 +65,35 @@ export const ManagementDataPortal: React.FC<ManagementDataPortalProps> = ({
   // Selected ticket for quality review
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
+  // WO Selection for Deletion (Requirement 5: Management Data Exclusive)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [ticketToDelete, setTicketToDelete] = useState<Ticket | null>(null);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [isDownloadingBackup, setIsDownloadingBackup] = useState(false);
+
+  const handleDownloadBackup = async () => {
+    setIsDownloadingBackup(true);
+    try {
+      const res = await downloadProductionBackup();
+      if (res.success) {
+        toast.success(`Backup database (${res.size?.toLocaleString()} bytes) berhasil diverifikasi dan diunduh.`);
+      } else {
+        toast.error(res.error || 'Gagal mengunduh file backup database');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Terjadi kesalahan saat mengunduh backup');
+    } finally {
+      setIsDownloadingBackup(false);
+    }
+  };
+
   // Operational Date from system
   const operationalDate = getOperationalTodayDate();
 
   // Metrics computation for Dashboard Data
   const metrics = useMemo(() => {
-    let total = tickets.length;
+    const activeTickets = tickets.filter(t => !t.isDeleted);
+    let total = activeTickets.length;
     let validCount = 0;
     let problematicCount = 0;
     let duplicateCount = 0;
@@ -76,7 +102,7 @@ export const ManagementDataPortal: React.FC<ManagementDataPortalProps> = ({
 
     const seenWo = new Set<string>();
 
-    tickets.forEach(t => {
+    activeTickets.forEach(t => {
       let isProblematic = false;
 
       // 1. Check WO uniqueness
@@ -132,7 +158,7 @@ export const ManagementDataPortal: React.FC<ManagementDataPortalProps> = ({
   // Filtered tickets in Data WO tab
   const filteredTickets = useMemo(() => {
     return tickets.filter(t => {
-      if (t.isArchived) return false;
+      if (t.isArchived || t.isDeleted) return false;
 
       if (searchWo && !t.woNumber.toLowerCase().includes(searchWo.toLowerCase().trim())) {
         return false;
@@ -196,19 +222,42 @@ export const ManagementDataPortal: React.FC<ManagementDataPortalProps> = ({
           </p>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => setActiveTab('dashboard')}
-            className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-              activeTab === 'dashboard'
-                ? 'bg-white dark:bg-[#3B1D78] text-[#5B35B1] dark:text-white shadow-xs font-bold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-            }`}
-          >
-            Dashboard Data
-          </button>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+          {(currentUser.role === 'super_admin' || currentUser.role === 'management_data') && (
+            <button
+              type="button"
+              onClick={handleDownloadBackup}
+              disabled={isDownloadingBackup}
+              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-md border border-emerald-400/50 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 hover:scale-[1.02] active:scale-95 shrink-0"
+              title="Unduh berkas morajaws_production_firestore_backup.json"
+            >
+              {isDownloadingBackup ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Mengunduh Backup...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 text-white" />
+                  <span>Download Backup Database</span>
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Tab Switcher */}
+          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                activeTab === 'dashboard'
+                  ? 'bg-white dark:bg-[#3B1D78] text-[#5B35B1] dark:text-white shadow-xs font-bold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              Dashboard Data
+            </button>
           <button
             type="button"
             onClick={() => setActiveTab('wo_data')}
@@ -244,6 +293,7 @@ export const ManagementDataPortal: React.FC<ManagementDataPortalProps> = ({
           </button>
         </div>
       </div>
+    </div>
 
       {/* 1. TAB: DASHBOARD DATA */}
       {activeTab === 'dashboard' && (
@@ -405,6 +455,32 @@ export const ManagementDataPortal: React.FC<ManagementDataPortalProps> = ({
             </div>
           )}
 
+          {/* Bulk Action Bar for Management Data Deletion */}
+          {selectedIds.size > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs">
+              <span className="font-bold text-rose-800 dark:text-rose-200">
+                {selectedIds.size} Work Order terpilih untuk tindakan penghapusan
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkDeleteModalOpen(true)}
+                  className="px-3.5 py-1.5 font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus {selectedIds.size} WO Terpilih</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds(new Set())}
+                  className="px-2.5 py-1 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white rounded-lg cursor-pointer"
+                >
+                  Batal
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Table */}
           {filteredTickets.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-400 space-y-1">
@@ -416,6 +492,17 @@ export const ManagementDataPortal: React.FC<ManagementDataPortalProps> = ({
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-[#756B8D] dark:text-[#D8CCF3] uppercase tracking-wider bg-slate-50/50 dark:bg-slate-900/30">
+                    <th className="py-2.5 px-3 w-8 text-center">
+                      <input
+                        type="checkbox"
+                        checked={filteredTickets.length > 0 && selectedIds.size === filteredTickets.length}
+                        onChange={e => {
+                          if (e.target.checked) setSelectedIds(new Set(filteredTickets.map(t => t.id)));
+                          else setSelectedIds(new Set());
+                        }}
+                        className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                      />
+                    </th>
                     <th className="py-2.5 px-3">WO Number</th>
                     <th className="py-2.5 px-3">Customer ID</th>
                     <th className="py-2.5 px-3">Nama Pelanggan</th>
@@ -425,7 +512,8 @@ export const ManagementDataPortal: React.FC<ManagementDataPortalProps> = ({
                     <th className="py-2.5 px-3">Area</th>
                     <th className="py-2.5 px-3">Status Agent</th>
                     <th className="py-2.5 px-3">Status Lapangan</th>
-                    <th className="py-2.5 px-3 text-right">Integritas</th>
+                    <th className="py-2.5 px-3 text-center">Integritas</th>
+                    <th className="py-2.5 px-3 text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-sans text-xs">
@@ -436,6 +524,21 @@ export const ManagementDataPortal: React.FC<ManagementDataPortalProps> = ({
 
                     return (
                       <tr key={t.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="py-2.5 px-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(t.id)}
+                            onChange={() => {
+                              setSelectedIds(prev => {
+                                const next = new Set(prev);
+                                if (next.has(t.id)) next.delete(t.id);
+                                else next.add(t.id);
+                                return next;
+                              });
+                            }}
+                            className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                          />
+                        </td>
                         <td className="py-2.5 px-3 font-mono font-bold text-[#5B35B1] dark:text-[#B19CF0]">
                           {t.woNumber}
                         </td>
@@ -473,7 +576,7 @@ export const ManagementDataPortal: React.FC<ManagementDataPortalProps> = ({
                         <td className="py-2.5 px-3">
                           <StatusInstallerBadge status={t.statusWOInstaller} />
                         </td>
-                        <td className="py-2.5 px-3 text-right">
+                        <td className="py-2.5 px-3 text-center">
                           {isCid7 && appDateParsed.isValid ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
                               <CheckCircle2 className="w-3 h-3" />
@@ -485,6 +588,17 @@ export const ManagementDataPortal: React.FC<ManagementDataPortalProps> = ({
                               <span>Review</span>
                             </span>
                           )}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setTicketToDelete(t)}
+                            className="px-2 py-1 bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white dark:bg-rose-950/50 dark:hover:bg-rose-600 dark:text-rose-300 dark:hover:text-white rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 font-semibold text-[11px]"
+                            title="Hapus Work Order (Khusus Role Management Data)"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Hapus</span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -612,6 +726,30 @@ export const ManagementDataPortal: React.FC<ManagementDataPortalProps> = ({
             </div>
           )}
         </div>
+      )}
+
+      {/* Management Data Single Ticket Delete Confirmation Modal */}
+      {ticketToDelete && (
+        <ManagementDataDeleteModal
+          isOpen={Boolean(ticketToDelete)}
+          onClose={() => setTicketToDelete(null)}
+          ticket={ticketToDelete}
+          onSuccess={() => setTicketToDelete(null)}
+        />
+      )}
+
+      {/* Management Data Bulk Delete Confirmation Modal */}
+      {isBulkDeleteModalOpen && (
+        <ManagementDataDeleteModal
+          isOpen={isBulkDeleteModalOpen}
+          onClose={() => setIsBulkDeleteModalOpen(false)}
+          ticket={null}
+          selectedTickets={filteredTickets.filter(t => selectedIds.has(t.id))}
+          onSuccess={() => {
+            setSelectedIds(new Set());
+            setIsBulkDeleteModalOpen(false);
+          }}
+        />
       )}
     </div>
   );

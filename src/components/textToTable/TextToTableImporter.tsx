@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { parseWorkOrderText, parseWorkOrderFile } from '../../services/textToTableParser';
 import { TextToTableResult, ParsedRowData } from '../../types/index.ts';
@@ -94,6 +94,16 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
 
   // Top Tab Switcher: Import vs Export vs Riwayat & Hapus
   const [mainTab, setMainTab] = useState<'import' | 'export' | 'history_delete'>('import');
+
+  // Role visibility check: Deleting imported data is strictly restricted to Management Data
+  const isManagementData = currentUser.role === 'management_data';
+
+  // Security guard: Automatically redirect away from history_delete if user is not management_data
+  useEffect(() => {
+    if (!isManagementData && mainTab === 'history_delete') {
+      setMainTab('import');
+    }
+  }, [isManagementData, mainTab]);
 
   // Export State & Filters
   const [exportFormat, setExportFormat] = useState<'full_46' | 'korlap_template' | 'teknisi_template'>('full_46');
@@ -483,81 +493,11 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
     setEditingRowData({ ...(row.mapped as any) });
   };
 
-  const handleForceValidateRow = (rowIndex: number) => {
-    if (!parseResult) return;
-    const updatedRows = parseResult.parsedRows.map(r => {
-      if (r.rowIndex !== rowIndex) return r;
-      const mapped = { ...r.mapped };
-      let woVal = (mapped.woNumber || '').trim();
-      if (!woVal || !isValidWoNumber(woVal)) {
-        woVal = `WO${new Date().getFullYear()}${Math.floor(1000000 + (rowIndex + 1) * 1111 + Math.random() * 999)}`;
-        mapped.woNumber = woVal;
-      }
-      let custVal = (mapped.idCustomer || mapped.customerId || '').trim().replace(/\D/g, '');
-      if (custVal.length !== 7) {
-        custVal = custVal.padEnd(7, '0').slice(0, 7) || `${Math.floor(1000000 + Math.random() * 9000000)}`;
-        mapped.idCustomer = custVal;
-      }
-      if (!mapped.customerName?.trim()) {
-        mapped.customerName = `Pelanggan ${woVal}`;
-      }
-      if (!mapped.customerPhone?.trim()) {
-        mapped.customerPhone = '081299880000';
-      }
-      return {
-        ...r,
-        mapped,
-        isValid: true,
-        isDuplicate: false,
-        validationErrors: []
-      };
-    });
 
-    const validCount = updatedRows.filter(r => r.isValid).length;
-    setParseResult({
-      ...parseResult,
-      validCount,
-      problematicCount: updatedRows.length - validCount,
-      parsedRows: updatedRows
-    });
-  };
-
-  const handleAutoFixAllRows = () => {
-    if (!parseResult) return;
-    const updatedRows = parseResult.parsedRows.map((r, idx) => {
-      const mapped = { ...r.mapped };
-      let woVal = (mapped.woNumber || '').trim().toUpperCase();
-      if (!woVal || !isValidWoNumber(woVal)) {
-        woVal = `WO${new Date().getFullYear()}${Math.floor(1000000 + (idx + 1) * 1000 + Math.random() * 999)}`;
-        mapped.woNumber = woVal;
-      }
-      let custVal = (mapped.idCustomer || mapped.customerId || '').trim().replace(/\D/g, '');
-      if (custVal.length !== 7) {
-        custVal = custVal.padEnd(7, '0').slice(0, 7) || `${Math.floor(1000000 + (idx + 1) * 111 + Math.random() * 888)}`;
-        mapped.idCustomer = custVal;
-      }
-      if (!mapped.customerName?.trim()) {
-        mapped.customerName = `Pelanggan ${woVal}`;
-      }
-      if (!mapped.customerPhone?.trim()) {
-        mapped.customerPhone = '081299880000';
-      }
-      return {
-        ...r,
-        mapped,
-        isValid: true,
-        isDuplicate: false,
-        validationErrors: []
-      };
-    });
-
-    setParseResult({
-      ...parseResult,
-      validCount: updatedRows.length,
-      problematicCount: 0,
-      duplicateCount: 0,
-      parsedRows: updatedRows
-    });
+  const handleCancelImport = () => {
+    setParseResult(null);
+    setRawText('');
+    setShowConfirmModal(false);
   };
 
   const handleSaveEditRow = (rowIndex: number) => {
@@ -565,40 +505,120 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
     const updatedRows = parseResult.parsedRows.map(r => {
       if (r.rowIndex !== rowIndex) return r;
       const updatedMapped = { ...r.mapped, ...editingRowData };
-      let woVal = (updatedMapped.woNumber || '').trim();
-      if (!woVal) {
-        woVal = `WO${new Date().getFullYear()}${Math.floor(1000000 + (rowIndex + 1) * 1000)}`;
-        updatedMapped.woNumber = woVal;
-      }
+      const woVal = (updatedMapped.woNumber || '').trim().toUpperCase();
       const isDup = existingWos.includes(woVal);
 
-      // Validate 7 digit customer ID
-      let custVal = (updatedMapped.idCustomer || '').trim().replace(/\D/g, '');
-      if (custVal.length !== 7) {
-        custVal = custVal.padEnd(7, '0').slice(0, 7) || `${Math.floor(1000000 + Math.random() * 9000000)}`;
-        updatedMapped.idCustomer = custVal;
+      // Re-validate mandatory fields strictly according to Bagian 1
+      const emptyCols: string[] = [];
+      const formatErrs: string[] = [];
+      const probCols: string[] = [];
+
+      // 1. Customer ID
+      const custId = (updatedMapped.idCustomer || updatedMapped.customerId || '').trim();
+      if (!custId) {
+        emptyCols.push('Customer ID');
+        probCols.push('Customer ID');
+      } else if (!/^\d{7}$/.test(custId)) {
+        formatErrs.push('Customer ID harus 7 digit numerik');
+        probCols.push('Customer ID');
       }
 
-      if (!updatedMapped.customerName?.trim()) {
-        updatedMapped.customerName = `Pelanggan ${woVal}`;
+      // 2. WO Number
+      if (!woVal) {
+        emptyCols.push('WO Number');
+        probCols.push('WO Number');
+      } else if (!isValidWoNumber(woVal)) {
+        formatErrs.push('WO Number tidak valid');
+        probCols.push('WO Number');
       }
-      if (!updatedMapped.customerPhone?.trim()) {
-        updatedMapped.customerPhone = '081299880000';
+
+      // 3. Street Name
+      if (!(updatedMapped.streetName || '').trim()) {
+        emptyCols.push('Street Name');
+        probCols.push('Street Name');
       }
+
+      // 4. Cluster Name
+      if (!(updatedMapped.clusterName || '').trim()) {
+        emptyCols.push('Cluster Name');
+        probCols.push('Cluster Name');
+      }
+
+      // 5. FAT
+      if (!(updatedMapped.fatCode || updatedMapped.fat || '').trim()) {
+        emptyCols.push('FAT');
+        probCols.push('FAT');
+      }
+
+      // 6. FDT
+      if (!(updatedMapped.fdtCode || updatedMapped.fdt || '').trim()) {
+        emptyCols.push('FDT');
+        probCols.push('FDT');
+      }
+
+      // 7. Customer Phone
+      const phone = (updatedMapped.customerPhone || updatedMapped.customerContact1 || '').trim().replace(/\D/g, '');
+      if (!phone) {
+        emptyCols.push('Customer Phone');
+        probCols.push('Customer Phone');
+      } else if (phone.length < 8) {
+        formatErrs.push('Customer Phone tidak valid (minimal 8 digit)');
+        probCols.push('Customer Phone');
+      }
+
+      // 8. Contractor Name
+      if (!(updatedMapped.contactorName || updatedMapped.contractorName || '').trim()) {
+        emptyCols.push('Contractor Name');
+        probCols.push('Contractor Name');
+      }
+
+      // 9. Area
+      if (!(updatedMapped.area || '').trim()) {
+        emptyCols.push('Area');
+        probCols.push('Area');
+      }
+
+      // 10. Appointment Date
+      const dateVal = (updatedMapped.appointmentDate || updatedMapped.date || '').trim();
+      if (!dateVal) {
+        emptyCols.push('Appointment Date');
+        probCols.push('Appointment Date');
+      }
+
+      let statusType: 'VALID' | 'DATA KOSONG' | 'HEADER TIDAK DITEMUKAN' | 'FORMAT TIDAK VALID' | 'WO DUPLIKAT';
+      const validationErrors: string[] = [];
+
+      if (isDup) {
+        statusType = 'WO DUPLIKAT';
+        validationErrors.push(`Nomor WO ${woVal} sudah terdaftar di database Firestore`);
+      } else if (emptyCols.length > 0) {
+        statusType = 'DATA KOSONG';
+        validationErrors.push(`Kolom wajib kosong: ${emptyCols.join(', ')}`);
+      } else if (formatErrs.length > 0) {
+        statusType = 'FORMAT TIDAK VALID';
+        validationErrors.push(...formatErrs);
+      } else {
+        statusType = 'VALID';
+      }
+
+      const isValid = statusType === 'VALID' && !isDup;
 
       return {
         ...r,
         mapped: updatedMapped,
-        isValid: true,
+        isValid,
+        statusType,
+        problematicColumns: probCols,
         isDuplicate: isDup,
-        validationErrors: []
+        validationErrors
       };
     });
 
     setParseResult({
       ...parseResult,
-      validCount: updatedRows.filter(r => r.isValid).length,
+      validCount: updatedRows.filter(r => r.isValid && !r.isDuplicate).length,
       problematicCount: updatedRows.filter(r => !r.isValid).length,
+      duplicateCount: updatedRows.filter(r => r.isDuplicate).length,
       parsedRows: updatedRows
     });
     setEditingRowIndex(null);
@@ -607,31 +627,23 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
   const handleExecuteImport = () => {
     if (!parseResult || parseResult.parsedRows.length === 0) return;
 
-    let rowsToImport = parseResult.parsedRows.filter(r => r.isValid);
-    if (rowsToImport.length === 0 && parseResult.parsedRows.length > 0) {
-      handleAutoFixAllRows();
-      rowsToImport = parseResult.parsedRows.map((r, idx) => ({
-        ...r,
-        isValid: true,
-        mapped: {
-          ...r.mapped,
-          woNumber: r.mapped.woNumber || `WO${new Date().getFullYear()}${Math.floor(1000000 + idx * 1000)}`,
-          idCustomer: (r.mapped.idCustomer || '').replace(/\D/g, '').padEnd(7, '0').slice(0, 7) || '7000001',
-          customerName: r.mapped.customerName || `Pelanggan WO-${idx + 1}`,
-          customerPhone: r.mapped.customerPhone || '081299880000'
-        }
-      }));
+    if (parseResult.headerCheckPassed === false) {
+      alert(`Proses import dihentikan: Header wajib tidak ditemukan (${parseResult.missingMandatoryHeaders?.join(', ')}).`);
+      return;
+    }
+
+    // Only import valid rows that are not duplicates (BAGIAN 1 - C & E)
+    const rowsToImport = parseResult.parsedRows.filter(r => r.isValid && !r.isDuplicate);
+
+    if (rowsToImport.length === 0) {
+      alert('Tidak ada baris data valid yang siap diimpor. Semua baris ditolak karena data kosong, format tidak valid, atau nomor WO duplikat.');
+      return;
     }
 
     const validMapped = rowsToImport.map(r => ({
       ...r.mapped,
       fileName: sourceFileName
     }));
-
-    if (validMapped.length === 0) {
-      alert('Tidak ada baris data untuk diimpor. Periksa data impor Anda.');
-      return;
-    }
 
     // Auto-register new contractors if toggle is enabled
     let enrolledNewCount = 0;
@@ -710,17 +722,19 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
           <span>Export Work Order & Template</span>
         </button>
 
-        <button
-          onClick={() => setMainTab('history_delete')}
-          className={`px-4 py-2 border-b-2 flex items-center gap-2 transition-colors ${
-            mainTab === 'history_delete'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
-        >
-          <History className="w-4 h-4" />
-          <span>Riwayat & Hapus Data Import (7 Hari)</span>
-        </button>
+        {isManagementData && (
+          <button
+            onClick={() => setMainTab('history_delete')}
+            className={`px-4 py-2 border-b-2 flex items-center gap-2 transition-colors ${
+              mainTab === 'history_delete'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <History className="w-4 h-4" />
+            <span>Riwayat & Hapus Data Import (7 Hari)</span>
+          </button>
+        )}
       </div>
 
       {mainTab === 'import' && (
@@ -837,10 +851,11 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
                 <button
                   onClick={() => handleParse()}
                   disabled={!rawText.trim()}
-                  className="px-4 py-1.5 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 rounded-lg flex items-center gap-1.5 shadow-xs transition-colors"
+                  className="px-4 py-1.5 font-bold text-white bg-[#6D28D9] hover:bg-[#5B21B6] disabled:opacity-40 rounded-lg flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                  title="Periksa dan validasi data teks/tabel sebelum import"
                 >
-                  <span>Parse & Preview</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>1. Periksa Data</span>
                 </button>
               </div>
             </div>
@@ -930,7 +945,7 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
       {/* Parse Preview Section */}
       {parseResult && (
         <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-6 shadow-2xs space-y-4">
-          {/* Summary KPIs */}
+          {/* Summary KPIs - Mandated 5 counts (Bagian 1 D) */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div>
               <h4 className="text-sm font-bold text-slate-900 dark:text-white">
@@ -943,29 +958,49 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
 
             <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
               <div className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                <span className="text-slate-500 block text-[10px]">TOTAL ROW</span>
+                <span className="text-slate-500 block text-[10px]">TOTAL BARIS DITEMUKAN</span>
                 <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">
                   {parseResult.totalDetected}
                 </span>
               </div>
               <div className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 rounded border border-emerald-200 dark:border-emerald-800">
-                <span className="block text-[10px]">VALID ROWS</span>
+                <span className="block text-[10px]">TOTAL DATA VALID</span>
                 <span className="font-bold text-sm">{parseResult.validCount}</span>
               </div>
-              {parseResult.duplicateCount > 0 && (
-                <div className="px-3 py-1.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 rounded border border-amber-200 dark:border-amber-800">
-                  <span className="block text-[10px]">DUPLICATE WO</span>
-                  <span className="font-bold text-sm">{parseResult.duplicateCount}</span>
-                </div>
-              )}
-              {parseResult.problematicCount > 0 && (
-                <div className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 rounded border border-rose-200 dark:border-rose-800">
-                  <span className="block text-[10px]">PROBLEMATIC</span>
-                  <span className="font-bold text-sm">{parseResult.problematicCount}</span>
-                </div>
-              )}
+              <div className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 rounded border border-rose-200 dark:border-rose-800">
+                <span className="block text-[10px]">TOTAL TIDAK VALID</span>
+                <span className="font-bold text-sm">{parseResult.problematicCount}</span>
+              </div>
+              <div className="px-3 py-1.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 rounded border border-amber-200 dark:border-amber-800">
+                <span className="block text-[10px]">TOTAL WO DUPLIKAT</span>
+                <span className="font-bold text-sm">{parseResult.duplicateCount}</span>
+              </div>
+              <div className="px-3 py-1.5 bg-purple-50 dark:bg-purple-950/40 text-[#6D28D9] dark:text-purple-300 rounded border border-purple-200 dark:border-purple-800">
+                <span className="block text-[10px]">SIAP DIIMPORT</span>
+                <span className="font-bold text-sm">
+                  {parseResult.parsedRows.filter(r => r.isValid && !r.isDuplicate).length}
+                </span>
+              </div>
             </div>
           </div>
+
+          {/* Critical Alert: Missing Mandatory Headers (Bagian 1 B) */}
+          {(!parseResult.headerCheckPassed || (parseResult.missingMandatoryHeaders && parseResult.missingMandatoryHeaders.length > 0)) && (
+            <div className="p-4 bg-rose-50 dark:bg-rose-950/60 border-2 border-rose-400 dark:border-rose-800 rounded-xl text-rose-900 dark:text-rose-200 text-xs flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h5 className="font-bold text-sm text-rose-700 dark:text-rose-300">
+                  HEADER WAJIB TIDAK DITEMUKAN - PROSES IMPORT DIHENTIKAN!
+                </h5>
+                <p>
+                  Setiap baris data wajib memiliki 9 kolom: <strong>Customer ID, WO Number, Street Name, Cluster Name, FAT, FDT, Customer Phone, Contractor Name, Area</strong> serta <strong>Appointment Date</strong> yang valid.
+                </p>
+                <div className="mt-2 p-2 bg-rose-100 dark:bg-rose-900/60 rounded font-mono font-bold text-rose-800 dark:text-rose-200">
+                  Header wajib yang bermasalah / hilang: {parseResult.missingMandatoryHeaders?.join(', ')}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Unnamed & Unrecognized Headers Notification */}
           {parseResult.unrecognizedHeaders.length > 0 && (
@@ -1146,50 +1181,87 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
             </div>
           </div>
 
-          {/* Scrollable Preview Table */}
+          {/* Scrollable Preview Table with Mandated 5 Statuses and Problematic Columns (Bagian 1 D) */}
           <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-md max-h-96 overflow-y-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-10 text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase">
                 <tr>
                   <th className="py-2.5 px-3">#</th>
-                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3">Status Validasi</th>
+                  <th className="py-2.5 px-3">Kolom Bermasalah</th>
                   <th className="py-2.5 px-3">WO Number</th>
-                  <th className="py-2.5 px-3">Customer ID (7 Digits)</th>
-                  <th className="py-2.5 px-3">Nama Pelanggan</th>
-                  <th className="py-2.5 px-3">Kontak</th>
-                  <th className="py-2.5 px-3">Kategori Tiket</th>
-                  <th className="py-2.5 px-3">Kontraktor & Leader</th>
+                  <th className="py-2.5 px-3">Customer ID</th>
+                  <th className="py-2.5 px-3">Appointment Date</th>
+                  <th className="py-2.5 px-3">Customer Phone</th>
+                  <th className="py-2.5 px-3">Contractor Name</th>
                   <th className="py-2.5 px-3">Area & Cluster</th>
-                  <th className="py-2.5 px-3">Jadwal Appointment</th>
-                  <th className="py-2.5 px-3">Status Distribusi</th>
-                  <th className="py-2.5 px-3 text-center">Action / Aksi</th>
+                  <th className="py-2.5 px-3">FAT / FDT</th>
+                  <th className="py-2.5 px-3">Street Name</th>
+                  <th className="py-2.5 px-3 text-center">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {displayedPreviewRows.map((row: ParsedRowData) => {
                   const isEditingThis = editingRowIndex === row.rowIndex;
+                  const status = row.statusType || (row.isDuplicate ? 'WO DUPLIKAT' : row.isValid ? 'VALID' : 'DATA KOSONG');
+
                   return (
                     <tr
                       key={row.rowIndex}
                       className={`hover:bg-slate-50 dark:hover:bg-slate-800/60 ${
-                        !row.isValid ? 'bg-rose-50/40 dark:bg-rose-950/20' : ''
+                        !row.isValid || row.isDuplicate ? 'bg-rose-50/40 dark:bg-rose-950/20' : ''
                       }`}
                     >
-                      <td className="py-2 px-3 font-mono text-slate-400">{row.rowIndex + 1}</td>
+                      {/* Nomor Baris */}
+                      <td className="py-2 px-3 font-mono text-slate-400 font-bold">{row.rowIndex + 1}</td>
 
+                      {/* Status Validasi (5 Tipe Wajib: VALID, DATA KOSONG, HEADER TIDAK DITEMUKAN, FORMAT TIDAK VALID, WO DUPLIKAT) */}
                       <td className="py-2 px-3 whitespace-nowrap">
-                        {row.isValid ? (
-                          <span className="inline-flex items-center gap-1 text-emerald-600 text-[11px] font-bold">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Valid
+                        {status === 'VALID' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                            <CheckCircle2 className="w-3 h-3" />
+                            VALID
+                          </span>
+                        ) : status === 'WO DUPLIKAT' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border border-red-300 dark:border-red-800">
+                            <AlertTriangle className="w-3 h-3" />
+                            WO DUPLIKAT
+                          </span>
+                        ) : status === 'HEADER TIDAK DITEMUKAN' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-[#4C1D95] dark:bg-purple-950 dark:text-purple-300 border border-purple-300 dark:border-purple-800">
+                            <ShieldAlert className="w-3 h-3" />
+                            HEADER TIDAK DITEMUKAN
+                          </span>
+                        ) : status === 'DATA KOSONG' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                            <AlertCircle className="w-3 h-3" />
+                            DATA KOSONG
                           </span>
                         ) : (
-                          <div className="text-rose-600 text-[10.5px] font-semibold max-w-xs">
-                            {row.validationErrors.join(' · ')}
-                          </div>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                            <AlertCircle className="w-3 h-3" />
+                            FORMAT TIDAK VALID
+                          </span>
                         )}
                       </td>
 
+                      {/* Kolom Bermasalah */}
+                      <td className="py-2 px-3 text-[11px]">
+                        {row.problematicColumns && row.problematicColumns.length > 0 ? (
+                          <div className="font-semibold text-rose-700 dark:text-rose-300 max-w-xs">
+                            {row.problematicColumns.join(', ')}
+                            {row.validationErrors.length > 0 && (
+                              <div className="text-[10px] text-slate-500 font-normal mt-0.5">
+                                {row.validationErrors[0]}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 font-mono">-</span>
+                        )}
+                      </td>
+
+                      {/* WO Number */}
                       <td className="py-2 px-3 font-mono font-bold text-slate-900 dark:text-white">
                         {isEditingThis ? (
                           <input
@@ -1199,10 +1271,11 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
                             className="p-1 border rounded w-32 text-xs bg-white dark:bg-slate-800"
                           />
                         ) : (
-                          row.mapped.woNumber || '-'
+                          row.mapped.woNumber || <span className="text-rose-500 font-bold">[Kosong]</span>
                         )}
                       </td>
 
+                      {/* Customer ID */}
                       <td className="py-2 px-3 font-mono font-semibold">
                         {isEditingThis ? (
                           <input
@@ -1213,25 +1286,29 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
                             className="p-1 border rounded w-24 text-xs bg-white dark:bg-slate-800"
                           />
                         ) : (
-                          <span className={row.mapped.idCustomer?.length === 7 ? 'text-indigo-600 dark:text-indigo-400' : 'text-rose-600 font-bold'}>
-                            {row.mapped.idCustomer || '-'}
+                          <span className={row.mapped.idCustomer?.length === 7 ? 'text-[#6D28D9] dark:text-purple-400' : 'text-rose-600 font-bold'}>
+                            {row.mapped.idCustomer || <span className="text-rose-500 font-bold">[Kosong]</span>}
                           </span>
                         )}
                       </td>
 
-                      <td className="py-2 px-3 font-medium text-slate-800 dark:text-slate-200">
+                      {/* Appointment Date */}
+                      <td className="py-2 px-3 whitespace-nowrap">
                         {isEditingThis ? (
                           <input
-                            type="text"
-                            value={editingRowData.customerName || ''}
-                            onChange={e => setEditingRowData({ ...editingRowData, customerName: e.target.value })}
-                            className="p-1 border rounded w-36 text-xs bg-white dark:bg-slate-800"
+                            type="date"
+                            value={editingRowData.appointmentDate || ''}
+                            onChange={e => setEditingRowData({ ...editingRowData, appointmentDate: e.target.value })}
+                            className="p-1 border rounded text-xs bg-white dark:bg-slate-800"
                           />
                         ) : (
-                          row.mapped.customerName || '-'
+                          <div className="font-semibold text-slate-700 dark:text-slate-300">
+                            {row.mapped.appointmentDate || row.mapped.date || <span className="text-rose-500 font-bold">[Kosong / Tidak Valid]</span>}
+                          </div>
                         )}
                       </td>
 
+                      {/* Customer Phone */}
                       <td className="py-2 px-3 font-mono text-slate-600 dark:text-slate-300">
                         {isEditingThis ? (
                           <input
@@ -1241,26 +1318,11 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
                             className="p-1 border rounded w-28 text-xs bg-white dark:bg-slate-800"
                           />
                         ) : (
-                          row.mapped.customerPhone || '-'
+                          row.mapped.customerPhone || <span className="text-rose-500 font-bold">[Kosong]</span>
                         )}
                       </td>
 
-                      <td className="py-2 px-3 whitespace-nowrap">
-                        {isEditingThis ? (
-                          <input
-                            type="text"
-                            value={editingRowData.ticketCategory || ''}
-                            onChange={e => setEditingRowData({ ...editingRowData, ticketCategory: e.target.value })}
-                            placeholder="Kategori Tiket"
-                            className="p-1 border rounded w-32 text-xs bg-white dark:bg-slate-800"
-                          />
-                        ) : (
-                          <span className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px]">
-                            {row.mapped.ticketCategory || '-'}
-                          </span>
-                        )}
-                      </td>
-
+                      {/* Contractor Name */}
                       <td className="py-2 px-3">
                         {isEditingThis ? (
                           <input
@@ -1271,21 +1333,14 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
                             className="p-1 border rounded w-32 text-xs bg-white dark:bg-slate-800"
                           />
                         ) : (
-                          <>
-                            <div className="flex items-center gap-1 font-medium text-slate-800 dark:text-slate-200">
-                              <Building2 className="w-3 h-3 text-indigo-500 shrink-0" />
-                              <span>{row.mapped.contactorName || '-'}</span>
-                            </div>
-                            {row.mapped.leaderName && (
-                              <div className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5">
-                                <UserCheck className="w-2.5 h-2.5" />
-                                <span>{row.mapped.leaderName}</span>
-                              </div>
-                            )}
-                          </>
+                          <div className="flex items-center gap-1 font-medium text-slate-800 dark:text-slate-200">
+                            <Building2 className="w-3 h-3 text-[#6D28D9] shrink-0" />
+                            <span>{row.mapped.contactorName || row.mapped.contractorName || <span className="text-rose-500 font-bold">[Kosong]</span>}</span>
+                          </div>
                         )}
                       </td>
 
+                      {/* Area & Cluster */}
                       <td className="py-2 px-3">
                         {isEditingThis ? (
                           <div className="space-y-1">
@@ -1306,31 +1361,34 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
                           </div>
                         ) : (
                           <>
-                            <div>{row.mapped.area || '-'}</div>
-                            <div className="text-[10px] text-slate-400">{row.mapped.clusterName}</div>
+                            <div className="font-medium">{row.mapped.area || <span className="text-rose-500 font-bold">[Area Kosong]</span>}</div>
+                            <div className="text-[10px] text-slate-400">{row.mapped.clusterName || <span className="text-rose-500 font-bold">[Cluster Kosong]</span>}</div>
                           </>
                         )}
                       </td>
 
-                      <td className="py-2 px-3 whitespace-nowrap">
-                        <div className="font-semibold text-slate-700 dark:text-slate-300">
-                          {row.mapped.appointmentDate || row.mapped.date || 'Belum Ada Jadwal'}
-                        </div>
-                        <div className="text-[10.5px] text-slate-400">{row.mapped.slotTime || '-'}</div>
+                      {/* FAT / FDT */}
+                      <td className="py-2 px-3 text-[11px] font-mono">
+                        <div>FAT: {row.mapped.fatCode || row.mapped.fat || <span className="text-rose-500 font-bold">[-]</span>}</div>
+                        <div>FDT: {row.mapped.fdtCode || row.mapped.fdt || <span className="text-rose-500 font-bold">[-]</span>}</div>
                       </td>
 
-                      <td className="py-2 px-3 whitespace-nowrap">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                          row.mapped.distributionStatus === 'distributed'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                            : row.mapped.distributionStatus === 'unmapped_contractor'
-                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                        }`}>
-                          {row.mapped.distributionStatus || 'pending'}
-                        </span>
+                      {/* Street Name */}
+                      <td className="py-2 px-3 max-w-xs truncate text-[11px]">
+                        {isEditingThis ? (
+                          <input
+                            type="text"
+                            value={editingRowData.streetName || ''}
+                            onChange={e => setEditingRowData({ ...editingRowData, streetName: e.target.value })}
+                            placeholder="Alamat / Street Name"
+                            className="p-1 border rounded w-44 text-xs bg-white dark:bg-slate-800"
+                          />
+                        ) : (
+                          row.mapped.streetName || <span className="text-rose-500 font-bold">[Street Name Kosong]</span>
+                        )}
                       </td>
 
+                      {/* Aksi */}
                       <td className="py-2 px-3 text-center whitespace-nowrap">
                         {isEditingThis ? (
                           <div className="flex items-center justify-center gap-1">
@@ -1338,10 +1396,10 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
                               type="button"
                               onClick={() => handleSaveEditRow(row.rowIndex)}
                               className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
-                              title="Simpan perubahan baris ini (Action Oke)"
+                              title="Simpan perbaikan data"
                             >
                               <Check className="w-3.5 h-3.5 stroke-[3]" />
-                              <span>Oke</span>
+                              <span>Simpan</span>
                             </button>
                             <button
                               type="button"
@@ -1354,22 +1412,11 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
                           </div>
                         ) : (
                           <div className="flex items-center justify-center gap-1">
-                            {!row.isValid && (
-                              <button
-                                type="button"
-                                onClick={() => handleForceValidateRow(row.rowIndex)}
-                                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded text-[11px] font-bold flex items-center gap-1 border border-emerald-300 dark:border-emerald-800 cursor-pointer shadow-2xs transition-colors"
-                                title="Action Oke: Setujui baris ini dan jadikan Valid"
-                              >
-                                <Check className="w-3.5 h-3.5 stroke-[3]" />
-                                <span>Oke</span>
-                              </button>
-                            )}
                             <button
                               type="button"
                               onClick={() => handleStartEditRow(row)}
-                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded transition-colors cursor-pointer"
-                              title="Edit baris data"
+                              className="p-1.5 text-slate-400 hover:text-[#6D28D9] hover:bg-purple-50 dark:hover:bg-purple-950/50 rounded transition-colors cursor-pointer"
+                              title="Edit data baris ini"
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </button>
@@ -1377,7 +1424,7 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
                               type="button"
                               onClick={() => handleDeleteRow(row.rowIndex)}
                               className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded transition-colors cursor-pointer"
-                              title="Hapus baris data"
+                              title="Hapus baris data ini"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1391,45 +1438,49 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
             </table>
           </div>
 
-          {/* Action Row */}
+          {/* Action Row - Sediakan 3 Tombol Mandat (Bagian 1 D) */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] text-slate-500">
-                Kebijakan Keamanan: Import biasa tidak akan menghapus data yang sudah ada di sistem.
-              </span>
-              {parseResult.problematicCount > 0 && (
-                <button
-                  type="button"
-                  onClick={handleAutoFixAllRows}
-                  className="px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 rounded border border-amber-200 dark:border-amber-800 flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Otomatis perbaiki Customer ID 7 digit dan format WO untuk semua baris bermasalah"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Auto-Fix & Setujui Semua ({parseResult.problematicCount} baris)</span>
-                </button>
-              )}
+            <div className="text-[11px] text-slate-500">
+              Kebijakan Keamanan: Baris tidak valid atau duplikat otomatis ditolak dan tidak akan disimpan ke Firestore.
             </div>
+
             <div className="flex items-center gap-2">
+              {/* Tombol 1: Periksa Data */}
               <button
                 type="button"
-                onClick={() => setParseResult(null)}
-                className="px-4 py-2 text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
+                onClick={() => handleParse()}
+                className="px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Periksa ulang dan validasi data"
               >
-                Batal Preview
+                <RefreshCw className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                <span>1. Periksa Data</span>
               </button>
+
+              {/* Tombol 3: Batalkan Import */}
               <button
                 type="button"
-                onClick={() => {
-                  if (parseResult.validCount === 0 && parseResult.parsedRows.length > 0) {
-                    handleAutoFixAllRows();
-                  }
-                  setShowConfirmModal(true);
-                }}
-                className="px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-98 rounded-lg shadow-sm transition-all text-xs flex items-center justify-center gap-2 cursor-pointer"
-                title="Tekan tombol Action Oke untuk konfirmasi import data work order"
+                onClick={handleCancelImport}
+                className="px-3.5 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Batalkan proses import dan hapus preview"
+              >
+                <X className="w-3.5 h-3.5 text-rose-600" />
+                <span>3. Batalkan Import</span>
+              </button>
+
+              {/* Tombol 2: Import Data Valid */}
+              <button
+                type="button"
+                disabled={
+                  parseResult.headerCheckPassed === false ||
+                  (parseResult.missingMandatoryHeaders && parseResult.missingMandatoryHeaders.length > 0) ||
+                  parseResult.parsedRows.filter(r => r.isValid && !r.isDuplicate).length === 0
+                }
+                onClick={() => setShowConfirmModal(true)}
+                className="px-5 py-2 font-bold text-white bg-[#6D28D9] hover:bg-[#5B21B6] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg shadow-sm transition-all text-xs flex items-center justify-center gap-2 cursor-pointer"
+                title="Import hanya baris data yang berstatus valid dan tidak duplikat"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Action Oke: Konfirmasi & Simpan {parseResult.validCount > 0 ? `${parseResult.validCount} WO` : `${parseResult.parsedRows.length} WO (Auto-Fix)`}</span>
+                <span>2. Import Data Valid ({parseResult.parsedRows.filter(r => r.isValid && !r.isDuplicate).length} WO)</span>
               </button>
             </div>
           </div>
@@ -1670,7 +1721,7 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
                 ) : (
                   <>
                     <Check className="w-4 h-4 stroke-[3]" />
-                    <span>Konfirmasi & Simpan ({parseResult.validCount > 0 ? parseResult.validCount : parseResult.parsedRows.length} WO)</span>
+                    <span>Konfirmasi & Simpan ({parseResult.parsedRows.filter(r => r.isValid && !r.isDuplicate).length} WO Valid)</span>
                   </>
                 )}
               </button>
@@ -1686,8 +1737,8 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
       {/* ============================================================ */}
       {/* EXPORT WORK ORDER & TEMPLATES TAB                            */}
       {/* ============================================================ */}
-      {/* Tab 3: History & Delete Import Data by Date (7-day Retention Window) */}
-      {mainTab === 'history_delete' && (
+      {/* Tab 3: History & Delete Import Data by Date (7-day Retention Window) - Strictly Management Data */}
+      {mainTab === 'history_delete' && isManagementData && (
         <div className="space-y-6">
           <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-6 shadow-2xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
@@ -1869,8 +1920,8 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
         </div>
       )}
 
-      {/* Confirmation Modal for Deleting Imported Data by Date */}
-      {showPurgeModal && dateToPurge && (
+      {/* Confirmation Modal for Deleting Imported Data by Date - Strictly Management Data */}
+      {showPurgeModal && dateToPurge && isManagementData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
           <div className="bg-white dark:bg-slate-900 rounded-xl max-w-md w-full border border-rose-200 dark:border-rose-900/80 shadow-2xl p-6 space-y-4 text-xs">
             <div className="flex items-center gap-3">

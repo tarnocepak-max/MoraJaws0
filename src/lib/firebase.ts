@@ -43,6 +43,29 @@ export interface FirestoreErrorInfo {
   };
 }
 
+export function isQuotaExceededError(error: unknown): boolean {
+  if (!error) return false;
+  const msg = error instanceof Error ? error.message : String(error);
+  return (
+    msg.includes('Quota limit exceeded') ||
+    msg.includes('resource-exhausted') ||
+    msg.includes('Free daily read units per project') ||
+    msg.includes('quota metric') ||
+    msg.includes('Quota exceeded')
+  );
+}
+
+export function isPermissionError(error: unknown): boolean {
+  if (!error) return false;
+  const msg = error instanceof Error ? error.message : String(error);
+  return (
+    msg.includes('permission-denied') ||
+    msg.includes('Missing or insufficient permissions') ||
+    msg.includes('insufficient permissions') ||
+    msg.includes('PERMISSION_DENIED')
+  );
+}
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),

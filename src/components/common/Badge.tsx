@@ -1,11 +1,12 @@
 import React from 'react';
-import { WhatsAppConfirmationStatus, TicketStatusWOAgent, TicketStatusWOInstaller } from '../../types';
+import { WhatsAppConfirmationStatus, TicketStatusWOAgent, TicketStatusWOInstaller, WOApprovalStatus } from '../../types';
 
-export const StatusAgentBadge: React.FC<{ status: TicketStatusWOAgent }> = ({ status }) => {
-  const styles: Record<TicketStatusWOAgent, string> = {
+export const StatusAgentBadge: React.FC<{ status: TicketStatusWOAgent | string }> = ({ status }) => {
+  const styles: Record<string, string> = {
     'Pending': 'text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800',
     'Assigned': 'text-blue-700 bg-blue-50 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800',
     'In Progress': 'text-indigo-700 bg-indigo-50 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800',
+    'PROGRESS': 'text-indigo-700 bg-indigo-50 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800',
     'Resolved': 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
     'Cancelled': 'text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800',
     'Closed': 'text-slate-700 bg-slate-100 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
@@ -18,12 +19,14 @@ export const StatusAgentBadge: React.FC<{ status: TicketStatusWOAgent }> = ({ st
   );
 };
 
-export const StatusInstallerBadge: React.FC<{ status: TicketStatusWOInstaller }> = ({ status }) => {
-  const styles: Record<TicketStatusWOInstaller, string> = {
+export const StatusInstallerBadge: React.FC<{ status: TicketStatusWOInstaller | string }> = ({ status }) => {
+  const styles: Record<string, string> = {
     'Unassigned': 'text-slate-600 bg-slate-100 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
     'Assigned': 'text-blue-700 bg-blue-50 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800',
     'En Route': 'text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800',
     'On Site': 'text-purple-700 bg-purple-50 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800',
+    'In Progress': 'text-purple-700 bg-purple-50 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800',
+    'PROGRESS': 'text-purple-700 bg-purple-50 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800 font-bold',
     'Installed': 'text-teal-700 bg-teal-50 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800',
     'Pending Technical': 'text-orange-700 bg-orange-50 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800',
     'Failed / Cancelled': 'text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800',
@@ -58,3 +61,37 @@ export const StatusWhatsAppBadge: React.FC<{ status: WhatsAppConfirmationStatus 
     </span>
   );
 };
+
+export const StatusApprovalBadge: React.FC<{ status?: WOApprovalStatus }> = ({ status }) => {
+  if (!status || status === 'NONE') return null;
+
+  const configs: Record<WOApprovalStatus, { label: string; style: string }> = {
+    'NONE': { label: '', style: '' },
+    'BUTUH APPROVAL': {
+      label: 'BUTUH APPROVAL',
+      style: 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/70 dark:text-amber-200 dark:border-amber-700 animate-pulse font-extrabold shadow-xs'
+    },
+    'APPROVED': {
+      label: 'APPROVED',
+      style: 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-200 dark:border-emerald-700 font-extrabold shadow-2xs'
+    },
+    'REJECTED': {
+      label: 'REJECTED / PERLU REVISI',
+      style: 'bg-rose-100 text-rose-900 border-rose-300 dark:bg-rose-950/70 dark:text-rose-200 dark:border-rose-700 font-extrabold shadow-2xs'
+    },
+    'REVISI': {
+      label: 'PERLU REVISI',
+      style: 'bg-orange-100 text-orange-900 border-orange-300 dark:bg-orange-950/70 dark:text-orange-200 dark:border-orange-700 font-extrabold shadow-2xs'
+    }
+  };
+
+  const item = configs[status] || configs['BUTUH APPROVAL'];
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[10.5px] border rounded-md uppercase tracking-wide shrink-0 ${item.style}`}>
+      <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+      <span>{item.label}</span>
+    </span>
+  );
+};
+

@@ -39,8 +39,11 @@ export function parseWorkOrderFile(fileBuffer: ArrayBuffer, options: ParseOption
     validCount: engineResult.validCount,
     problematicCount: engineResult.problematicCount,
     duplicateCount: engineResult.duplicateCount,
+    readyToImportCount: engineResult.readyToImportCount,
     unrecognizedHeaders: engineResult.unrecognizedHeaders,
     detectedHeaders: engineResult.detectedHeaders,
+    missingMandatoryHeaders: engineResult.missingMandatoryHeaders,
+    headerCheckPassed: engineResult.headerCheckPassed,
     parsedRows: engineResult.parsedRows,
     detectedContractors: engineResult.detectedContractors,
     newCoverageAreas: engineResult.newCoverageAreas
@@ -221,8 +224,11 @@ export function parseWorkOrderText(rawText: string, options: ParseOptions = {}):
     validCount: engineResult.validCount,
     problematicCount: engineResult.problematicCount,
     duplicateCount: engineResult.duplicateCount,
+    readyToImportCount: engineResult.readyToImportCount,
     unrecognizedHeaders: engineResult.unrecognizedHeaders,
     detectedHeaders: engineResult.detectedHeaders.length > 0 ? engineResult.detectedHeaders : detectedHeaders,
+    missingMandatoryHeaders: engineResult.missingMandatoryHeaders,
+    headerCheckPassed: engineResult.headerCheckPassed,
     parsedRows: engineResult.parsedRows,
     detectedContractors: engineResult.detectedContractors,
     newCoverageAreas: engineResult.newCoverageAreas

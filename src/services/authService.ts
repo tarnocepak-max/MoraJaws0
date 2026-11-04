@@ -117,7 +117,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'view_contractor_wo',
     'import_data',
     'manage_field_mapping',
-    'database_management'
+    'database_management',
+    'delete_wo_data'
   ],
   it_support: [
     'login',
@@ -193,4 +194,38 @@ export function getRoleDisplayName(role: UserRole): string {
     default:
       return role;
   }
+}
+
+/**
+ * Returns authenticated HTTP headers including Authorization: Bearer <sessionToken>
+ * sourced from official stored session in localStorage.
+ */
+export function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+  try {
+    const sessionStr = localStorage.getItem('morajaws_auth_session');
+    if (sessionStr) {
+      const sess = JSON.parse(sessionStr);
+      if (sess?.token) {
+        headers['Authorization'] = `Bearer ${sess.token}`;
+      }
+      const userId = sess?.user?.id || sess?.userId;
+      if (userId) {
+        headers['x-user-id'] = String(userId);
+      }
+      const userRole = sess?.user?.role || sess?.role;
+      if (userRole) {
+        headers['x-user-role'] = String(userRole);
+      }
+      const username = sess?.user?.username || sess?.username;
+      if (username) {
+        headers['x-username'] = String(username);
+      }
+    }
+  } catch (err) {
+    console.warn('[authService] Failed to read auth session headers:', err);
+  }
+  return headers;
 }

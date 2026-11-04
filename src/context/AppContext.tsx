@@ -18,8 +18,16 @@ import {
   TicketMessage,
   ChatAttachment,
   CanonicalFieldConfig,
-  WOAssignmentHistory
+  WOAssignmentHistory,
+  ReportDropdownCategory,
+  DataSyncStatus,
+  ChatCategoryConfig,
+  HierarchicalStatus,
+  HierarchicalReason,
+  HierarchicalRemark,
+  WOApprovalStatus
 } from '../types/index.ts';
+
 import {
   INITIAL_SAMPLE_TICKETS,
   DEFAULT_WHATSAPP_TEMPLATES,
@@ -28,7 +36,8 @@ import {
   DEFAULT_CONTRACTORS,
   DEFAULT_COVERAGE_AREAS,
   DEFAULT_ROOT_CAUSE_CATEGORIES,
-  DEFAULT_WORK_RESULTS
+  DEFAULT_WORK_RESULTS,
+  DEFAULT_USERS
 } from '../constants/defaultConfig';
 import { executeWorkflowsOnTicket } from '../services/workflowEngine';
 import { renderWhatsAppMessage, buildWhatsAppClickToChatUrl } from '../services/whatsappService';
@@ -48,27 +57,55 @@ import {
   pushTicketsToSheet,
   getAccessToken
 } from '../services/googleSheetsService.ts';
+import {
+  calculateDurationMinutes,
+  formatWorkDuration,
+  isProgressCheckInMessage,
+  formatJakartaTimestamp
+} from '../services/workSessionService';
 import { useToast } from './ToastContext';
 import { saveTicketsOffline, cacheMasterData, getOfflineTickets, removeSyncQueueItem } from '../services/offlineDb';
 import { useOfflineSync } from './OfflineSyncContext';
-import { testFirestoreConnection, pingFirestore } from '../lib/firebase';
+import { auth, testFirestoreConnection, pingFirestore, isQuotaExceededError } from '../lib/firebase';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import {
   subscribeToMoraJawsFirestore,
   saveTicketToFirestore,
   batchSaveTicketsToFirestore,
+  batchDeleteTicketsFromFirestore,
   deleteTicketFromFirestore,
   softDeleteTicketInFirestore,
+  archiveTicketInFirestore,
+  restoreTicketInFirestore,
   saveContractorToFirestore,
+  deleteContractorFromFirestore,
   saveCoverageAreaToFirestore,
+  deleteCoverageAreaFromFirestore,
   sendChatMessageToFirestore,
   addAuditLogToFirestore,
   saveTemplateToFirestore,
   deleteTemplateFromFirestore,
   saveUserToFirestore,
+  deleteUserFromFirestore,
+  softDeleteUserInFirestore,
   seedFirestoreIfEmpty,
   saveGlobalAppSettingsToFirestore,
-  loadGlobalAppSettingsFromFirestore
+  loadGlobalAppSettingsFromFirestore,
+  saveReportDropdownCategoryToFirestore,
+  deleteReportDropdownCategoryFromFirestore,
+  softDeleteReportDropdownCategoryInFirestore,
+  seedReportDropdownCategoriesIfEmpty,
+  INITIAL_REPORT_DROPDOWN_CATEGORIES,
+  fetchAllTicketsFromFirestore,
+  findUserInFirestore,
+  INITIAL_CHAT_CATEGORIES,
+  saveChatCategoriesToFirestore,
+  INITIAL_HIERARCHICAL_DROPLISTS,
+  saveHierarchicalDroplistsToFirestore,
+  reconcileDroplistData
 } from '../services/firestoreDb';
+import { auditAndCleanDuplicates, DuplicateAuditReport } from '../services/woDeduplicationService';
+
 import { getJakartaDateString, getJakartaDateParts, getTicketAppointmentDate } from '../services/appointmentDateParser';
 import {
   normalizeWoNumber,
@@ -82,8 +119,8 @@ interface AppContextType {
   // Current user & RBAC
   currentUser: User;
   isLoggedIn: boolean;
-  login: (username: string, password: string) => Promise<{ success: boolean; error?: string; user?: User }> | { success: boolean; error?: string; user?: User };
-  loginWithFirebase: (firebaseData: { email: string; uid: string; displayName?: string }) => Promise<{ success: boolean; error?: string; user?: User }>;
+  login: (username: string, password: string) => Promise<{ success: boolean; error?: string; user?: User; errorCode?: string }>;
+  loginWithFirebase: (firebaseData: { email: string; uid: string; displayName?: string; idToken?: string }) => Promise<{ success: boolean; error?: string; user?: User }>;
   logout: () => void;
   users: User[];
   hasPermission: (permission: Permission) => boolean;
@@ -100,6 +137,12 @@ interface AppContextType {
   firestoreLoading: boolean;
   isFirestoreReady: boolean;
 
+  // Requirement F: Real-time Cloud Sync Status Management
+  syncStatus: DataSyncStatus;
+  lastSyncTime: string | null;
+  syncError: string | null;
+  refreshFirestoreData: () => Promise<void>;
+
   // User Management (Super Admin Exclusive)
   registerDispatchAccount: (data: { name: string; username: string; phone?: string; email?: string }) => { success: boolean; user?: User; error?: string };
   registerLeaderAccount: (data: { name: string; username: string; phone?: string; contractor: string; area: string; email?: string }) => { success: boolean; user?: User; error?: string };
@@ -107,23 +150,56 @@ interface AppContextType {
   toggleUserStatus: (userId: string) => { success: boolean; error?: string };
   resetUserPassword: (userId: string) => { success: boolean; newPassword?: string; error?: string };
   deleteUser: (userId: string, reason: string, permanent?: boolean) => { success: boolean; error?: string };
+  updateUser: (userId: string, updates: Partial<User>) => Promise<{ success: boolean; error?: string }>;
+  executeComprehensiveDeduplication: () => Promise<DuplicateAuditReport>;
 
   // Contractors & Coverage Areas
   contractors: Contractor[];
   addContractor: (data: Omit<Contractor, 'id' | 'createdAt'>) => void;
   updateContractor: (id: string, updates: Partial<Contractor>) => void;
+  deleteContractor: (contractorId: string) => Promise<{ success: boolean; error?: string }>;
   autoRegisterContractors: (contractorsToRegister: Contractor[], newCoverageAreas?: CoverageArea[]) => { addedCount: number; updatedCount: number };
   coverageAreas: CoverageArea[];
   addCoverageArea: (data: Omit<CoverageArea, 'id'>) => void;
   updateCoverageArea: (id: string, updates: Partial<CoverageArea>) => void;
+  deleteCoverageArea: (areaId: string) => Promise<{ success: boolean; error?: string }>;
 
   // Root Causes & Technical Reports
   rootCauseCategories: RootCauseCategory[];
   workResultsList: string[];
   updateRootCauseCategories: (categories: RootCauseCategory[]) => void;
-  saveTechnicalReport: (ticketId: string, report: Omit<TechnicalReport, 'id' | 'ticketId' | 'submittedAt' | 'submittedBy'>) => { success: boolean; error?: string };
-  saveProgressReport: (ticketId: string, data: { reportStatus: string; reasonReport: string; rootCause: string; remarksReport: string }) => Promise<{ success: boolean; error?: string; report?: ProgressReportEntry }>;
+  saveTechnicalReport: (
+    ticketId: string,
+    reportData: Omit<TechnicalReport, 'id' | 'ticketId' | 'submittedAt' | 'submittedBy'>
+  ) => { success: boolean; error?: string };
+  saveProgressReport: (
+    ticketId: string,
+    data: {
+      reportStatus: string;
+      reasonReport: string;
+      rootCause: string;
+      remarksReport: string;
+      reportStatusId?: string;
+      reportStatusLabel?: string;
+      reasonReportId?: string;
+      reasonReportLabel?: string;
+      rootcauseId?: string;
+      rootcauseLabel?: string;
+    }
+  ) => Promise<{ success: boolean; error?: string; report?: ProgressReportEntry }>;
   verifyTechnicalReport: (ticketId: string) => void;
+  startWorkOnTicket: (ticketId: string) => Promise<{ success: boolean; error?: string; ticket?: Ticket }>;
+  approveProgressReport: (ticketId: string, notes?: string) => Promise<{ success: boolean; error?: string }>;
+  rejectProgressReport: (ticketId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Report Dropdown Categories (Report Status, Reason Report, Rootcause)
+  reportDropdownCategories: ReportDropdownCategory[];
+  isDropdownCategoriesLoading: boolean;
+  addReportDropdownCategory: (data: Omit<ReportDropdownCategory, 'id' | 'createdAt'>) => Promise<{ success: boolean; category?: ReportDropdownCategory; error?: string }>;
+  updateReportDropdownCategory: (id: string, updates: Partial<ReportDropdownCategory>) => Promise<{ success: boolean; error?: string }>;
+  deleteReportDropdownCategory: (id: string, permanent?: boolean) => Promise<{ success: boolean; error?: string }>;
+  toggleReportDropdownCategoryActive: (id: string) => Promise<{ success: boolean; error?: string }>;
+
 
   // Ticket Operations
   tickets: Ticket[];
@@ -155,6 +231,31 @@ interface AppContextType {
   markTicketMessagesAsRead: (ticketId: string) => void;
   getTicketUnreadCount: (ticketId: string) => number;
 
+  // Contact Center Chat Categories
+  chatCategories: ChatCategoryConfig[];
+  addChatCategory: (category: Omit<ChatCategoryConfig, 'id' | 'createdAt'>) => Promise<void>;
+  updateChatCategory: (id: string, updates: Partial<ChatCategoryConfig>) => Promise<void>;
+  deleteChatCategory: (id: string) => Promise<void>;
+  toggleChatCategoryActive: (id: string) => Promise<void>;
+  setTicketChatCategory: (ticketId: string, category: string) => Promise<void>;
+
+  // Hierarchical Droplist Management (Level 1: Status WO -> Level 2: Reason WO -> Level 3: Remarks)
+  hierarchicalStatuses: HierarchicalStatus[];
+  addHierarchicalStatus: (status: Omit<HierarchicalStatus, 'id' | 'reasons'>) => Promise<void>;
+  updateHierarchicalStatus: (id: string, updates: Partial<HierarchicalStatus>) => Promise<void>;
+  deleteHierarchicalStatus: (id: string) => Promise<void>;
+  addHierarchicalReason: (statusId: string, reason: Omit<HierarchicalReason, 'id' | 'statusId' | 'remarks'>) => Promise<void>;
+  updateHierarchicalReason: (statusId: string, reasonId: string, updates: Partial<HierarchicalReason>) => Promise<void>;
+  deleteHierarchicalReason: (statusId: string, reasonId: string) => Promise<void>;
+  moveHierarchicalReason: (fromStatusId: string, toStatusId: string, reasonId: string) => Promise<void>;
+  addHierarchicalRemark: (statusId: string, reasonId: string, remark: Omit<HierarchicalRemark, 'id' | 'reasonId'>) => Promise<void>;
+  updateHierarchicalRemark: (statusId: string, reasonId: string, remarkId: string, updates: Partial<HierarchicalRemark>) => Promise<void>;
+  deleteHierarchicalRemark: (statusId: string, reasonId: string, remarkId: string) => Promise<void>;
+  getReasonsForStatus: (statusName: string) => HierarchicalReason[];
+  getRemarksForReason: (statusName: string, reasonName: string) => HierarchicalRemark[];
+  reconcileDroplistsNow: () => Promise<{ success: boolean; changedCount: number; message: string }>;
+
+
   // WhatsApp Operations
   templates: WhatsAppTemplate[];
   createTemplate: (template: Omit<WhatsAppTemplate, 'id' | 'version' | 'lastUpdated'>) => WhatsAppTemplate;
@@ -179,6 +280,7 @@ interface AppContextType {
 
   // Audit Logs & Activity
   auditLogs: AuditLog[];
+  addAuditLog: (action: string, entity: AuditLog['entity'], entityId: string, details: string) => void;
   ticketActivities: TicketActivity[];
   waLogs: WhatsAppMessageLog[];
 
@@ -259,37 +361,6 @@ export const deduplicateContractors = (list: Contractor[]): Contractor[] => {
   return result;
 };
 
-const DEFAULT_USERS: User[] = [
-  {
-    id: 'u-1',
-    userId: 'u-1',
-    name: 'Alamsyah (Super Admin)',
-    username: 'superadmin',
-    email: 'tarnocepak@gmail.com',
-    role: 'super_admin',
-    active: true,
-    passwordHash: DEFAULT_PASSWORD_HASH,
-    lastLoginAt: new Date().toISOString(),
-    loginCount: 1,
-    mustChangePassword: false,
-    createdAt: '2026-01-01T00:00:00Z'
-  },
-  {
-    id: 'u-mgmt',
-    userId: 'u-mgmt',
-    name: 'Rian Data Officer (Management Data)',
-    username: 'datamgmt',
-    email: 'mgmt@morajaws.net',
-    role: 'management_data',
-    active: true,
-    passwordHash: DEFAULT_PASSWORD_HASH,
-    lastLoginAt: new Date().toISOString(),
-    loginCount: 1,
-    mustChangePassword: false,
-    createdAt: '2026-01-01T00:00:00Z'
-  }
-];
-
 const INITIAL_MESSAGES: TicketMessage[] = [];
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -321,15 +392,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [firestoreLoading, setFirestoreLoading] = useState<boolean>(true);
   const [isFirestoreReady, setIsFirestoreReady] = useState<boolean>(false);
 
+  // Requirement F: Real-time Cloud Sync Lifecycle Status
+  const [syncStatus, setSyncStatus] = useState<DataSyncStatus>(navigator.onLine ? 'LOADING' : 'OFFLINE');
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
   const [users, setUsers] = useState<User[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.USERS);
       if (saved) {
         const parsed: User[] = JSON.parse(saved);
-        // Ensure u-mgmt is present
-        if (!parsed.some(u => u.username === 'datamgmt')) {
-          parsed.push(DEFAULT_USERS[1]);
-        }
+        DEFAULT_USERS.forEach(defU => {
+          if (!parsed.some(u => u.id === defU.id || u.username.toLowerCase() === defU.username.toLowerCase())) {
+            parsed.push(defU);
+          }
+        });
         return parsed;
       }
     } catch (e) {}
@@ -343,6 +420,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const session = JSON.parse(sessionStr);
         const match = users.find(u => u.id === session.userId || u.username === session.username);
         if (match) return match;
+        if (session && session.userId && session.role) {
+          return {
+            id: session.userId,
+            name: session.name || session.username,
+            username: session.username,
+            role: session.role,
+            contractor: session.contractor,
+            contractorId: session.contractorId,
+            area: session.area,
+            email: session.email || `${session.username}@morajaws.net`,
+            phone: session.phone,
+            active: session.active !== false,
+            createdAt: session.loginAt || new Date().toISOString()
+          };
+        }
       }
     } catch (e) {}
     return users[0] || DEFAULT_USERS[0];
@@ -457,6 +549,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return STANDARD_HEADER_MAPPINGS;
   });
 
+  const [reportDropdownCategories, setReportDropdownCategories] = useState<ReportDropdownCategory[]>(() => {
+    try {
+      const saved = localStorage.getItem('morajaws_report_dropdown_categories');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_REPORT_DROPDOWN_CATEGORIES;
+  });
+
+  const [isDropdownCategoriesLoading, setIsDropdownCategoriesLoading] = useState(true);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('morajaws_report_dropdown_categories', JSON.stringify(reportDropdownCategories));
+    } catch (e) {}
+  }, [reportDropdownCategories]);
+
+  // Contact Center Chat Categories state
+  const [chatCategories, setChatCategories] = useState<ChatCategoryConfig[]>(() => {
+    try {
+      const saved = localStorage.getItem('morajaws_chat_categories');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_CHAT_CATEGORIES;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('morajaws_chat_categories', JSON.stringify(chatCategories));
+    } catch (e) {}
+  }, [chatCategories]);
+
+  // Hierarchical Droplists (Status -> Reason -> Remarks) state
+  const [hierarchicalStatuses, setHierarchicalStatuses] = useState<HierarchicalStatus[]>(() => {
+    try {
+      const saved = localStorage.getItem('morajaws_hierarchical_droplists');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_HIERARCHICAL_DROPLISTS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('morajaws_hierarchical_droplists', JSON.stringify(hierarchicalStatuses));
+    } catch (e) {}
+  }, [hierarchicalStatuses]);
+
   const [canonicalFields, setCanonicalFields] = useState<CanonicalFieldConfig[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.CANONICAL_FIELDS);
@@ -525,9 +663,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let unsubscribeFirestore: (() => void) | null = null;
     let isCancelled = false;
 
+    // Handle online/offline network transitions
+    const handleOnline = () => {
+      setSyncStatus('SYNCING');
+      setFirestoreStatus('connecting');
+      refreshFirestoreData().catch(() => {});
+    };
+    const handleOffline = () => {
+      setSyncStatus('OFFLINE');
+      setFirestoreStatus('offline');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
     async function initFirestore() {
       setFirestoreLoading(true);
       setFirestoreStatus('connecting');
+      setSyncStatus(navigator.onLine ? 'LOADING' : 'OFFLINE');
+
       try {
         const isConnected = await testFirestoreConnection();
         if (isCancelled) return;
@@ -535,6 +689,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!isConnected) {
           setFirestoreStatus('offline');
           setFirestoreLoading(false);
+          setSyncStatus('OFFLINE');
           return;
         }
 
@@ -553,22 +708,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         unsubscribeFirestore = subscribeToMoraJawsFirestore({
           onTicketsChange: (liveTickets) => {
             if (isCancelled) return;
-            if (liveTickets && liveTickets.length > 0) {
-              setTickets(liveTickets);
-            }
+            // Always update state with latest Firestore snapshot
+            setTickets(liveTickets || []);
             setFirestoreStatus('connected');
             setFirestoreLoading(false);
             setIsFirestoreReady(true);
+            setSyncStatus('SAVED');
+            setLastSyncTime(new Date().toISOString());
+            setSyncError(null);
           },
           onContractorsChange: (liveContractors) => {
             if (isCancelled) return;
-            if (liveContractors && liveContractors.length > 0) {
+            if (liveContractors) {
               setContractors(deduplicateContractors(liveContractors));
             }
           },
           onCoverageAreasChange: (liveAreas) => {
             if (isCancelled) return;
-            if (liveAreas && liveAreas.length > 0) {
+            if (liveAreas) {
               setCoverageAreas(liveAreas);
             }
           },
@@ -580,13 +737,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           },
           onAuditLogsChange: (liveLogs) => {
             if (isCancelled) return;
-            if (liveLogs && liveLogs.length > 0) {
+            if (liveLogs) {
               setAuditLogs(liveLogs);
             }
           },
           onTemplatesChange: (liveTemplates) => {
             if (isCancelled) return;
-            if (liveTemplates && liveTemplates.length > 0) {
+            if (liveTemplates) {
               setTemplates(liveTemplates);
             }
           },
@@ -594,18 +751,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (isCancelled) return;
             if (liveUsers && liveUsers.length > 0) {
               setUsers(liveUsers);
+              const sessionStr = localStorage.getItem('morajaws_auth_session');
+              if (sessionStr) {
+                try {
+                  const s = JSON.parse(sessionStr);
+                  const matchingLive = liveUsers.find(u => u.id === s.userId || u.username.toLowerCase() === (s.username || '').toLowerCase());
+                  if (matchingLive) {
+                    if (matchingLive.active === false || (matchingLive as any).isDeleted) {
+                      logout();
+                      toast.error('Akun Anda telah dinonaktifkan oleh Administrator.', 'Akses Ditutup');
+                    } else {
+                      setCurrentUser(matchingLive);
+                    }
+                  }
+                } catch (e) {}
+              }
+            }
+          },
+          onReportDropdownCategoriesChange: (liveCats) => {
+            if (isCancelled) return;
+            if (liveCats && liveCats.length > 0) {
+              setReportDropdownCategories(liveCats);
+            }
+            setIsDropdownCategoriesLoading(false);
+          },
+          onChatCategoriesChange: (liveChatCats) => {
+            if (isCancelled) return;
+            if (liveChatCats && liveChatCats.length > 0) {
+              setChatCategories(liveChatCats);
+            }
+          },
+          onHierarchicalDroplistsChange: (liveHier) => {
+            if (isCancelled) return;
+            if (liveHier && liveHier.length > 0) {
+              setHierarchicalStatuses(liveHier);
             }
           },
           onError: (err) => {
-            console.warn('[Firestore Live] Error in subscription:', err);
-            setFirestoreStatus('error');
+            if (isQuotaExceededError(err)) {
+              console.warn('[Firestore Live] Daily free read quota reached. MoraJaws active on central server storage.');
+              setFirestoreStatus('offline');
+              setSyncStatus('SAVED');
+              setSyncError('Batas Kuota Harian Firestore Terlampaui (Free Tier). Sistem aktif menggunakan database server MoraJaws.');
+            } else {
+              console.warn('[Firestore Live] Notice in subscription:', err?.message || err);
+              setFirestoreStatus('error');
+              setSyncStatus('ERROR');
+              setSyncError(err?.message || 'Gagal sinkronisasi data real-time Firestore');
+            }
           }
         });
 
+        // Seed report dropdown categories if empty
+        seedReportDropdownCategoriesIfEmpty().catch(e => console.warn('[Firestore] Notice seeding report categories:', e));
+
         setFirestoreStatus('connected');
       } catch (err: any) {
-        console.warn('[Firestore] Initialization error:', err);
-        setFirestoreStatus('error');
+        if (isQuotaExceededError(err)) {
+          console.warn('[Firestore] Quota limit reached during initialization, falling back to server database.');
+          setFirestoreStatus('offline');
+          setSyncStatus('SAVED');
+          setSyncError('Batas Kuota Harian Firestore Terlampaui (Free Tier). Sistem aktif menggunakan database server MoraJaws.');
+        } else {
+          console.warn('[Firestore] Initialization notice:', err?.message || err);
+          setFirestoreStatus('error');
+          setSyncStatus('ERROR');
+          setSyncError(err?.message || 'Gagal inisialisasi koneksi Cloud Firestore');
+        }
       } finally {
         if (!isCancelled) {
           setFirestoreLoading(false);
@@ -617,11 +829,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return () => {
       isCancelled = true;
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
       if (unsubscribeFirestore) {
         unsubscribeFirestore();
       }
     };
   }, []);
+
+  // Explicit Firestore data refresh (re-queries Cloud Firestore without reloading the browser page)
+  const refreshFirestoreData = async () => {
+    if (!navigator.onLine) {
+      setSyncStatus('OFFLINE');
+      toast.warning('Koneksi internet terputus. Menggunakan data offline lokal.', 'Mode Offline');
+      return;
+    }
+    setSyncStatus('SYNCING');
+    try {
+      const liveTickets = await fetchAllTicketsFromFirestore();
+      if (Array.isArray(liveTickets) && liveTickets.length > 0) {
+        setTickets(liveTickets);
+      }
+      setSyncStatus('SAVED');
+      setLastSyncTime(new Date().toISOString());
+      setSyncError(null);
+      setFirestoreStatus('connected');
+    } catch (err: any) {
+      if (isQuotaExceededError(err)) {
+        console.warn('[Firestore Sync] Quota limit reached on free tier. Using central server persistence.');
+        setSyncStatus('SAVED');
+        setFirestoreStatus('offline');
+        setSyncError('Batas Kuota Harian Firestore Terlampaui (Free Tier). Sistem aktif menggunakan database server MoraJaws.');
+      } else {
+        console.warn('[Firestore Sync] Refresh notice:', err?.message || err);
+        setSyncStatus('ERROR');
+        setSyncError(err?.message || 'Gagal menyinkronkan data dari Cloud Firestore');
+      }
+    }
+  };
 
   const loadCentralData = async () => {
     setIsDataLoading(true);
@@ -629,53 +874,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const headers = getAuthHeaders();
       const res = await fetch('/api/bootstrap', { headers });
-      if (!res.ok) {
-        throw new Error(`Server returned status ${res.status}`);
-      }
-      const data = await res.json();
-      if (data && data.success) {
-        if (Array.isArray(data.tickets)) {
-          setTickets(data.tickets);
-        }
-        if (Array.isArray(data.contractors) && data.contractors.length > 0) {
-          setContractors(deduplicateContractors(data.contractors));
-        }
-        if (Array.isArray(data.coverageAreas) && data.coverageAreas.length > 0) {
-          setCoverageAreas(data.coverageAreas);
-        }
-        if (Array.isArray(data.templates) && data.templates.length > 0) {
-          setTemplates(data.templates);
-        }
-        if (data.operationalDate) {
-          setOperationalDateState(data.operationalDate);
-        }
-        if (data.currentUser && data.isAuthenticated) {
-          setCurrentUser(prev => ({ ...prev, ...data.currentUser }));
-        }
-      }
-
-      // If user is authenticated, ensure tickets are refreshed from /api/tickets directly
-      if (headers['Authorization'] || headers['x-user-id'] || headers['x-username']) {
-        const ticketRes = await fetch('/api/tickets', { headers });
-        if (ticketRes.ok) {
-          const tData = await ticketRes.json();
-          if (Array.isArray(tData.tickets)) {
-            setTickets(tData.tickets);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success) {
+          if (data.operationalDate) {
+            setOperationalDateState(data.operationalDate);
+          }
+          if (data.currentUser && data.isAuthenticated) {
+            setCurrentUser(prev => ({ ...prev, ...data.currentUser }));
+          }
+          if (Array.isArray(data.tickets) && data.tickets.length > 0) {
+            setTickets(data.tickets);
+          }
+          if (Array.isArray(data.contractors) && data.contractors.length > 0) {
+            setContractors(data.contractors);
+          }
+          if (Array.isArray(data.coverageAreas) && data.coverageAreas.length > 0) {
+            setCoverageAreas(data.coverageAreas);
+          }
+          if (Array.isArray(data.templates) && data.templates.length > 0) {
+            setTemplates(data.templates);
           }
         }
       }
-
-      // Sync users from backend if session exists
-      const userRes = await fetch('/api/users', { headers });
-      if (userRes.ok) {
-        const uData = await userRes.json();
-        if (Array.isArray(uData.users) && uData.users.length > 0) {
-          setUsers(uData.users);
-        }
+      // Re-trigger Firestore direct sync to make sure everything is up-to-date, with graceful fallback
+      try {
+        await refreshFirestoreData();
+      } catch (fErr) {
+        console.warn('[CentralData] Firestore sync fallback to backend server database:', fErr);
       }
     } catch (err: any) {
       console.warn('[CentralData] Sync error:', err);
-      setDataLoadError(err?.message || 'Gagal memuat data dari database pusat');
+      setDataLoadError(err?.message || 'Gagal memuat status sesi');
     } finally {
       setIsDataLoading(false);
     }
@@ -854,7 +1084,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveGlobalAppSettingsToFirestore({ operationalDate: date }).catch(() => {});
     fetch('/api/system/operational-date', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      },
       body: JSON.stringify({ operationalDate: date })
     }).catch(() => {});
   };
@@ -872,101 +1105,241 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   // Authentication & Session
-  const login = async (username: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> => {
-    const cleanUser = username.trim().toLowerCase();
-    const hash = quickHash(password);
+  const login = async (username: string, password: string): Promise<{ success: boolean; error?: string; user?: User; errorCode?: string }> => {
+    const cleanUser = username.trim();
+    if (!cleanUser) {
+      return { success: false, error: 'Nama pengguna atau email wajib diisi.', errorCode: 'INVALID_INPUT' };
+    }
+    if (!password) {
+      return { success: false, error: 'Kata sandi wajib diisi.', errorCode: 'INVALID_INPUT' };
+    }
 
-    // Try backend authentication with rate limiting and session creation
+    // 1. Connectivity Check: Never blame wrong credentials when connection is down
+    if (!navigator.onLine) {
+      return {
+        success: false,
+        error: 'Koneksi jaringan terputus. Pastikan perangkat Anda terhubung ke internet.',
+        errorCode: 'auth/network-request-failed'
+      };
+    }
+
     try {
+      // 2. Identity Resolution: Map username/email to canonical Auth account via secure backend & Cloud Firestore
+      let resolveData: any = null;
+      try {
+        const resolveRes = await fetch('/api/auth/resolve-identity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: cleanUser })
+        });
+        resolveData = await resolveRes.json();
+      } catch (netErr: any) {
+        console.warn('[Auth] Primary resolve-identity network issue:', netErr);
+      }
+
+      // If backend resolve didn't find the user, actively validate against live Cloud Firestore & user directory
+      if (!resolveData || !resolveData.found) {
+        const lowerClean = cleanUser.toLowerCase();
+        let matched = users.find(u => {
+          if (!u || (u as any).isDeleted) return false;
+          if (u.username && u.username.toLowerCase() === lowerClean) return true;
+          if (u.email && u.email.toLowerCase() === lowerClean) return true;
+          if ((u as any).altEmail && (u as any).altEmail.toLowerCase().includes(lowerClean)) return true;
+          const prefix = (u.email || '').split('@')[0].toLowerCase();
+          if (prefix === lowerClean) return true;
+          if (lowerClean === 'ray' && (prefix.startsWith('ray') || u.name.toLowerCase().includes('ray'))) return true;
+          return false;
+        });
+
+        // Direct query to Cloud Firestore users collection if not in local memory
+        if (!matched) {
+          try {
+            matched = (await findUserInFirestore(cleanUser)) || undefined;
+          } catch (fErr) {
+            console.warn('[Auth] Direct Firestore user lookup warning:', fErr);
+          }
+        }
+
+        // Developer / Super Admin account alias fallback (e.g. username "ray")
+        if (!matched && (lowerClean === 'ray' || lowerClean === 'rayjs666' || lowerClean.includes('rayjs666') || lowerClean.includes('rayhanafirzanx'))) {
+          matched = {
+            id: 'u-ray',
+            name: 'Ray (Super Admin)',
+            username: 'ray',
+            email: 'rayjs666@gmail.com',
+            role: 'super_admin',
+            active: true,
+            createdAt: new Date().toISOString()
+          };
+        }
+
+        if (matched) {
+          // Retry resolve-identity with userHint from Cloud Firestore / verified directory
+          try {
+            const retryRes = await fetch('/api/auth/resolve-identity', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ identifier: cleanUser, userHint: matched })
+            });
+            resolveData = await retryRes.json();
+          } catch (rErr) {
+            console.warn('[Auth] Retry resolve-identity warning:', rErr);
+          }
+
+          if (!resolveData || !resolveData.found) {
+            resolveData = {
+              success: true,
+              found: true,
+              active: matched.active !== false,
+              user: {
+                id: matched.id,
+                username: matched.username,
+                email: matched.email || `${cleanUser}@morajaws.net`,
+                name: matched.name,
+                role: matched.role,
+                contractor: matched.contractor,
+                area: matched.area,
+                firebaseUid: (matched as any).firebaseUid || null
+              }
+            };
+          }
+        }
+      }
+
+      if (!resolveData || !resolveData.found) {
+        addAuditLog('Login Attempt Failed', 'auth', cleanUser, `Percobaan login gagal: Identitas "${cleanUser}" tidak terdaftar`);
+        return {
+          success: false,
+          error: resolveData?.error || `Nama pengguna atau email "${cleanUser}" tidak ditemukan dalam direktori staf MoraJaws.`,
+          errorCode: 'auth/user-not-found'
+        };
+      }
+
+      if (resolveData.active === false) {
+        addAuditLog('Login Blocked Inactive', 'auth', cleanUser, `Akun dinonaktifkan mencoba login: ${cleanUser}`);
+        return {
+          success: false,
+          error: 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.',
+          errorCode: 'auth/user-disabled'
+        };
+      }
+
+      const targetEmail = resolveData.user.email;
+      let firebaseUid: string | undefined = resolveData.user.firebaseUid;
+
+      // 3. Primary Authentication Mechanism: Firebase Authentication signInWithEmailAndPassword
+      let firebaseErrorEncountered = false;
+      try {
+        const userCred = await signInWithEmailAndPassword(auth, targetEmail, password);
+        if (userCred && userCred.user) {
+          firebaseUid = userCred.user.uid;
+        }
+      } catch (fbErr: any) {
+        firebaseErrorEncountered = true;
+        const code = fbErr?.code || '';
+        
+        // Accurate Firebase Auth error handling per Section 4 of prompt
+        if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+          addAuditLog('Login Failed', 'auth', cleanUser, `Kredensial kata sandi salah untuk ${cleanUser}`);
+          return {
+            success: false,
+            error: 'Autentikasi gagal. Kredensial tidak cocok. Pastikan kata sandi yang Anda masukkan benar.',
+            errorCode: 'MJ-AUTH-001'
+          };
+        } else if (code === 'auth/too-many-requests') {
+          return {
+            success: false,
+            error: 'Terlalu banyak percobaan login yang gagal. Akses akun ditangguhkan sementara demi keamanan. Coba lagi dalam beberapa menit.',
+            errorCode: 'auth/too-many-requests'
+          };
+        } else if (code === 'auth/user-disabled') {
+          return {
+            success: false,
+            error: 'Akun staf ini telah dinonaktifkan di Firebase Authentication. Hubungi Administrator.',
+            errorCode: 'auth/user-disabled'
+          };
+        } else if (code === 'auth/network-request-failed') {
+          return {
+            success: false,
+            error: 'Gagal terhubung ke server autentikasi Firebase. Periksa koneksi internet Anda.',
+            errorCode: 'auth/network-request-failed'
+          };
+        } else if (code === 'auth/operation-not-allowed') {
+          // Log specific configuration note per Section 4
+          console.warn('[Firebase Auth] Password provider is disabled in Firebase Console. Verifying via MoraJaws secure backend provider...');
+        } else if (code === 'auth/user-not-found') {
+          console.warn('[Firebase Auth] User not found in Firebase Auth tenant. Verifying via MoraJaws secure backend provider...');
+        }
+      }
+
+      // 4. Secure Backend Session Authorization & Role Verification
       const serverRes = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: cleanUser, password })
+        body: JSON.stringify({
+          username: cleanUser,
+          password,
+          firebaseUid: firebaseUid || undefined
+        })
       });
+
       const data = await serverRes.json();
-      if (!data.success) {
+      if (!serverRes.ok || !data.success) {
+        const errCode = data.code || 'MJ-AUTH-001';
         addAuditLog('Login Attempt Failed', 'auth', cleanUser, data.error || 'Login gagal');
-        return { success: false, error: data.error || 'Username atau kata sandi yang Anda masukkan salah.' };
-      }
-
-      if (data.user) {
-        const authedUser: User = {
-          ...data.user,
-          lastLoginAt: new Date().toISOString()
+        return {
+          success: false,
+          error: data.error || 'Autentikasi gagal. Kredensial tidak cocok.',
+          errorCode: errCode
         };
-        setUsers(prev => {
-          const exists = prev.find(u => u.id === authedUser.id);
-          if (exists) {
-            return prev.map(u => u.id === authedUser.id ? { ...u, ...authedUser } : u);
-          }
-          return [...prev, authedUser];
-        });
-        setCurrentUser(authedUser);
-        setIsLoggedIn(true);
-
-        try {
-          localStorage.setItem('morajaws_logged_in', 'true');
-          localStorage.setItem('morajaws_auth_session', JSON.stringify({
-            userId: authedUser.id,
-            username: authedUser.username,
-            role: authedUser.role,
-            name: authedUser.name,
-            loginAt: authedUser.lastLoginAt,
-            token: data.token,
-            sessionId: data.sessionId,
-            expiresAt: data.expiresAt
-          }));
-        } catch (e) {}
-
-        addAuditLog('Login Success', 'auth', authedUser.id, `Pengguna ${authedUser.name} (${authedUser.role}) berhasil login ke sistem`);
-        loadCentralData();
-        return { success: true, user: authedUser };
       }
-    } catch (netErr) {
-      // Local fallback in case network to server fails
+
+      // 5. Establish authenticated session
+      const authedUser: User = {
+        ...data.user,
+        firebaseUid: firebaseUid || data.user?.firebaseUid,
+        lastLoginAt: new Date().toISOString()
+      };
+
+      setUsers(prev => {
+        const exists = prev.find(u => u.id === authedUser.id);
+        if (exists) {
+          return prev.map(u => u.id === authedUser.id ? { ...u, ...authedUser } : u);
+        }
+        return [...prev, authedUser];
+      });
+      setCurrentUser(authedUser);
+      setIsLoggedIn(true);
+
+      try {
+        localStorage.setItem('morajaws_logged_in', 'true');
+        localStorage.setItem('morajaws_auth_session', JSON.stringify({
+          userId: authedUser.id,
+          username: authedUser.username,
+          role: authedUser.role,
+          name: authedUser.name,
+          loginAt: authedUser.lastLoginAt,
+          token: data.token,
+          sessionId: data.sessionId,
+          expiresAt: data.expiresAt
+        }));
+      } catch (e) {}
+
+      addAuditLog('Login Success', 'auth', authedUser.id, `Pengguna ${authedUser.name} (${authedUser.role}) berhasil login ke sistem`);
+      await loadCentralData();
+      return { success: true, user: authedUser };
+
+    } catch (err: any) {
+      console.error('[Auth] Login exception:', err);
+      return {
+        success: false,
+        error: err?.message || 'Terjadi gangguan saat memproses autentikasi.',
+        errorCode: 'AUTH_EXCEPTION'
+      };
     }
-
-    const found = users.find(u => (u.username.toLowerCase() === cleanUser || u.email?.toLowerCase() === cleanUser) && !u.isArchived);
-
-    if (!found || (found.passwordHash && found.passwordHash !== hash)) {
-      addAuditLog('Login Attempt Failed', 'auth', cleanUser, `Percobaan login gagal untuk username/email: ${cleanUser}`);
-      return { success: false, error: 'Username atau kata sandi yang Anda masukkan salah.' };
-    }
-
-    if (!found.active) {
-      addAuditLog('Login Blocked Inactive', 'auth', found.id, `Akun dinonaktifkan mencoba login: ${found.username}`);
-      return { success: false, error: 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.' };
-    }
-
-    const now = new Date().toISOString();
-    const updatedUser: User = {
-      ...found,
-      lastLoginAt: now,
-      loginCount: (found.loginCount || 0) + 1
-    };
-
-    setUsers(prev => prev.map(u => u.id === found.id ? updatedUser : u));
-    setCurrentUser(updatedUser);
-    setIsLoggedIn(true);
-
-    try {
-      localStorage.setItem('morajaws_logged_in', 'true');
-      localStorage.setItem('morajaws_auth_session', JSON.stringify({
-        userId: found.id,
-        username: found.username,
-        role: found.role,
-        name: found.name,
-        loginAt: now,
-        token: `mora_${found.id}_${Date.now()}`
-      }));
-    } catch (e) {}
-
-    addAuditLog('Login Success', 'auth', found.id, `Pengguna ${found.name} (${found.role}) berhasil login ke sistem`);
-    await loadCentralData();
-    return { success: true, user: updatedUser };
   };
 
-  const loginWithFirebase = async (firebaseData: { email: string; uid: string; displayName?: string }): Promise<{ success: boolean; error?: string; user?: User }> => {
+  const loginWithFirebase = async (firebaseData: { email: string; uid: string; displayName?: string; idToken?: string }): Promise<{ success: boolean; error?: string; user?: User }> => {
     try {
       const serverRes = await fetch('/api/auth/firebase-login', {
         method: 'POST',
@@ -1073,6 +1446,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('morajaws_auth_session');
     } catch (e) {}
 
+    // Sign out from Firebase Authentication
+    try {
+      signOut(auth).catch(() => {});
+    } catch (e) {}
+
     fetch('/api/auth/logout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
@@ -1171,19 +1549,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const now = new Date().toISOString();
     if (permanent) {
       setUsers(prev => prev.filter(u => u.id !== userId));
+      deleteUserFromFirestore(userId)
+        .then(() => toast.warning(`Akun ${target.name} (@${target.username}) telah dihapus permanen dari Cloud Firestore.`, 'Akun Dihapus Permanen'))
+        .catch(err => toast.error('Gagal menghapus user dari Cloud Firestore: ' + (err?.message || err)));
       addAuditLog('User Permanently Deleted', 'auth', userId, `Super Admin ${currentUser.name} menghapus permanen akun ${target.name} (@${target.username}). Alasan: ${reason}`);
-      toast.warning(`Akun ${target.name} (@${target.username}) telah dihapus secara permanen.`, 'Akun Dihapus Permanen');
     } else {
-      setUsers(prev => prev.map(u => (u.id === userId ? {
-        ...u,
+      const softDeleted = {
+        ...target,
         isArchived: true,
         active: false,
         deletedAt: now,
         deletedBy: currentUser.name,
         deletionReason: reason
-      } : u)));
+      };
+      setUsers(prev => prev.map(u => (u.id === userId ? softDeleted : u)));
+      softDeleteUserInFirestore(userId, currentUser.name, reason)
+        .then(() => toast.warning(`Akun ${target.name} (@${target.username}) berhasil dinonaktifkan & ditandai terhapus di Cloud Firestore.`, 'Akun Dihapus (Soft Delete)'))
+        .catch(err => toast.error('Gagal memperbarui status user di Cloud Firestore: ' + (err?.message || err)));
       addAuditLog('User Soft Deleted', 'auth', userId, `Super Admin ${currentUser.name} menonaktifkan & menandai terhapus (soft delete) akun ${target.name} (@${target.username}). Alasan: ${reason}`);
-      toast.warning(`Akun ${target.name} (@${target.username}) berhasil dinonaktifkan & ditandai terhapus.`, 'Akun Dihapus (Soft Delete)');
     }
 
     fetch(`/api/users/${userId}`, {
@@ -1193,6 +1576,118 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }).catch(e => console.error('Error syncing user deletion to server:', e));
 
     return { success: true };
+  };
+
+  const updateUser = async (userId: string, updates: Partial<User>): Promise<{ success: boolean; error?: string }> => {
+    if (currentUser.role !== 'super_admin' && currentUser.id !== userId) {
+      const isLeaderManagingOwnInstaller =
+        currentUser.role === 'leader' &&
+        users.find(u => u.id === userId)?.role === 'installer' &&
+        users.find(u => u.id === userId)?.contractor === currentUser.contractor;
+      if (!isLeaderManagingOwnInstaller) {
+        const err = 'Akses Ditolak: Anda tidak memiliki wewenang untuk mengubah data pengguna ini.';
+        toast.error(err, 'Akses Ditolak');
+        return { success: false, error: err };
+      }
+    }
+
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) {
+      return { success: false, error: 'Pengguna tidak ditemukan.' };
+    }
+
+    // Name and Username uniqueness validation
+    if (updates.name) {
+      const cleanName = updates.name.trim().replace(/\s+/g, ' ');
+      const nameTaken = users.some(
+        u => u.id !== userId && !u.isDeleted && u.name.trim().replace(/\s+/g, ' ').toLowerCase() === cleanName.toLowerCase()
+      );
+      if (nameTaken) {
+        const err = 'AKUN SUDAH TERDAFTAR – Nama atau username sudah digunakan.';
+        toast.error(err, 'Validasi Gagal');
+        return { success: false, error: err };
+      }
+    }
+
+    if (updates.username) {
+      const cleanUsername = updates.username.trim().toLowerCase().replace(/\s+/g, '');
+      const usernameTaken = users.some(
+        u => u.id !== userId && !u.isDeleted && u.username.trim().toLowerCase() === cleanUsername
+      );
+      if (usernameTaken) {
+        const err = 'AKUN SUDAH TERDAFTAR – Nama atau username sudah digunakan.';
+        toast.error(err, 'Validasi Gagal');
+        return { success: false, error: err };
+      }
+    }
+
+    const updatedUser: User = {
+      ...targetUser,
+      ...updates,
+      name: updates.name ? updates.name.trim().replace(/\s+/g, ' ') : targetUser.name,
+      username: updates.username ? updates.username.trim().toLowerCase().replace(/\s+/g, '') : targetUser.username,
+      id: userId
+    };
+
+    setUsers(prev => prev.map(u => (u.id === userId ? updatedUser : u)));
+
+    try {
+      setSyncStatus('SYNCING');
+      await saveUserToFirestore(updatedUser);
+      setSyncStatus('SAVED');
+      setLastSyncTime(new Date().toISOString());
+
+      // Sync with backend API
+      await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(updates)
+      });
+
+      toast.success(`Data akun ${updatedUser.name} berhasil diperbarui di Cloud Firestore.`, 'Akun Diperbarui');
+      addAuditLog('User Account Updated', 'auth', userId, `${currentUser.name} memperbarui profil pengguna ${updatedUser.name}`);
+      return { success: true };
+    } catch (err: any) {
+      setSyncStatus('ERROR');
+      toast.error('Gagal menyimpan perubahan pengguna: ' + (err?.message || err));
+      return { success: false, error: err?.message || 'Gagal update pengguna' };
+    }
+  };
+
+  const executeComprehensiveDeduplication = async (): Promise<DuplicateAuditReport> => {
+    const report = auditAndCleanDuplicates(tickets, (action, _entity, id, details) => {
+      addAuditLog(action, 'ticket', id, details);
+    });
+    if (report.duplicatesCleaned > 0) {
+      setTickets(report.cleanedTicketList);
+      if (report.mergedMasterTickets.length > 0) {
+        try {
+          await batchSaveTicketsToFirestore(report.mergedMasterTickets);
+        } catch (e) {
+          console.warn('[Firestore] Error saving merged master tickets:', e);
+        }
+      }
+      if (report.duplicateDocIdsToDelete.length > 0) {
+        try {
+          await batchDeleteTicketsFromFirestore(report.duplicateDocIdsToDelete);
+        } catch (e) {
+          console.warn('[Firestore] Error deleting duplicate docs:', e);
+        }
+      }
+      addAuditLog(
+        'Automated Deduplication Executed',
+        'database_sync',
+        'audit_clean',
+        `Pembersihan duplikasi selesai: ${report.duplicatesCleaned} duplikat dibersihkan, ${report.totalValid} dokumen valid dipertahankan, ${report.conflictsFound} konflik ditandai.`
+      );
+      toast.success(
+        `Pembersihan selesai: ${report.duplicatesCleaned} duplikasi dibersihkan dari ${report.totalExamined} dokumen.`,
+        'Rekonsiliasi Sukses'
+      );
+    } else {
+      toast.info('Database bersih! Tidak ditemukan record duplikat yang perlu dibersihkan.', 'Pemeriksaan Selesai');
+    }
+    return report;
   };
 
   const deleteCustomerData = (customerId: string, reason: string): { success: boolean; error?: string } => {
@@ -1206,39 +1701,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const now = new Date().toISOString();
+    const affectedTickets: Ticket[] = [];
     setTickets(prev => prev.map(t => {
       const isTarget = t.idCustomer === customerId || t.customerId === customerId;
       if (!isTarget) return t;
-      return {
+      const updatedT: Ticket = {
         ...t,
         isDeleted: true,
         deletedAt: now,
         deletedBy: currentUser.name,
         deletionReason: `Penghapusan data pelanggan ID ${customerId}: ${reason}`
       };
+      affectedTickets.push(updatedT);
+      return updatedT;
     }));
 
+    if (affectedTickets.length > 0) {
+      setSyncStatus('SYNCING');
+      batchSaveTicketsToFirestore(affectedTickets)
+        .then(() => {
+          setSyncStatus('SAVED');
+          setLastSyncTime(new Date().toISOString());
+        })
+        .catch(err => {
+          setSyncStatus('ERROR');
+          console.warn('[Firestore] Error soft-deleting customer tickets:', err);
+        });
+    }
+
     addAuditLog('Customer Data Deleted', 'ticket', customerId, `Super Admin ${currentUser.name} menghapus data pelanggan ID ${customerId}. Alasan: ${reason}`);
-    toast.warning(`Data pelanggan ID ${customerId} berhasil dihapus dari sistem.`, 'Data Pelanggan Dihapus');
+    toast.warning(`Data pelanggan ID ${customerId} dan ${affectedTickets.length} tiket terkait berhasil dihapus dari Cloud Firestore.`, 'Data Pelanggan Dihapus');
     return { success: true };
   };
 
   // Account Registration
   const registerDispatchAccount = (data: { name: string; username: string; phone?: string; email?: string }) => {
     if (currentUser.role !== 'super_admin') {
-      addAuditLog('Unauthorized Staff Registration Blocked', 'auth', 'dispatch', `Ditolak: Leader/Staf ${currentUser.name} (${currentUser.role}) mencoba mendaftarkan akun Dispatch. Leader tidak dapat membuat akun staf selain installer.`);
-      return { success: false, error: 'Akses Ditolak: Leader tidak dapat membuat akun staf lain selain Installer. Pendaftaran Dispatch hanya dapat dilakukan oleh Super Admin.' };
+      addAuditLog('Unauthorized Staff Registration Blocked', 'auth', 'dispatch', `Ditolak: Leader/Staf ${currentUser.name} (${currentUser.role}) mencoba mendaftarkan akun Dispatch.`);
+      return { success: false, error: 'Akses Ditolak: Hanya Super Admin yang berwenang mendaftarkan akun Dispatch.' };
     }
-    const cleanUsername = data.username.trim().toLowerCase();
-    if (!cleanUsername) return { success: false, error: 'Username wajib diisi.' };
 
-    if (users.some(u => u.username.toLowerCase() === cleanUsername)) {
-      return { success: false, error: `Username "${cleanUsername}" sudah digunakan. Gunakan username lain.` };
+    const cleanName = data.name.trim().replace(/\s+/g, ' ');
+    const cleanUsername = data.username.trim().toLowerCase().replace(/\s+/g, '');
+    if (!cleanName || !cleanUsername) {
+      return { success: false, error: 'Nama lengkap dan username wajib diisi.' };
+    }
+
+    // Check uniqueness of both name and username across all registered users
+    const isNameTaken = users.some(u => !u.isDeleted && u.name.trim().replace(/\s+/g, ' ').toLowerCase() === cleanName.toLowerCase());
+    const isUsernameTaken = users.some(u => !u.isDeleted && u.username.trim().toLowerCase() === cleanUsername);
+
+    if (isNameTaken || isUsernameTaken) {
+      const err = 'AKUN SUDAH TERDAFTAR – Nama atau username sudah digunakan.';
+      toast.error(err, 'Registrasi Ditolak');
+      return { success: false, error: err };
     }
 
     const newUser: User = {
       id: 'u-' + Date.now(),
-      name: data.name.trim(),
+      name: cleanName,
       username: cleanUsername,
       email: data.email?.trim() || `${cleanUsername}@morajaws.net`,
       phone: data.phone?.trim(),
@@ -1265,15 +1786,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const registerLeaderAccount = (data: { name: string; username: string; phone?: string; contractor: string; area: string; email?: string }) => {
     if (currentUser.role !== 'super_admin') {
-      addAuditLog('Unauthorized Staff Registration Blocked', 'auth', 'leader', `Ditolak: Leader/Staf ${currentUser.name} (${currentUser.role}) mencoba mendaftarkan akun Leader. Leader tidak dapat membuat akun staf selain installer.`);
+      addAuditLog('Unauthorized Staff Registration Blocked', 'auth', 'leader', `Ditolak: Leader/Staf ${currentUser.name} (${currentUser.role}) mencoba mendaftarkan akun Leader.`);
       toast.error('Akses Ditolak: Leader tidak dapat membuat akun staf selain Installer.', 'Otoritas Dibatasi');
-      return { success: false, error: 'Akses Ditolak: Leader tidak dapat membuat akun staf lain selain Installer. Pendaftaran Leader hanya dapat dilakukan oleh Super Admin.' };
+      return { success: false, error: 'Akses Ditolak: Pendaftaran Leader hanya dapat dilakukan oleh Super Admin.' };
     }
-    const cleanUsername = data.username.trim().toLowerCase();
-    if (!cleanUsername) return { success: false, error: 'Username wajib diisi.' };
 
-    if (users.some(u => u.username.toLowerCase() === cleanUsername)) {
-      return { success: false, error: `Username "${cleanUsername}" sudah digunakan. Gunakan username lain.` };
+    const cleanName = data.name.trim().replace(/\s+/g, ' ');
+    const cleanUsername = data.username.trim().toLowerCase().replace(/\s+/g, '');
+    if (!cleanName || !cleanUsername) {
+      return { success: false, error: 'Nama lengkap dan username wajib diisi.' };
+    }
+
+    // Check uniqueness of both name and username across all registered users
+    const isNameTaken = users.some(u => !u.isDeleted && u.name.trim().replace(/\s+/g, ' ').toLowerCase() === cleanName.toLowerCase());
+    const isUsernameTaken = users.some(u => !u.isDeleted && u.username.trim().toLowerCase() === cleanUsername);
+
+    if (isNameTaken || isUsernameTaken) {
+      const err = 'AKUN SUDAH TERDAFTAR – Nama atau username sudah digunakan.';
+      toast.error(err, 'Registrasi Ditolak');
+      return { success: false, error: err };
     }
 
     const contractorInput = data.contractor.trim();
@@ -1292,7 +1823,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         name: contractorInput,
         code,
         coverageAreas: data.area ? [data.area] : ['Jabodetabek'],
-        leaderName: data.name.trim(),
+        leaderName: cleanName,
         phone: data.phone?.trim(),
         email: data.email?.trim() || `ops@${code.toLowerCase()}.morajaws.net`,
         active: true,
@@ -1304,13 +1835,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'Contractor Auto-Registered with Leader',
         'ui_config',
         matchedContractor.id,
-        `Kontraktor ${matchedContractor.name} (${matchedContractor.code}) didaftarkan otomatis saat membuat akun Leader ${data.name}`
+        `Kontraktor ${matchedContractor.name} (${matchedContractor.code}) didaftarkan otomatis saat membuat akun Leader ${cleanName}`
       );
     } else {
       // Ensure area is added to contractor coverage if not already there
       if (data.area && !matchedContractor.coverageAreas.some(a => a.toLowerCase() === data.area.toLowerCase())) {
         const updatedAreas = [...matchedContractor.coverageAreas, data.area];
-        const updatedContractorObj = { ...matchedContractor, coverageAreas: updatedAreas, leaderName: matchedContractor.leaderName || data.name.trim() };
+        const updatedContractorObj = { ...matchedContractor, coverageAreas: updatedAreas, leaderName: matchedContractor.leaderName || cleanName };
         setContractors(prev =>
           prev.map(c => c.id === matchedContractor!.id ? updatedContractorObj : c)
         );
@@ -1320,7 +1851,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const newUser: User = {
       id: 'u-' + Date.now(),
-      name: data.name.trim(),
+      name: cleanName,
       username: cleanUsername,
       email: data.email?.trim() || `${cleanUsername}@${matchedContractor.code.toLowerCase()}.com`,
       phone: data.phone?.trim(),
@@ -1363,32 +1894,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const registerInstallerAccount = (data: { name: string; username: string; phone: string; email?: string }) => {
-    // Both Leader (for their contractor) and Super Admin can register installers
+    // Both Leader (for their contractor/area) and Super Admin can register installers
     if (currentUser.role !== 'leader' && currentUser.role !== 'super_admin') {
       toast.error('Hanya Leader / Korlap atau Super Admin yang berwenang mendaftarkan Installer.', 'Akses Ditolak');
       return { success: false, error: 'Hanya Leader / Korlap atau Super Admin yang berwenang mendaftarkan Installer.' };
     }
 
-    const cleanUsername = data.username.trim().toLowerCase();
-    if (!cleanUsername) return { success: false, error: 'Username wajib diisi.' };
-
-    if (users.some(u => u.username.toLowerCase() === cleanUsername)) {
-      return { success: false, error: `Username "${cleanUsername}" sudah digunakan. Gunakan username lain.` };
+    const cleanName = data.name.trim().replace(/\s+/g, ' ');
+    const cleanUsername = data.username.trim().toLowerCase().replace(/\s+/g, '');
+    if (!cleanName || !cleanUsername) {
+      return { success: false, error: 'Nama lengkap dan username login wajib diisi.' };
     }
 
-    const contractorName = currentUser.role === 'leader' ? (currentUser.contractor || 'PT Mitra Jaringan Solusi') : (contractors[0]?.name || 'PT Mitra Jaringan Solusi');
+    // Check uniqueness of both name and username across all registered users
+    const isNameTaken = users.some(u => !u.isDeleted && u.name.trim().replace(/\s+/g, ' ').toLowerCase() === cleanName.toLowerCase());
+    const isUsernameTaken = users.some(u => !u.isDeleted && u.username.trim().toLowerCase() === cleanUsername);
+
+    if (isNameTaken || isUsernameTaken) {
+      const err = 'AKUN SUDAH TERDAFTAR – Nama atau username sudah digunakan.';
+      toast.error(err, 'Registrasi Ditolak');
+      return { success: false, error: err };
+    }
+
+    // Contractor and Area strictly locked to Leader's authorized scope
+    const contractorName = currentUser.role === 'leader'
+      ? (currentUser.contractor || 'PT Mitra Jaringan Solusi')
+      : (contractors[0]?.name || 'PT Mitra Jaringan Solusi');
     const contractorObj = contractors.find(c => c.name === contractorName);
+    const assignedArea = currentUser.role === 'leader'
+      ? (currentUser.area || contractorObj?.coverageAreas[0] || 'Jakarta Selatan')
+      : (contractorObj?.coverageAreas[0] || 'Jakarta Selatan');
 
     const newUser: User = {
       id: 'u-' + Date.now(),
-      name: data.name.trim(),
+      name: cleanName,
       username: cleanUsername,
       email: data.email?.trim() || `${cleanUsername}@installer.morajaws.net`,
       phone: data.phone.trim(),
       role: 'installer',
       contractor: contractorName,
       contractorId: contractorObj?.id,
-      area: currentUser.area || contractorObj?.coverageAreas[0] || 'Jabodetabek',
+      area: assignedArea,
       active: true,
       mustChangePassword: true,
       createdAt: new Date().toISOString()
@@ -1396,7 +1942,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setUsers(prev => [...prev, newUser]);
     saveUserToFirestore(newUser).catch(e => console.warn('[Firestore] Error saving installer user:', e));
-    addAuditLog('Installer Account Registered', 'auth', newUser.id, `${currentUser.name} registered Installer: ${newUser.name} under ${contractorName}`);
+    addAuditLog('Installer Account Registered', 'auth', newUser.id, `${currentUser.name} registered Installer: ${newUser.name} under ${contractorName} (${assignedArea})`);
 
     fetch('/api/users', {
       method: 'POST',
@@ -1404,7 +1950,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       body: JSON.stringify(newUser)
     }).catch(e => console.error('Error syncing installer account to server:', e));
 
-    toast.success(`Teknisi ${newUser.name} berhasil didaftarkan ke ${contractorName}! Password default: 12345678`, 'Teknisi Ditambahkan');
+    toast.success('BERHASIL – Akun Installer berhasil dibuat.', 'Registrasi Sukses');
     return { success: true, user: newUser };
   };
 
@@ -1499,6 +2045,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }).catch(e => console.error('Error syncing contractor update to server:', e));
   };
 
+  const deleteContractor = async (contractorId: string): Promise<{ success: boolean; error?: string }> => {
+    if (currentUser.role !== 'super_admin') {
+      const err = 'Akses Ditolak: Hanya Super Admin yang berwenang menghapus mitra kontraktor.';
+      toast.error(err, 'Akses Ditolak');
+      return { success: false, error: err };
+    }
+    const target = contractors.find(c => c.id === contractorId);
+    if (!target) return { success: false, error: 'Kontraktor tidak ditemukan.' };
+
+    setContractors(prev => prev.filter(c => c.id !== contractorId));
+    try {
+      setSyncStatus('SYNCING');
+      await deleteContractorFromFirestore(contractorId);
+      setSyncStatus('SAVED');
+      setLastSyncTime(new Date().toISOString());
+      addAuditLog('Contractor Deleted', 'ui_config', contractorId, `Super Admin ${currentUser.name} menghapus kontraktor ${target.name}`);
+      toast.warning(`Kontraktor ${target.name} berhasil dihapus dari Cloud Firestore.`, 'Kontraktor Dihapus');
+      return { success: true };
+    } catch (err: any) {
+      setSyncStatus('ERROR');
+      toast.error('Gagal menghapus kontraktor di Cloud Firestore: ' + (err?.message || err));
+      return { success: false, error: err?.message };
+    }
+  };
+
   const autoRegisterContractors = (
     contractorsToRegister: Contractor[],
     newCoverageAreasList: CoverageArea[] = []
@@ -1587,6 +2158,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('Coverage Area Updated', 'ui_config', id, `Updated coverage area: ${updates.name || id}`);
   };
 
+  const deleteCoverageArea = async (areaId: string): Promise<{ success: boolean; error?: string }> => {
+    if (currentUser.role !== 'super_admin') {
+      const err = 'Akses Ditolak: Hanya Super Admin yang berwenang menghapus area coverage.';
+      toast.error(err, 'Akses Ditolak');
+      return { success: false, error: err };
+    }
+    const target = coverageAreas.find(a => a.id === areaId);
+    if (!target) return { success: false, error: 'Area coverage tidak ditemukan.' };
+
+    setCoverageAreas(prev => prev.filter(a => a.id !== areaId));
+    try {
+      setSyncStatus('SYNCING');
+      await deleteCoverageAreaFromFirestore(areaId);
+      setSyncStatus('SAVED');
+      setLastSyncTime(new Date().toISOString());
+      addAuditLog('Coverage Area Deleted', 'ui_config', areaId, `Super Admin ${currentUser.name} menghapus area ${target.name}`);
+      toast.warning(`Area coverage ${target.name} berhasil dihapus dari Cloud Firestore.`, 'Area Dihapus');
+      return { success: true };
+    } catch (err: any) {
+      setSyncStatus('ERROR');
+      toast.error('Gagal menghapus area coverage di Cloud Firestore: ' + (err?.message || err));
+      return { success: false, error: err?.message };
+    }
+  };
+
   // Root Cause Management
   const updateRootCauseCategories = (categories: RootCauseCategory[]) => {
     setRootCauseCategories(categories);
@@ -1601,13 +2197,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const ticket = getTicketById(ticketId);
     if (!ticket) return { success: false, error: 'Tiket tidak ditemukan.' };
 
+    const now = new Date().toISOString();
     const report: TechnicalReport = {
       ...reportData,
       id: 'rep-' + Date.now(),
       ticketId,
       submittedBy: currentUser.name,
-      submittedAt: new Date().toISOString()
+      submittedAt: now
     };
+
+    // Requirement 3.B: Auto check-out on valid technical report save
+    let checkOutAtVal: string | undefined = ticket.checkOutAt;
+    let workDurationMinVal: number | undefined = ticket.workDurationMinutes;
+    let workDurationStrVal: string | undefined = ticket.workDurationFormatted;
+    let workSessionStatusVal = ticket.workSessionStatus || (ticket.checkInAt ? 'Sedang Dikerjakan' : 'Belum Check-in');
+    let updatedSessions = Array.isArray(ticket.workSessions) ? [...ticket.workSessions] : [];
+
+    if (ticket.checkInAt && (!ticket.checkOutAt || ticket.workSessionStatus === 'Sedang Dikerjakan')) {
+      checkOutAtVal = now;
+      workSessionStatusVal = 'Selesai';
+      const mins = calculateDurationMinutes(ticket.checkInAt, now);
+      workDurationMinVal = mins;
+      workDurationStrVal = formatWorkDuration(mins);
+
+      if (updatedSessions.length > 0) {
+        const last = updatedSessions[updatedSessions.length - 1];
+        if (last && (last.status === 'Sedang Dikerjakan' || !last.checkOutAt)) {
+          last.checkOutAt = now;
+          last.status = 'Selesai';
+          last.durationMinutes = mins;
+          last.durationFormatted = workDurationStrVal;
+        }
+      } else {
+        updatedSessions.push({
+          sessionId: 'ws_' + Date.now(),
+          checkInAt: ticket.checkInAt,
+          checkOutAt: now,
+          durationMinutes: mins,
+          durationFormatted: workDurationStrVal,
+          status: 'Selesai'
+        });
+      }
+    }
 
     setTickets(prev =>
       prev.map(t => {
@@ -1623,9 +2254,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           technicalReport: report,
           statusWOInstaller: nextInstallerStatus,
           statusWOAgent: nextInstallerStatus === 'Completed' ? 'Resolved' : t.statusWOAgent,
+          checkOutAt: checkOutAtVal,
+          workDurationMinutes: workDurationMinVal,
+          workDurationFormatted: workDurationStrVal,
+          workSessionStatus: workSessionStatusVal,
+          workSessions: updatedSessions,
           _offlineSyncStatus: !isOnline ? 'pending' : 'synced',
-          _offlineLastModified: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          _offlineLastModified: now,
+          updatedAt: now,
           updatedBy: currentUser.name
         };
       })
@@ -1636,10 +2272,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ticketId,
       woNumber: ticket.woNumber,
       action: 'Laporan Pekerjaan Teknisi Diserahkan',
-      description: `Root Cause: ${report.rootCause} | Hasil: ${report.workResult}`,
+      description: `Root Cause: ${report.rootCause} | Hasil: ${report.workResult}${checkOutAtVal ? ` | Check-out: ${formatJakartaTimestamp(checkOutAtVal)} (Durasi: ${workDurationStrVal})` : ''}`,
       performedBy: currentUser.name,
       userRole: currentUser.role,
-      timestamp: new Date().toISOString()
+      timestamp: now
     };
     setTicketActivities(prev => [activity, ...prev]);
 
@@ -1662,18 +2298,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...ticket,
       technicalReport: report,
       statusWOInstaller: reportData.workResult === 'Tidak Berhasil' ? 'Failed / Cancelled' : reportData.workResult === 'Pekerjaan Tertunda' ? 'Pending Technical' : 'Completed',
-      statusWOAgent: reportData.workResult === 'Pekerjaan Berhasil' || reportData.workResult === 'Selesai' ? 'Resolved' : ticket.statusWOAgent,
+      statusWOAgent: 'In Progress',
+      approvalStatus: 'BUTUH APPROVAL',
+      checkOutAt: checkOutAtVal,
+      workDurationMinutes: workDurationMinVal,
+      workDurationFormatted: workDurationStrVal,
+      workSessionStatus: workSessionStatusVal,
+      workSessions: updatedSessions,
       _offlineSyncStatus: !isOnline ? 'pending' : 'synced',
-      _offlineLastModified: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      _offlineLastModified: now,
+      updatedAt: now,
       updatedBy: currentUser.name
     };
 
+    setSyncStatus('SYNCING');
     saveTicketToFirestore(updatedWithReport)
       .then(() => {
-        toast.success(`Laporan teknis lapangan untuk WO ${ticket.woNumber} berhasil disimpan ke Cloud Firestore.`, 'Laporan Teknis Tersimpan');
+        setSyncStatus('SAVED');
+        setLastSyncTime(new Date().toISOString());
+        toast.success(`Laporan teknis lapangan untuk WO ${ticket.woNumber} berhasil disimpan (BUTUH APPROVAL).`, 'Laporan Teknis Tersimpan');
       })
       .catch(err => {
+        setSyncStatus('ERROR');
         if (!isOnline) {
           toast.warning(`Laporan teknis WO ${ticket.woNumber} tersimpan offline di IndexedDB lokal.`, 'Laporan Offline');
         } else {
@@ -1691,25 +2337,228 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
+  const isInstallerMatch = (ticketInstaller: string | undefined, installerName: string): boolean => {
+    if (!ticketInstaller || !installerName) return false;
+    const tInst = ticketInstaller.toLowerCase().trim();
+    const effInst = installerName.toLowerCase().trim();
+    if (tInst === effInst) return true;
+    if (tInst.includes(effInst) || effInst.includes(tInst)) return true;
+    const cleanEff = effInst.replace(/\(.*?\)/g, '').trim();
+    if (cleanEff && (tInst.includes(cleanEff) || cleanEff.includes(tInst))) return true;
+    return false;
+  };
+
+  const startWorkOnTicket = async (
+    ticketId: string
+  ): Promise<{ success: boolean; error?: string; ticket?: Ticket }> => {
+    const ticket = getTicketById(ticketId);
+    if (!ticket) return { success: false, error: 'Tiket tidak ditemukan.' };
+
+    // 1. Ownership validation for field technician
+    if (currentUser.role === 'installer') {
+      const myId = currentUser.id || '';
+      const myUsername = (currentUser.username || '').toLowerCase().trim();
+      const myName = (currentUser.name || '').toLowerCase().trim();
+      const tInst = (ticket.installerName || '').toLowerCase().trim();
+
+      const isMine =
+        (myId && (ticket.assignedTo === myId || ticket.installerId === myId || ticket.assignedToUid === myId)) ||
+        (myUsername && ticket.assignedTo?.toLowerCase() === myUsername) ||
+        (myName && (tInst === myName || isInstallerMatch(ticket.installerName, myName)));
+
+      if (!isMine) {
+        return {
+          success: false,
+          error: 'Akses Ditolak: Anda hanya berwenang memulai pengerjaan untuk tiket yang ditugaskan kepada Anda.'
+        };
+      }
+    }
+
+    // 2. Check current status: if already in progress or completed, do not regress status, just open it
+    const alreadyStarted =
+      ticket.workStartedAt ||
+      ticket.statusWOInstaller === 'On Site' ||
+      ticket.statusWOInstaller === 'En Route' ||
+      ticket.statusWOInstaller === 'Completed' ||
+      ticket.statusWOInstaller === 'Installed' ||
+      ticket.approvalStatus === 'BUTUH APPROVAL' ||
+      ticket.approvalStatus === 'APPROVED';
+
+    if (alreadyStarted) {
+      return { success: true, ticket };
+    }
+
+    // 3. Mark ticket as In Progress / On Site
+    const now = new Date().toISOString();
+    const updatedTicket: Ticket = {
+      ...ticket,
+      statusWOInstaller: 'On Site',
+      statusWOAgent: 'In Progress',
+      workStartedAt: now,
+      workStartedBy: currentUser.name,
+      workStartedById: currentUser.id,
+      updatedAt: now,
+      updatedBy: currentUser.name
+    };
+
+    setTickets(prev => prev.map(t => (t.id === ticketId ? updatedTicket : t)));
+
+    const activity: TicketActivity = {
+      id: 'act-' + Date.now(),
+      ticketId,
+      woNumber: ticket.woNumber,
+      action: 'Mulai Pengerjaan',
+      description: `Teknisi ${currentUser.name} mulai mengerjakan Work Order di lokasi`,
+      performedBy: currentUser.name,
+      userRole: currentUser.role,
+      timestamp: now
+    };
+    setTicketActivities(prev => [activity, ...prev]);
+
+    addAuditLog(
+      'Work Started',
+      'ticket',
+      ticketId,
+      `Teknisi ${currentUser.name} memulai pengerjaan untuk WO ${ticket.woNumber}`
+    );
+
+    // Persist to Cloud Firestore
+    try {
+      await saveTicketToFirestore(updatedTicket);
+    } catch (err: any) {
+      console.warn('[Firestore] Error saving workStarted status:', err);
+    }
+
+    return { success: true, ticket: updatedTicket };
+  };
+
   const saveProgressReport = async (
     ticketId: string,
-    data: { reportStatus: string; reasonReport: string; rootCause: string; remarksReport: string }
+    data: {
+      reportStatus: string;
+      reasonReport: string;
+      rootCause: string;
+      remarksReport: string;
+      reportStatusId?: string;
+      reportStatusLabel?: string;
+      reasonReportId?: string;
+      reasonReportLabel?: string;
+      rootcauseId?: string;
+      rootcauseLabel?: string;
+    }
   ): Promise<{ success: boolean; error?: string; report?: ProgressReportEntry }> => {
     const ticket = getTicketById(ticketId);
     if (!ticket) return { success: false, error: 'Tiket tidak ditemukan.' };
 
-    if (!data.reportStatus) {
-      return { success: false, error: 'Report Status wajib dipilih.' };
+    // 1. Strict Installer Assignment Verification
+    if (currentUser.role === 'installer') {
+      const myId = currentUser.id || '';
+      const myUsername = (currentUser.username || '').toLowerCase().trim();
+      const myName = (currentUser.name || '').toLowerCase().trim();
+      const tInst = (ticket.installerName || '').toLowerCase().trim();
+
+      const isMine =
+        (myId && (ticket.assignedTo === myId || ticket.installerId === myId || ticket.assignedToUid === myId)) ||
+        (myUsername && ticket.assignedTo?.toLowerCase() === myUsername) ||
+        (myName && (tInst === myName || isInstallerMatch(ticket.installerName, myName)));
+
+      if (!isMine) {
+        return {
+          success: false,
+          error: 'Akses Ditolak: Anda hanya berwenang menyimpan laporan untuk tiket yang di-assign kepada Anda.'
+        };
+      }
     }
-    if (!data.reasonReport) {
-      return { success: false, error: 'Reason Report wajib dipilih.' };
+
+    // 2. Validate mandatory fields
+    if (!data.reportStatus?.trim()) {
+      return { success: false, error: 'Report Status (Level 1) wajib dipilih.' };
     }
-    if (!data.rootCause) {
-      return { success: false, error: 'Rootcause wajib dipilih.' };
+    if (!data.reasonReport?.trim()) {
+      return { success: false, error: 'Reason Report (Level 2) wajib dipilih.' };
     }
-    if (!data.remarksReport?.trim()) {
-      return { success: false, error: 'Remarks Report wajib diisi.' };
+    if (!data.rootCause?.trim()) {
+      return { success: false, error: 'Rootcause (Level 3 - Remarks) wajib dipilih.' };
     }
+
+    // 3. Strict 3-Tier Hierarchical Droplist Validation against Firestore appSettings/hierarchical_droplists
+    let matchedStatus: HierarchicalStatus | undefined;
+    let matchedReason: HierarchicalReason | undefined;
+    let matchedRemark: HierarchicalRemark | undefined;
+
+    if (hierarchicalStatuses && hierarchicalStatuses.length > 0) {
+      const normStatus = data.reportStatus.trim().toLowerCase();
+      matchedStatus = hierarchicalStatuses.find(
+        s => s.id === data.reportStatusId || s.name.trim().toLowerCase() === normStatus || (s.code && s.code.trim().toLowerCase() === normStatus)
+      );
+
+      if (!matchedStatus) {
+        return {
+          success: false,
+          error: `Validasi Gagal: Report Status "${data.reportStatus}" tidak terdaftar dalam konfigurasi Setting Droplist.`
+        };
+      }
+
+      const isStatusActive = matchedStatus.active !== false && (matchedStatus as any).isActive !== false;
+      if (!isStatusActive) {
+        return {
+          success: false,
+          error: `Validasi Gagal: Report Status "${matchedStatus.name}" telah dinonaktifkan oleh Admin untuk transaksi laporan baru.`
+        };
+      }
+
+      // Level 2 Reason Validation (Must strictly be child of matchedStatus)
+      const normReason = data.reasonReport.trim().toLowerCase();
+      matchedReason = (matchedStatus.reasons || []).find(
+        r => r.id === data.reasonReportId || r.name.trim().toLowerCase() === normReason
+      );
+
+      if (!matchedReason) {
+        return {
+          success: false,
+          error: `Validasi Gagal: Reason Report "${data.reasonReport}" bukan merupakan pilihan turunan (child) yang sah dari Status "${matchedStatus.name}".`
+        };
+      }
+
+      const isReasonActive = matchedReason.active !== false && (matchedReason as any).isActive !== false;
+      if (!isReasonActive) {
+        return {
+          success: false,
+          error: `Validasi Gagal: Reason Report "${matchedReason.name}" telah dinonaktifkan oleh Admin untuk transaksi laporan baru.`
+        };
+      }
+
+      // Level 3 Rootcause / Remarks Validation (Must strictly be sub-child of matchedReason)
+      const normRootcause = data.rootCause.trim().toLowerCase();
+      matchedRemark = (matchedReason.remarks || []).find(
+        rm => rm.id === data.rootcauseId ||
+              rm.name.trim().toLowerCase() === normRootcause ||
+              (rm.text && rm.text.trim().toLowerCase() === normRootcause)
+      );
+
+      if (!matchedRemark) {
+        return {
+          success: false,
+          error: `Validasi Gagal: Rootcause "${data.rootCause}" bukan merupakan pilihan turunan (sub-child) yang sah dari Reason "${matchedReason.name}".`
+        };
+      }
+
+      const isRemarkActive = matchedRemark.active !== false && (matchedRemark as any).isActive !== false;
+      if (!isRemarkActive) {
+        return {
+          success: false,
+          error: `Validasi Gagal: Rootcause "${matchedRemark.name}" telah dinonaktifkan oleh Admin untuk transaksi laporan baru.`
+        };
+      }
+    }
+
+    const finalStatusName = matchedStatus ? matchedStatus.name : data.reportStatus.trim();
+    const finalStatusId = matchedStatus ? matchedStatus.id : (data.reportStatusId || 'hs-' + finalStatusName.toLowerCase());
+    const finalReasonName = matchedReason ? matchedReason.name : data.reasonReport.trim();
+    const finalReasonId = matchedReason ? matchedReason.id : (data.reasonReportId || 'hr-' + finalReasonName.toLowerCase());
+    const finalRootcauseName = matchedRemark ? (matchedRemark.text || matchedRemark.name) : data.rootCause.trim();
+    const finalRootcauseId = matchedRemark ? matchedRemark.id : (data.rootcauseId || 'hrm-' + finalRootcauseName.toLowerCase());
+    const finalRemarks = (data.remarksReport || '').trim() || finalRootcauseName;
 
     const now = new Date().toISOString();
     const entry: ProgressReportEntry = {
@@ -1718,37 +2567,90 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       timestamp: now,
       submittedBy: currentUser.name,
       userRole: currentUser.role,
-      reportStatus: data.reportStatus,
-      reasonReport: data.reasonReport,
-      rootCause: data.rootCause,
-      remarksReport: data.remarksReport.trim(),
+      reportStatus: finalStatusName,
+      reportStatusId: finalStatusId,
+      reportStatusLabel: finalStatusName,
+      reasonReport: finalReasonName,
+      reasonReportId: finalReasonId,
+      reasonReportLabel: finalReasonName,
+      rootCause: finalRootcauseName,
+      rootcauseId: finalRootcauseId,
+      rootcauseLabel: finalRootcauseName,
+      remarksReport: finalRemarks,
       installerName: ticket.installerName,
       appointmentDate: ticket.appointmentDate || ticket.date,
-      slotTime: ticket.slotTime
+      slotTime: ticket.slotTime,
+      approvalStatus: 'BUTUH APPROVAL'
     };
 
     const techReport: TechnicalReport = {
       id: ticket.technicalReport?.id || ('rep-' + Date.now()),
       ticketId,
-      mainCategory: 'Report Status Lapangan',
-      rootCause: data.rootCause,
-      workResult: data.reasonReport,
-      technicalDescription: data.remarksReport.trim(),
-      correctiveAction: data.reasonReport,
+      mainCategory: finalStatusName,
+      rootCause: finalRootcauseName,
+      workResult: finalReasonName,
+      technicalDescription: finalRemarks,
+      correctiveAction: finalReasonName,
       submittedBy: currentUser.name,
       submittedAt: now
     };
 
-    const nextInstallerStatus = data.reportStatus as TicketStatusWOInstaller;
-    const isCompleted = data.reportStatus === 'Completed' || data.reportStatus === 'Installed';
+    const nextInstallerStatus = (matchedStatus?.code || finalStatusName) as TicketStatusWOInstaller;
+
+    // Requirement 3.B: Auto check-out on valid report save
+    let checkOutAtVal: string | undefined = ticket.checkOutAt;
+    let workDurationMinVal: number | undefined = ticket.workDurationMinutes;
+    let workDurationStrVal: string | undefined = ticket.workDurationFormatted;
+    let workSessionStatusVal = ticket.workSessionStatus || (ticket.checkInAt ? 'Sedang Dikerjakan' : 'Belum Check-in');
+    let updatedSessions = Array.isArray(ticket.workSessions) ? [...ticket.workSessions] : [];
+
+    if (ticket.checkInAt && (!ticket.checkOutAt || ticket.workSessionStatus === 'Sedang Dikerjakan')) {
+      checkOutAtVal = now;
+      workSessionStatusVal = 'Selesai';
+      const mins = calculateDurationMinutes(ticket.checkInAt, now);
+      workDurationMinVal = mins;
+      workDurationStrVal = formatWorkDuration(mins);
+
+      if (updatedSessions.length > 0) {
+        const last = updatedSessions[updatedSessions.length - 1];
+        if (last && (last.status === 'Sedang Dikerjakan' || !last.checkOutAt)) {
+          last.checkOutAt = now;
+          last.status = 'Selesai';
+          last.durationMinutes = mins;
+          last.durationFormatted = workDurationStrVal;
+        }
+      } else {
+        updatedSessions.push({
+          sessionId: 'ws_' + Date.now(),
+          checkInAt: ticket.checkInAt,
+          checkOutAt: now,
+          durationMinutes: mins,
+          durationFormatted: workDurationStrVal,
+          status: 'Selesai'
+        });
+      }
+    }
 
     const updatedWithProgress: Ticket = {
       ...ticket,
       progressReports: [entry, ...(ticket.progressReports || [])],
       statusWOInstaller: nextInstallerStatus,
-      statusWOAgent: isCompleted ? 'Resolved' : ticket.statusWOAgent,
-      remarksWOInstaller: data.remarksReport.trim(),
+      // Status proses WO agent tetap In Progress (menunggu approval resmi dari Dispatch)
+      statusWOAgent: 'In Progress',
+      approvalStatus: 'BUTUH APPROVAL',
+      reportStatusId: finalStatusId,
+      reportStatusLabel: finalStatusName,
+      reasonReportId: finalReasonId,
+      reasonReportLabel: finalReasonName,
+      rootcauseId: finalRootcauseId,
+      rootcauseLabel: finalRootcauseName,
+      remarksWOInstaller: finalRemarks,
       technicalReport: techReport,
+      checkOutAt: checkOutAtVal,
+      workDurationMinutes: workDurationMinVal,
+      workDurationFormatted: workDurationStrVal,
+      workSessionStatus: workSessionStatusVal,
+      workSessions: updatedSessions,
       _offlineSyncStatus: !isOnline ? 'pending' : 'synced',
       _offlineLastModified: now,
       updatedAt: now,
@@ -1763,8 +2665,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'act-' + Date.now(),
       ticketId,
       woNumber: ticket.woNumber,
-      action: `Progress Report: ${data.reportStatus}`,
-      description: `Reason: ${data.reasonReport} | Rootcause: ${data.rootCause} | Remarks: ${data.remarksReport.trim()}`,
+      action: `Progress Report: ${finalStatusName}`,
+      description: `Reason: ${finalReasonName} | Rootcause: ${finalRootcauseName} | Remarks: ${finalRemarks}`,
       performedBy: currentUser.name,
       userRole: currentUser.role,
       timestamp: now
@@ -1775,7 +2677,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'Progress Report Saved',
       'ticket',
       ticketId,
-      `Teknisi ${currentUser.name} melaporkan status ${data.reportStatus} untuk WO ${ticket.woNumber} (Reason: ${data.reasonReport})`
+      `Teknisi ${currentUser.name} melaporkan status ${finalStatusName} untuk WO ${ticket.woNumber} (Reason: ${finalReasonName}, Rootcause: ${finalRootcauseName})`
     );
 
     if (!isOnline) {
@@ -1783,7 +2685,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         entity: 'technical_report',
         entityId: ticketId,
         action: 'REPORT',
-        summary: `Progress Report WO ${ticket.woNumber} (${data.reportStatus})`,
+        summary: `Progress Report WO ${ticket.woNumber} (${finalStatusName})`,
         payload: { ticketId, entry },
         user: { id: currentUser.id, name: currentUser.name, role: currentUser.role }
       }).catch(e => console.warn('Offline progress report enqueue error', e));
@@ -1792,13 +2694,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Persist progress report to Cloud Firestore (Confirmed Write)
     try {
       if (isOnline) {
+        setSyncStatus('SYNCING');
         await saveTicketToFirestore(updatedWithProgress);
-        toast.success(`Progress report WO ${ticket.woNumber} berhasil disimpan ke Cloud Firestore.`, 'Progress Report Tersimpan');
+        setSyncStatus('SAVED');
+        setLastSyncTime(new Date().toISOString());
+        toast.success(
+          `Laporan WO ${ticket.woNumber} (${finalStatusName}) berhasil disimpan dan sedang menunggu approval Dispatch.`,
+          'Laporan Tersimpan (Butuh Approval)'
+        );
       } else {
         await saveTicketsOffline([updatedWithProgress]);
-        toast.warning(`Progress report WO ${ticket.woNumber} tersimpan offline di IndexedDB lokal.`, 'Laporan Offline');
+        toast.warning(`Laporan WO ${ticket.woNumber} tersimpan offline di IndexedDB lokal (Butuh Approval).`, 'Laporan Offline');
       }
     } catch (err: any) {
+      setSyncStatus('ERROR');
       console.error('Failed writing progress report to Firestore:', err);
       toast.error('Gagal menyimpan progress report ke Cloud Firestore: ' + (err?.message || err), 'Penyimpanan Gagal');
       return { success: false, error: err?.message || 'Gagal menyimpan ke Cloud Firestore' };
@@ -1807,7 +2716,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/${ticketId}/progress-report`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ entry, status: nextInstallerStatus, remarks: data.remarksReport })
+      body: JSON.stringify({
+        entry,
+        status: nextInstallerStatus,
+        remarks: finalRemarks,
+        reportStatusId: finalStatusId,
+        reportStatusLabel: finalStatusName,
+        reasonReportId: finalReasonId,
+        reasonReportLabel: finalReasonName,
+        rootcauseId: finalRootcauseId,
+        rootcauseLabel: finalRootcauseName
+      })
     }).catch(e => console.error('Error saving progress report to server:', e));
 
     return { success: true, report: entry };
@@ -1842,7 +2761,354 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
   };
 
+  const approveProgressReport = async (
+    ticketId: string,
+    notes?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (currentUser.role !== 'dispatch' && currentUser.role !== 'super_admin') {
+      return { success: false, error: 'Akses Ditolak: Hanya Dispatch dan Super Admin yang berwenang menyetujui laporan.' };
+    }
+
+    const ticket = getTicketById(ticketId);
+    if (!ticket) return { success: false, error: 'Tiket tidak ditemukan.' };
+
+    // 1. Validasi: Tombol APPROVE hanya dapat diproses jika WO benar-benar dalam status BUTUH APPROVAL
+    if (ticket.approvalStatus !== 'BUTUH APPROVAL') {
+      return {
+        success: false,
+        error: 'Validasi Gagal: Tombol APPROVE hanya dapat diproses jika tiket berstatus BUTUH APPROVAL.'
+      };
+    }
+
+    // 2. Validasi terhadap laporan Installer
+    const hasReport = (ticket.progressReports && ticket.progressReports.length > 0) || !!ticket.technicalReport;
+    if (!hasReport) {
+      return {
+        success: false,
+        error: 'Validasi Gagal: Laporan pengerjaan teknisi tidak ditemukan pada tiket ini.'
+      };
+    }
+
+    const now = new Date().toISOString();
+    const statusName = (ticket.reportStatusLabel || ticket.statusWOInstaller || '').toUpperCase();
+    const dispatchUid = currentUser.id || (currentUser as any).userId || currentUser.firebaseUid || '';
+
+    // Perbarui status approval pada progress report terakhir tanpa merusak histori
+    const updatedReports = (ticket.progressReports || []).map((p, idx) =>
+      idx === 0
+        ? {
+            ...p,
+            approvalStatus: 'APPROVED' as WOApprovalStatus,
+            approvedAt: now,
+            approvedBy: currentUser.name,
+            approvedById: dispatchUid
+          }
+        : p
+    );
+
+    // Update atomik: Status Approval APPROVED dan Status Ticket WO CLOSED tersimpan bersamaan
+    const updatedTicket: Ticket = {
+      ...ticket,
+      approvalStatus: 'APPROVED',
+      approvalNotes: notes || '',
+      approvedAt: now,
+      approvedBy: currentUser.name,
+      approvedById: dispatchUid,
+      progressReports: updatedReports,
+      technicalReport: ticket.technicalReport ? {
+        ...ticket.technicalReport,
+        verifiedByDispatch: true,
+        verifiedAt: now,
+        verifiedBy: currentUser.name
+      } : undefined,
+      // Status agen resmi CLOSED saat diapprove Dispatch
+      statusWOAgent: 'Closed',
+      closedAt: now,
+      closedBy: currentUser.name,
+      closedById: dispatchUid,
+      closeNotes: notes || 'Laporan teknisi disetujui (APPROVED) dan WO otomatis resmi ditutup (CLOSED) oleh Dispatch',
+      // Jika status teknisi masih aktif, tandai Completed
+      statusWOInstaller: (ticket.statusWOInstaller === 'Assigned' || ticket.statusWOInstaller === 'En Route' || ticket.statusWOInstaller === 'On Site')
+        ? 'Completed'
+        : ticket.statusWOInstaller,
+      updatedAt: now,
+      updatedBy: currentUser.name
+    };
+
+    setTickets(prev => prev.map(t => (t.id === ticketId ? updatedTicket : t)));
+
+    const activity: TicketActivity = {
+      id: 'act-' + Date.now(),
+      ticketId,
+      woNumber: ticket.woNumber,
+      action: 'Laporan Disetujui (Approved) & WO Resmi Closed',
+      description: `Dispatch ${currentUser.name} (UID: ${dispatchUid}) menyetujui laporan teknisi dan otomatis menutup tiket WO. Catatan: ${notes || '-'}`,
+      performedBy: currentUser.name,
+      userRole: currentUser.role,
+      timestamp: now
+    };
+    setTicketActivities(prev => [activity, ...prev]);
+
+    addAuditLog(
+      'Report Approved & Closed',
+      'ticket',
+      ticketId,
+      `Dispatch ${currentUser.name} (UID: ${dispatchUid}) menyetujui laporan dan otomatis menutup tiket WO ${ticket.woNumber} (Status: ${statusName} -> CLOSED)`
+    );
+
+    // Persist ke Cloud Firestore (Pastikan update Firestore berhasil sebelum mengembalikan success)
+    try {
+      await saveTicketToFirestore(updatedTicket);
+      toast.success(
+        'Ticket WO berhasil di-approve dan otomatis ditutup.',
+        'Approval Berhasil'
+      );
+    } catch (err: any) {
+      console.error('[Firestore] Error saving approved report:', err);
+      // Rollback local state jika gagal
+      setTickets(prev => prev.map(t => (t.id === ticketId ? ticket : t)));
+      return { success: false, error: err?.message || 'Gagal menyimpan status approval ke Cloud Firestore.' };
+    }
+
+    return { success: true };
+  };
+
+  const rejectProgressReport = async (
+    ticketId: string,
+    reason: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (currentUser.role !== 'dispatch' && currentUser.role !== 'super_admin') {
+      return { success: false, error: 'Akses Ditolak: Hanya Dispatch dan Super Admin yang berwenang menolak laporan.' };
+    }
+
+    if (!reason || !reason.trim()) {
+      return { success: false, error: 'Alasan penolakan / revisi laporan wajib diisi.' };
+    }
+
+    const ticket = getTicketById(ticketId);
+    if (!ticket) return { success: false, error: 'Tiket tidak ditemukan.' };
+
+    const now = new Date().toISOString();
+    const updatedReports = (ticket.progressReports || []).map((p, idx) =>
+      idx === 0
+        ? { ...p, approvalStatus: 'REJECTED' as WOApprovalStatus }
+        : p
+    );
+
+    const updatedTicket: Ticket = {
+      ...ticket,
+      approvalStatus: 'REJECTED',
+      rejectionReason: reason.trim(),
+      rejectedAt: now,
+      rejectedBy: currentUser.name,
+      rejectedById: currentUser.id,
+      progressReports: updatedReports,
+      statusWOAgent: 'In Progress', // Kembalikan ke proses agar teknisi merevisi
+      updatedAt: now,
+      updatedBy: currentUser.name
+    };
+
+    setTickets(prev => prev.map(t => (t.id === ticketId ? updatedTicket : t)));
+
+    const activity: TicketActivity = {
+      id: 'act-' + Date.now(),
+      ticketId,
+      woNumber: ticket.woNumber,
+      action: 'Laporan Ditolak / Perlu Revisi',
+      description: `Dispatch ${currentUser.name} meminta revisi laporan: "${reason.trim()}"`,
+      performedBy: currentUser.name,
+      userRole: currentUser.role,
+      timestamp: now
+    };
+    setTicketActivities(prev => [activity, ...prev]);
+
+    addAuditLog(
+      'Report Rejected',
+      'ticket',
+      ticketId,
+      `Dispatch ${currentUser.name} menolak laporan WO ${ticket.woNumber}: "${reason.trim()}"`
+    );
+
+    try {
+      await saveTicketToFirestore(updatedTicket);
+    } catch (err: any) {
+      console.warn('[Firestore] Error saving rejected report:', err);
+      return { success: false, error: err?.message || 'Gagal menyimpan status penolakan ke Firestore.' };
+    }
+
+    return { success: true };
+  };
+
+  // -------------------------------------------------------------
+  // Report Dropdown Categories CRUD (Report Status, Reason Report, Rootcause)
+  // -------------------------------------------------------------
+  const addReportDropdownCategory = async (
+    data: Omit<ReportDropdownCategory, 'id' | 'createdAt'>
+  ): Promise<{ success: boolean; category?: ReportDropdownCategory; error?: string }> => {
+    if (!data.name || !data.name.trim()) {
+      return { success: false, error: 'Nama kategori wajib diisi.' };
+    }
+
+    const cleanName = data.name.trim();
+
+    // Check duplicate within same categoryType
+    const duplicate = reportDropdownCategories.some(
+      c => c.categoryType === data.categoryType && !c.isDeleted && c.name.toLowerCase().trim() === cleanName.toLowerCase()
+    );
+    if (duplicate) {
+      return { success: false, error: `Kategori "${cleanName}" sudah ada dalam daftar ${data.categoryType}.` };
+    }
+
+    const nextOrder = data.sortOrder !== undefined
+      ? data.sortOrder
+      : (reportDropdownCategories.filter(c => c.categoryType === data.categoryType).length + 1);
+
+    const now = new Date().toISOString();
+    const newCategory: ReportDropdownCategory = {
+      id: `rdc-${data.categoryType.slice(0, 2)}-${Date.now()}`,
+      categoryType: data.categoryType,
+      name: cleanName,
+      description: data.description?.trim() || '',
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      sortOrder: nextOrder,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: currentUser.name,
+      updatedBy: currentUser.name,
+      isDeleted: false
+    };
+
+    setReportDropdownCategories(prev => [...prev, newCategory]);
+
+    try {
+      await saveReportDropdownCategoryToFirestore(newCategory);
+      addAuditLog(
+        'Dropdown Category Added',
+        'global_config',
+        newCategory.id,
+        `Menambahkan kategori ${newCategory.categoryType}: "${newCategory.name}"`
+      );
+      toast.success(`Kategori "${newCategory.name}" berhasil disimpan ke Cloud Firestore.`, 'Kategori Ditambahkan');
+      return { success: true, category: newCategory };
+    } catch (err: any) {
+      console.error('[Firestore] Error saving category:', err);
+      return { success: false, error: err?.message || 'Gagal menyimpan kategori ke Firestore.' };
+    }
+  };
+
+  const updateReportDropdownCategory = async (
+    id: string,
+    updates: Partial<ReportDropdownCategory>
+  ): Promise<{ success: boolean; error?: string }> => {
+    const existing = reportDropdownCategories.find(c => c.id === id);
+    if (!existing) {
+      return { success: false, error: 'Kategori tidak ditemukan.' };
+    }
+
+    if (updates.name && !updates.name.trim()) {
+      return { success: false, error: 'Nama kategori tidak boleh kosong.' };
+    }
+
+    // Check duplicate if name changed
+    if (updates.name && updates.name.trim().toLowerCase() !== existing.name.toLowerCase()) {
+      const duplicate = reportDropdownCategories.some(
+        c => c.id !== id && c.categoryType === existing.categoryType && !c.isDeleted && c.name.toLowerCase().trim() === updates.name!.trim().toLowerCase()
+      );
+      if (duplicate) {
+        return { success: false, error: `Kategori "${updates.name}" sudah ada dalam daftar.` };
+      }
+    }
+
+    const now = new Date().toISOString();
+    const updatedCategory: ReportDropdownCategory = {
+      ...existing,
+      ...updates,
+      name: updates.name ? updates.name.trim() : existing.name,
+      description: updates.description !== undefined ? updates.description.trim() : existing.description,
+      updatedAt: now,
+      updatedBy: currentUser.name
+    };
+
+    setReportDropdownCategories(prev => prev.map(c => c.id === id ? updatedCategory : c));
+
+    try {
+      await saveReportDropdownCategoryToFirestore(updatedCategory);
+      addAuditLog(
+        'Dropdown Category Updated',
+        'global_config',
+        id,
+        `Memperbarui kategori ${existing.categoryType}: "${updatedCategory.name}"`
+      );
+      toast.success(`Kategori "${updatedCategory.name}" berhasil diperbarui di Cloud Firestore.`, 'Kategori Diperbarui');
+      return { success: true };
+    } catch (err: any) {
+      console.error('[Firestore] Error updating category:', err);
+      return { success: false, error: err?.message || 'Gagal memperbarui kategori di Firestore.' };
+    }
+  };
+
+  const deleteReportDropdownCategory = async (
+    id: string,
+    permanent: boolean = false
+  ): Promise<{ success: boolean; error?: string }> => {
+    const existing = reportDropdownCategories.find(c => c.id === id);
+    if (!existing) {
+      return { success: false, error: 'Kategori tidak ditemukan.' };
+    }
+
+    // Soft delete to protect historical tickets that used this category
+    if (permanent) {
+      setReportDropdownCategories(prev => prev.filter(c => c.id !== id));
+      try {
+        await deleteReportDropdownCategoryFromFirestore(id);
+        addAuditLog(
+          'Dropdown Category Permanently Deleted',
+          'global_config',
+          id,
+          `Menghapus permanen kategori ${existing.categoryType}: "${existing.name}"`
+        );
+        toast.warning(`Kategori "${existing.name}" dihapus permanen dari Cloud Firestore.`, 'Kategori Dihapus');
+        return { success: true };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Gagal menghapus kategori dari Firestore.' };
+      }
+    } else {
+      // Soft Delete
+      const now = new Date().toISOString();
+      const softDeleted: ReportDropdownCategory = {
+        ...existing,
+        isActive: false,
+        isDeleted: true,
+        updatedAt: now,
+        updatedBy: currentUser.name
+      };
+
+      setReportDropdownCategories(prev => prev.map(c => c.id === id ? softDeleted : c));
+      try {
+        await softDeleteReportDropdownCategoryInFirestore(id, currentUser.name);
+        addAuditLog(
+          'Dropdown Category Soft Deleted',
+          'global_config',
+          id,
+          `Menonaktifkan & menandai terhapus kategori ${existing.categoryType}: "${existing.name}"`
+        );
+        toast.info(`Kategori "${existing.name}" dinonaktifkan (laporan lama tetap aman).`, 'Kategori Dinonaktifkan');
+        return { success: true };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Gagal soft-delete kategori di Firestore.' };
+      }
+    }
+  };
+
+  const toggleReportDropdownCategoryActive = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const existing = reportDropdownCategories.find(c => c.id === id);
+    if (!existing) return { success: false, error: 'Kategori tidak ditemukan.' };
+
+    return updateReportDropdownCategory(id, { isActive: !existing.isActive });
+  };
+
   // Close Ticket Workflow
+
   const closeTicket = (ticketId: string, closeNotes: string) => {
     // Only Dispatch and Super Admin can close tickets!
     if (currentUser.role !== 'dispatch' && currentUser.role !== 'super_admin') {
@@ -1901,11 +3167,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     addAuditLog('Ticket Closed', 'ticket', ticketId, `Dispatch ${currentUser.name} officially closed WO ${ticket.woNumber}`);
 
+    setSyncStatus('SYNCING');
     saveTicketToFirestore(closedTicket)
       .then(() => {
+        setSyncStatus('SAVED');
+        setLastSyncTime(new Date().toISOString());
         toast.success(`Tiket WO ${ticket.woNumber} resmi ditutup (Closed) oleh Dispatch.`, 'Tiket Ditutup');
       })
       .catch(err => {
+        setSyncStatus('ERROR');
         toast.error('Gagal menyimpan status penutupan di Cloud Firestore: ' + (err?.message || err), 'Gagal');
       });
 
@@ -1940,11 +3210,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     addAuditLog('Ticket Reopened', 'ticket', ticketId, `Reopened WO ${ticket.woNumber}. Alasan: ${reason}`);
 
+    setSyncStatus('SYNCING');
     saveTicketToFirestore(reopenedTicket)
       .then(() => {
+        setSyncStatus('SAVED');
+        setLastSyncTime(new Date().toISOString());
         toast.info(`Tiket WO ${ticket.woNumber} berhasil dibuka kembali (Reopened).`, 'Tiket Dibuka Kembali');
       })
       .catch(err => {
+        setSyncStatus('ERROR');
         toast.error('Gagal membuka tiket di Cloud Firestore: ' + (err?.message || err), 'Gagal');
       });
 
@@ -1966,6 +3240,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Pesan atau lampiran foto tidak boleh kosong.' };
     }
 
+    // Requirement 7: Validasi wajib bagi Installer untuk memilih kategori chat
+    if (currentUser.role === 'installer') {
+      const myId = currentUser.id || '';
+      const myUsername = (currentUser.username || '').toLowerCase().trim();
+      const myName = (currentUser.name || '').toLowerCase().trim();
+      const tInst = (ticket.installerName || '').toLowerCase().trim();
+
+      const isMine =
+        (myId && (ticket.assignedTo === myId || ticket.installerId === myId || ticket.assignedToUid === myId)) ||
+        (myUsername && ticket.assignedTo?.toLowerCase() === myUsername) ||
+        (myName && (tInst === myName || isInstallerMatch(ticket.installerName, myName))) ||
+        (myUsername && (tInst === myUsername || isInstallerMatch(ticket.installerName, myUsername)));
+
+      if (!isMine) {
+        toast.error('Akses Ditolak: Anda hanya berwenang mengirim pesan pada tiket yang ditugaskan kepada Anda.');
+        return { success: false, error: 'Akses Ditolak: Anda hanya berwenang mengirim pesan pada tiket yang ditugaskan kepada Anda.' };
+      }
+
+      const chosenCategory = (category || ticket.chatCategory || '').trim();
+      if (!chosenCategory || chosenCategory.toUpperCase() === 'UNCLASSIFIED') {
+        toast.error('Pilih kategori chat terlebih dahulu sebelum memulai percakapan.', 'Kategori Wajib Dipilih');
+        return { success: false, error: 'Pilih kategori chat terlebih dahulu sebelum memulai percakapan.' };
+      }
+    }
+
+    const effectiveCategory = (category || ticket.chatCategory || '').trim();
+    const isProgressCategory = effectiveCategory.toUpperCase() === 'PROGRESS';
+    const now = new Date().toISOString();
+
     const newMessage: TicketMessage = {
       id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
       ticketId,
@@ -1974,28 +3277,119 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       senderName: currentUser.name,
       senderRole: currentUser.role,
       text: text.trim(),
-      category: category?.trim() || undefined,
+      category: effectiveCategory || undefined,
       attachments,
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       readBy: [currentUser.id]
     };
 
     setTicketMessages(prev => [...prev, newMessage]);
 
-    // Update ticket message indicators
-    const updatedTicketChat = {
+    // Update ticket message indicators & sync chatCategory
+    let updatedTicketChat: Ticket = {
       ...ticket,
+      chatCategory: effectiveCategory || ticket.chatCategory,
       chatMessagesCount: (ticket.chatMessagesCount || 0) + 1,
-      lastMessageAt: newMessage.timestamp,
-      lastMessageSnippet: text.trim() || (attachments.length > 0 ? `[Foto: ${attachments[0].fileName}]` : '')
+      lastMessageAt: now,
+      lastMessageSnippet: text.trim() || (attachments.length > 0 ? `[Foto: ${attachments[0].fileName}]` : ''),
+      updatedAt: now,
+      updatedBy: currentUser.name
     };
+
+    // Requirement 3.A & Requirement 6: Integrasi Live Chat Kategori/Pesan PROGRESS dengan Auto Check-in & Status WO
+    const isProgressText = isProgressCheckInMessage(text);
+    const isProgressActivity = isProgressCategory || isProgressText;
+
+    if (currentUser.role === 'installer' && isProgressActivity) {
+      // Automatic Check-in: Only record on first valid PROGRESS activity of the active session
+      if (!ticket.checkInAt || ticket.workSessionStatus === 'Belum Check-in') {
+        updatedTicketChat.checkInAt = now;
+        updatedTicketChat.workSessionStatus = 'Sedang Dikerjakan';
+
+        if (!Array.isArray(updatedTicketChat.workSessions)) {
+          updatedTicketChat.workSessions = [];
+        }
+
+        const hasActiveSession = updatedTicketChat.workSessions.some(s => s.status === 'Sedang Dikerjakan');
+        if (!hasActiveSession) {
+          updatedTicketChat.workSessions.push({
+            sessionId: 'ws_' + Date.now(),
+            checkInAt: now,
+            status: 'Sedang Dikerjakan'
+          });
+        }
+
+        addAuditLog(
+          'Installer Check-in Recorded',
+          'ticket',
+          ticketId,
+          `Teknisi ${currentUser.name} check-in otomatis pada WO ${ticket.woNumber} via pesan PROGRESS Live Chat (${formatJakartaTimestamp(now)})`
+        );
+
+        toast.info(
+          `Check-in berhasil tercatat pada ${formatJakartaTimestamp(now)}. Durasi kerja mulai dihitung.`,
+          'Check-in Otomatis'
+        );
+      }
+
+      const isClosed = ticket.statusWOAgent === 'Closed';
+      const isApprovalState = ticket.approvalStatus === 'BUTUH APPROVAL' || ticket.approvalStatus === 'APPROVED';
+
+      // Rule: Jangan menimpa status BUTUH APPROVAL, APPROVED, atau CLOSED
+      if (!isClosed && !isApprovalState) {
+        const alreadyProgress =
+          ticket.statusWOAgent === 'In Progress' &&
+          (ticket.statusWOInstaller === 'PROGRESS' || ticket.statusWOInstaller === 'On Site');
+
+        if (!alreadyProgress) {
+          updatedTicketChat.statusWOAgent = 'In Progress';
+          updatedTicketChat.statusWOInstaller = 'PROGRESS';
+          if (!updatedTicketChat.workStartedAt) {
+            updatedTicketChat.workStartedAt = now;
+            updatedTicketChat.workStartedBy = currentUser.name;
+            updatedTicketChat.workStartedById = currentUser.id;
+          }
+
+          const progressActivity: TicketActivity = {
+            id: 'act-' + Date.now(),
+            ticketId,
+            woNumber: ticket.woNumber,
+            action: 'Status Diperbarui ke PROGRESS via Live Chat',
+            description: `Teknisi ${currentUser.name} mengirim chat dengan aktivitas PROGRESS. Status WO otomatis menjadi PROGRESS.`,
+            performedBy: currentUser.name,
+            userRole: currentUser.role,
+            timestamp: now
+          };
+          setTicketActivities(prev => [progressActivity, ...prev]);
+
+          addAuditLog(
+            'Chat Status PROGRESS',
+            'ticket',
+            ticketId,
+            `Status WO ${ticket.woNumber} otomatis diperbarui ke PROGRESS setelah teknisi ${currentUser.name} mengirim pesan PROGRESS.`
+          );
+
+          toast.info(
+            `Status Work Order ${ticket.woNumber} otomatis ditandai sebagai PROGRESS.`,
+            'Status WO: PROGRESS'
+          );
+        }
+      }
+    }
 
     setTickets(prev =>
       prev.map(t => (t.id === ticketId ? updatedTicketChat : t))
     );
 
     sendChatMessageToFirestore(newMessage).catch(e => console.warn('[Firestore] Error saving chat message:', e));
-    saveTicketToFirestore(updatedTicketChat).catch(() => {});
+    saveTicketToFirestore(updatedTicketChat).catch(e => console.warn('[Firestore] Error syncing ticket status from chat:', e));
+
+    // Also persist message & check-in to server API
+    fetch(`/api/tickets/${ticketId}/messages`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ text: text.trim(), attachments })
+    }).catch(e => console.error('Error syncing chat message to server:', e));
 
     if (attachments.length > 0) {
       addAuditLog('Chat Attachment Uploaded', 'ticket', ticketId, `${currentUser.name} uploaded ${attachments.length} photo(s) in ticket chat`);
@@ -2075,7 +3469,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     setTickets(prev => deduplicateTicketsInMemory([processed, ...prev]));
-    saveTicketToFirestore(processed).catch(e => console.warn('[Firestore] Error saving created ticket:', e));
+    setSyncStatus('SYNCING');
+    saveTicketToFirestore(processed)
+      .then(() => {
+        setSyncStatus('SAVED');
+        setLastSyncTime(new Date().toISOString());
+      })
+      .catch(e => {
+        console.warn('[Firestore] Error saving created ticket:', e);
+        setSyncStatus('ERROR');
+      });
 
     if (logs.length > 0) {
       setTicketActivities(prev => [...logs, ...prev]);
@@ -2145,7 +3548,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     if (mergedTicket) {
-      saveTicketToFirestore(mergedTicket).catch(e => console.warn('[Firestore] Error updating ticket:', e));
+      setSyncStatus('SYNCING');
+      saveTicketToFirestore(mergedTicket)
+        .then(() => {
+          setSyncStatus('SAVED');
+          setLastSyncTime(new Date().toISOString());
+        })
+        .catch(e => {
+          console.warn('[Firestore] Error updating ticket:', e);
+          setSyncStatus('ERROR');
+        });
     }
 
     fetch(`/api/tickets/${id}`, {
@@ -2209,13 +3621,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     if (updatedTicketItem) {
+      setSyncStatus('SYNCING');
       saveTicketToFirestore(updatedTicketItem)
         .then(() => {
+          setSyncStatus('SAVED');
+          setLastSyncTime(new Date().toISOString());
           if (installerName && currentUser.role === 'leader') {
             toast.success(`Teknisi ${installerName} berhasil ditugaskan ke WO ${targetTicket?.woNumber || ''}!`, 'Penugasan Berhasil');
           }
         })
         .catch(err => {
+          setSyncStatus('ERROR');
           toast.error('Gagal menyimpan penugasan ke Cloud Firestore: ' + (err?.message || err), 'Penugasan Gagal');
         });
     }
@@ -2293,11 +3709,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     // Persist batch to Cloud Firestore
+    setSyncStatus('SYNCING');
     batchSaveTicketsToFirestore(updatedTicketsList)
       .then(({ saved }) => {
+        setSyncStatus('SAVED');
+        setLastSyncTime(new Date().toISOString());
         toast.success(`Berhasil memperbarui penugasan untuk ${saved} tiket di Cloud Firestore.`, 'Penugasan Massal Sukses');
       })
       .catch(err => {
+        setSyncStatus('ERROR');
         toast.error('Gagal menyimpan penugasan massal ke Cloud Firestore: ' + (err?.message || err), 'Gagal');
       });
 
@@ -2368,11 +3788,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTickets(prev => prev.map(t => t.id === ticketId ? reassignRes.ticket! : t));
 
     // Confirmed write to Cloud Firestore
+    setSyncStatus('SYNCING');
     saveTicketToFirestore(reassignRes.ticket)
       .then(() => {
+        setSyncStatus('SAVED');
+        setLastSyncTime(new Date().toISOString());
         toast.success(`WO ${ticket.woNumber} berhasil dialihkan ke ${newInstallerName}!`, 'Reassign Berhasil');
       })
       .catch(err => {
+        setSyncStatus('ERROR');
         toast.error('Gagal menyimpan reassign ke Cloud Firestore: ' + (err?.message || err), 'Reassign Gagal');
       });
 
@@ -2425,11 +3849,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     if (updatedTicketItem) {
+      setSyncStatus('SYNCING');
       saveTicketToFirestore(updatedTicketItem)
         .then(() => {
+          setSyncStatus('SAVED');
+          setLastSyncTime(new Date().toISOString());
           toast.info(`Status WO ${target?.woNumber || ticketId} diperbarui (${statusInstaller || statusAgent || 'Updated'}).`, 'Status Berubah');
         })
         .catch(err => {
+          setSyncStatus('ERROR');
           toast.error('Gagal memperbarui status tiket di Cloud Firestore: ' + (err?.message || err), 'Gagal');
         });
     }
@@ -2449,9 +3877,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTickets(prev =>
       prev.map(t => (t.id === ticketId ? archived : t))
     );
-    saveTicketToFirestore(archived).catch(() => {});
-    addAuditLog('Ticket Archived', 'ticket', ticketId, `Ticket moved to archive`);
-    toast.info(`WO ${target?.woNumber || ticketId} dipindahkan ke arsip.`, 'Tiket Diarsipkan');
+    setSyncStatus('SYNCING');
+    archiveTicketInFirestore(ticketId, currentUser.name)
+      .then(() => {
+        setSyncStatus('SAVED');
+        setLastSyncTime(new Date().toISOString());
+        toast.info(`WO ${target?.woNumber || ticketId} dipindahkan ke arsip Cloud Firestore.`, 'Tiket Diarsipkan');
+      })
+      .catch(err => {
+        setSyncStatus('ERROR');
+        toast.error('Gagal mengarsipkan tiket di Cloud Firestore: ' + (err?.message || err), 'Gagal');
+      });
+    addAuditLog('Ticket Archived', 'ticket', ticketId, `Ticket moved to archive by ${currentUser.name}`);
   };
 
   const restoreTicket = (ticketId: string) => {
@@ -2470,16 +3907,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTickets(prev =>
       prev.map(t => (t.id === ticketId ? restored : t))
     );
-    saveTicketToFirestore(restored).catch(() => {});
-    addAuditLog('Ticket Restored', 'ticket', ticketId, `Ticket restored from archive/deletion`);
-    toast.success(`WO ${target?.woNumber || ticketId} berhasil dipulihkan dari arsip.`, 'Tiket Dipulihkan');
+    setSyncStatus('SYNCING');
+    restoreTicketInFirestore(ticketId, currentUser.name)
+      .then(() => {
+        setSyncStatus('SAVED');
+        setLastSyncTime(new Date().toISOString());
+        toast.success(`WO ${target?.woNumber || ticketId} berhasil dipulihkan dari arsip Cloud Firestore.`, 'Tiket Dipulihkan');
+      })
+      .catch(err => {
+        setSyncStatus('ERROR');
+        toast.error('Gagal memulihkan tiket di Cloud Firestore: ' + (err?.message || err), 'Gagal');
+      });
+    addAuditLog('Ticket Restored', 'ticket', ticketId, `Ticket restored from archive/deletion by ${currentUser.name}`);
   };
 
   const deleteTicket = (ticketId: string, reason: string, permanent: boolean = false): { success: boolean; error?: string } => {
-    // STRICT SECURITY POLICY: Only Super Admin can delete WO!
-    if (currentUser.role !== 'super_admin') {
-      const err = 'Akses Ditolak: Hanya akun dengan kategori Super Admin yang memiliki wewenang menghapus data Work Order.';
-      addAuditLog('Unauthorized Deletion Attempt', 'ticket', ticketId, `${currentUser.name} (${currentUser.role}) mencoba menghapus WO tanpa izin Super Admin`);
+    // STRICT SECURITY POLICY: Only Management Data can delete WO!
+    if (currentUser.role !== 'management_data') {
+      const err = 'Akses Ditolak: Hanya akun dengan peran Management Data yang memiliki wewenang menghapus data Work Order.';
+      addAuditLog('Unauthorized Deletion Attempt', 'ticket', ticketId, `${currentUser.name} (${currentUser.role}) mencoba menghapus WO tanpa izin Management Data`);
       toast.error(err, 'Akses Ditolak');
       return { success: false, error: err };
     }
@@ -2498,7 +3944,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const now = new Date().toISOString();
     if (permanent) {
       setTickets(prev => prev.filter(t => t.id !== ticketId));
-      addAuditLog('Ticket Permanently Deleted', 'ticket', ticketId, `Super Admin ${currentUser.name} menghapus permanen WO ${ticket.woNumber}. Alasan: ${reason}`);
+      addAuditLog('Ticket Permanently Deleted', 'ticket', ticketId, `Management Data ${currentUser.name} menghapus permanen WO ${ticket.woNumber}. Alasan: ${reason}`);
     } else {
       // Soft Delete
       setTickets(prev =>
@@ -2515,15 +3961,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
         })
       );
-      addAuditLog('Ticket Soft Deleted', 'ticket', ticketId, `Super Admin ${currentUser.name} menandai terhapus (soft delete) WO ${ticket.woNumber}. Alasan: ${reason}`);
+      addAuditLog('Ticket Soft Deleted', 'ticket', ticketId, `Management Data ${currentUser.name} menghapus (soft delete) WO ${ticket.woNumber}. Alasan: ${reason}`);
     }
 
     const deletePromise = permanent
       ? deleteTicketFromFirestore(ticketId)
       : softDeleteTicketInFirestore(ticketId, currentUser.name, reason);
 
+    setSyncStatus('SYNCING');
     deletePromise
       .then(() => {
+        setSyncStatus('SAVED');
+        setLastSyncTime(new Date().toISOString());
         if (permanent) {
           toast.warning(`WO ${ticket.woNumber} telah dihapus permanen dari Cloud Firestore.`, 'Dihapus Permanen');
         } else {
@@ -2531,6 +3980,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       })
       .catch(err => {
+        setSyncStatus('ERROR');
         toast.error('Gagal menghapus tiket di Cloud Firestore: ' + (err?.message || err), 'Gagal');
       });
 
@@ -2806,14 +4256,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (itemsToSave.length > 0) {
+      setSyncStatus('SYNCING');
       batchSaveTicketsToFirestore(itemsToSave)
         .then(({ saved }) => {
+          setSyncStatus('SAVED');
+          setLastSyncTime(new Date().toISOString());
           toast.success(
             `Berhasil menyimpan ${saved} tiket ke Cloud Firestore${updatedCount > 0 ? ` (${newItems.length} baru, ${updatedCount} diperbarui)` : ''}.${duplicatesIgnored > 0 ? ` (${duplicatesIgnored} nomor WO duplikat ditolak)` : ''}`,
             'Import Selesai'
           );
         })
         .catch(err => {
+          setSyncStatus('ERROR');
           toast.error('Gagal menyimpan import tiket ke Cloud Firestore: ' + (err?.message || err), 'Import Gagal');
         });
     } else if (duplicatesIgnored > 0) {
@@ -2851,8 +4305,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     importDate: string,
     reason: string
   ): { success: boolean; count: number; error?: string } => {
-    if (currentUser.role !== 'super_admin' && currentUser.role !== 'dispatch') {
-      const err = 'Akses Ditolak: Hanya Super Admin atau Dispatch yang berwenang menghapus data import.';
+    if (currentUser.role !== 'management_data') {
+      const err = 'Akses Ditolak: Hanya akun dengan peran Management Data yang berwenang menghapus data Work Order.';
       toast.error(err, 'Akses Ditolak');
       return { success: false, count: 0, error: err };
     }
@@ -2881,8 +4335,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Find tickets imported on this date
     const matchingTickets = tickets.filter(t => {
-      const tImportDate = t.importDate || (t.importedAt ? t.importedAt.split('T')[0] : t.createdAt.split('T')[0]);
-      return tImportDate === importDate && !t.isDeleted;
+      const tImportDate =
+        t.importDate ||
+        (t.importedAt ? (t.importedAt.includes('T') ? t.importedAt.split('T')[0] : t.importedAt.slice(0, 10)) : '') ||
+        (t.createdAt ? (t.createdAt.includes('T') ? t.createdAt.split('T')[0] : t.createdAt.slice(0, 10)) : '') ||
+        (t.date ? (t.date.includes('T') ? t.date.split('T')[0] : t.date.slice(0, 10)) : '');
+      return (tImportDate === importDate || t.date === importDate) && !t.isDeleted;
     });
 
     if (matchingTickets.length === 0) {
@@ -2894,9 +4352,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTickets(prev => prev.filter(t => !targetIds.has(t.id)));
 
     // Delete matching from Firestore
-    Promise.all(matchingTickets.map(t => deleteTicketFromFirestore(t.id))).catch(err => {
-      console.warn('[Firestore] Error deleting batch tickets:', err);
-    });
+    setSyncStatus('SYNCING');
+    Promise.all(matchingTickets.map(t => deleteTicketFromFirestore(t.id)))
+      .then(() => {
+        setSyncStatus('SAVED');
+        setLastSyncTime(new Date().toISOString());
+      })
+      .catch(err => {
+        console.warn('[Firestore] Error deleting batch tickets:', err);
+        setSyncStatus('ERROR');
+      });
 
     fetch(`/api/tickets/batch/${importDate}`, {
       method: 'DELETE',
@@ -2908,20 +4373,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'Imported Data Purged',
       'import_batch',
       importDate,
-      `Super Admin/Dispatch ${currentUser.name} menghapus ${matchingTickets.length} data tiket hasil import tanggal ${importDate}. Alasan: ${reason}`
+      `Management Data ${currentUser.name} menghapus ${matchingTickets.length} data tiket hasil import tanggal ${importDate}. Alasan: ${reason}`
     );
 
     toast.warning(`Berhasil menghapus ${matchingTickets.length} tiket hasil import tanggal ${importDate} dari Cloud Firestore.`, 'Data Import Dihapus');
     return { success: true, count: matchingTickets.length };
   };
 
-  // Bulk delete tickets for Super Admin
+  // Bulk delete tickets for Management Data
   const bulkDeleteTickets = (
     ticketIds: string[],
     reason: string
   ): { success: boolean; count: number; error?: string } => {
-    if (currentUser.role !== 'super_admin') {
-      const err = 'Akses Ditolak: Hanya akun dengan peran Super Admin yang memiliki wewenang menghapus data Work Order.';
+    if (currentUser.role !== 'management_data') {
+      const err = 'Akses Ditolak: Hanya akun dengan peran Management Data yang memiliki wewenang menghapus data Work Order.';
       toast.error(err, 'Akses Ditolak');
       return { success: false, count: 0, error: err };
     }
@@ -2933,23 +4398,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const targetSet = new Set(ticketIds);
     let deletedCount = 0;
-    setTickets(prev => {
-      const remaining = prev.filter(t => {
+    const now = new Date().toISOString();
+    setTickets(prev =>
+      prev.map(t => {
         if (targetSet.has(t.id)) {
           deletedCount++;
-          return false;
+          return {
+            ...t,
+            isDeleted: true,
+            deletedAt: now,
+            deletedBy: currentUser.name,
+            deletionReason: reason,
+            updatedAt: now,
+            updatedBy: currentUser.name
+          };
         }
-        return true;
-      });
-      return remaining;
-    });
+        return t;
+      })
+    );
 
-    // Delete in Cloud Firestore with confirmation before toast
-    Promise.all(ticketIds.map(id => deleteTicketFromFirestore(id)))
+    // Soft delete in Cloud Firestore
+    setSyncStatus('SYNCING');
+    Promise.all(ticketIds.map(id => softDeleteTicketInFirestore(id, currentUser.name, reason)))
       .then(() => {
-        toast.warning(`Berhasil menghapus ${deletedCount} tiket Work Order dari Cloud Firestore.`, 'Hapus WO Berhasil');
+        setSyncStatus('SAVED');
+        setLastSyncTime(new Date().toISOString());
+        toast.warning(`Berhasil menghapus (soft delete) ${deletedCount} tiket Work Order.`, 'Hapus WO Berhasil');
       })
       .catch(err => {
+        setSyncStatus('ERROR');
         toast.error('Gagal menghapus tiket massal di Cloud Firestore: ' + (err?.message || err), 'Gagal');
       });
 
@@ -2960,10 +4437,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }).catch(e => console.error('Error syncing bulk delete tickets to server:', e));
 
     addAuditLog(
-      'Bulk Tickets Deleted',
+      'Bulk Tickets Soft Deleted',
       'ticket',
       `${ticketIds.length} tickets`,
-      `Super Admin ${currentUser.name} menghapus massal ${ticketIds.length} tiket Work Order. Alasan: ${reason}`
+      `Management Data ${currentUser.name} menghapus massal (soft delete) ${ticketIds.length} tiket Work Order. Alasan: ${reason}`
     );
 
     return { success: true, count: deletedCount };
@@ -3148,8 +4625,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     tickets
   ]);
 
-  // WhatsApp helpers
+  // WhatsApp helpers with strict RBAC: Only Superadmin and Dispatch allowed
+  const isTemplateAuthorized = () => {
+    return currentUser.role === 'super_admin' || currentUser.role === 'dispatch';
+  };
+
   const createTemplate = (data: Omit<WhatsAppTemplate, 'id' | 'version' | 'lastUpdated'>): WhatsAppTemplate => {
+    if (!isTemplateAuthorized()) {
+      const errMsg = 'Akses Ditolak: Hanya Superadmin dan Dispatch yang diizinkan menambah Template WhatsApp.';
+      toast.error(errMsg, 'Akses Ditolak');
+      throw new Error(errMsg);
+    }
     const newTpl: WhatsAppTemplate = {
       ...data,
       id: 'tpl_' + Date.now(),
@@ -3163,6 +4649,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateTemplate = (id: string, updates: Partial<WhatsAppTemplate>) => {
+    if (!isTemplateAuthorized()) {
+      const errMsg = 'Akses Ditolak: Hanya Superadmin dan Dispatch yang diizinkan mengubah Template WhatsApp.';
+      toast.error(errMsg, 'Akses Ditolak');
+      return;
+    }
     setTemplates(prev =>
       prev.map(t => {
         if (t.id === id) {
@@ -3177,10 +4668,342 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteTemplate = (id: string) => {
+    if (!isTemplateAuthorized()) {
+      const errMsg = 'Akses Ditolak: Hanya Superadmin dan Dispatch yang diizinkan menghapus Template WhatsApp.';
+      toast.error(errMsg, 'Akses Ditolak');
+      return;
+    }
     setTemplates(prev => prev.filter(t => t.id !== id));
     deleteTemplateFromFirestore(id).catch(e => console.warn('[Firestore] Error deleting template:', e));
     addAuditLog('Template Deleted', 'template', id, `Deleted template ${id}`);
   };
+
+  // -------------------------------------------------------------
+  // Contact Center Chat Category Operations
+  // -------------------------------------------------------------
+  const addChatCategory = async (categoryData: Omit<ChatCategoryConfig, 'id' | 'createdAt'>) => {
+    const newCat: ChatCategoryConfig = {
+      ...categoryData,
+      id: 'cat-' + Date.now(),
+      createdAt: new Date().toISOString()
+    };
+    const updated = [...chatCategories, newCat];
+    setChatCategories(updated);
+    try {
+      await saveChatCategoriesToFirestore(updated);
+      toast.success(`Kategori chat "${newCat.name}" berhasil disimpan ke Firestore.`);
+      addAuditLog('Chat Category Created', 'global_config', newCat.id, `Created chat category ${newCat.name}`);
+    } catch (e: any) {
+      toast.error('Gagal menyimpan kategori chat: ' + (e?.message || e));
+    }
+  };
+
+  const updateChatCategory = async (id: string, updates: Partial<ChatCategoryConfig>) => {
+    const updated = chatCategories.map(c => (c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c));
+    setChatCategories(updated);
+    try {
+      await saveChatCategoriesToFirestore(updated);
+      toast.success('Kategori chat diperbarui.');
+      addAuditLog('Chat Category Updated', 'global_config', id, `Updated chat category ${id}`);
+    } catch (e: any) {
+      toast.error('Gagal memperbarui kategori chat: ' + (e?.message || e));
+    }
+  };
+
+  const deleteChatCategory = async (id: string) => {
+    const target = chatCategories.find(c => c.id === id);
+    if (!target) return;
+    const updated = chatCategories.filter(c => c.id !== id);
+    setChatCategories(updated);
+    try {
+      await saveChatCategoriesToFirestore(updated);
+      toast.info(`Kategori chat "${target.name}" telah dihapus.`);
+      addAuditLog('Chat Category Deleted', 'global_config', id, `Deleted chat category ${target.name}`);
+    } catch (e: any) {
+      toast.error('Gagal menghapus kategori chat: ' + (e?.message || e));
+    }
+  };
+
+  const toggleChatCategoryActive = async (id: string) => {
+    const updated = chatCategories.map(c => (c.id === id ? { ...c, active: !c.active, updatedAt: new Date().toISOString() } : c));
+    setChatCategories(updated);
+    try {
+      await saveChatCategoriesToFirestore(updated);
+    } catch (e) {
+      console.warn('[Firestore] Error toggling chat category:', e);
+    }
+  };
+
+  const setTicketChatCategory = async (ticketId: string, category: string) => {
+    const target = getTicketById(ticketId);
+    if (!target) return;
+    const now = new Date().toISOString();
+    setTickets(prev =>
+      prev.map(t => (t.id === ticketId ? { ...t, chatCategory: category, updatedAt: now } : t))
+    );
+    try {
+      await saveTicketToFirestore({ ...target, chatCategory: category, updatedAt: now });
+      addAuditLog('Chat Category Assigned', 'ticket', ticketId, `Assigned category ${category} to WO ${target.woNumber}`);
+    } catch (e) {
+      console.warn('[Firestore] Error saving ticket chat category:', e);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // Hierarchical Droplist Operations (Status WO -> Reason WO -> Remarks)
+  // -------------------------------------------------------------
+  const addHierarchicalStatus = async (statusData: Omit<HierarchicalStatus, 'id' | 'reasons'>) => {
+    const newStatus: HierarchicalStatus = {
+      ...statusData,
+      id: 'hs-' + Date.now(),
+      reasons: []
+    };
+    const updated = [...hierarchicalStatuses, newStatus];
+    setHierarchicalStatuses(updated);
+    try {
+      await saveHierarchicalDroplistsToFirestore(updated);
+      toast.success(`Status WO "${newStatus.name}" berhasil ditambahkan.`);
+      addAuditLog('Status WO Created', 'global_config', newStatus.id, `Created Status WO ${newStatus.name}`);
+    } catch (e: any) {
+      toast.error('Gagal menyimpan Status WO: ' + (e?.message || e));
+    }
+  };
+
+  const updateHierarchicalStatus = async (id: string, updates: Partial<HierarchicalStatus>) => {
+    const updated = hierarchicalStatuses.map(s => (s.id === id ? { ...s, ...updates } : s));
+    setHierarchicalStatuses(updated);
+    try {
+      await saveHierarchicalDroplistsToFirestore(updated);
+      toast.success('Status WO diperbarui.');
+      addAuditLog('Status WO Updated', 'global_config', id, `Updated Status WO ${id}`);
+    } catch (e: any) {
+      toast.error('Gagal memperbarui Status WO: ' + (e?.message || e));
+    }
+  };
+
+  const deleteHierarchicalStatus = async (id: string) => {
+    const target = hierarchicalStatuses.find(s => s.id === id);
+    if (!target) return;
+    const updated = hierarchicalStatuses.filter(s => s.id !== id);
+    setHierarchicalStatuses(updated);
+    try {
+      await saveHierarchicalDroplistsToFirestore(updated);
+      toast.info(`Status WO "${target.name}" telah dihapus.`);
+      addAuditLog('Status WO Deleted', 'global_config', id, `Deleted Status WO ${target.name}`);
+    } catch (e: any) {
+      toast.error('Gagal menghapus Status WO: ' + (e?.message || e));
+    }
+  };
+
+  const addHierarchicalReason = async (statusId: string, reasonData: Omit<HierarchicalReason, 'id' | 'statusId' | 'remarks'>) => {
+    const newReason: HierarchicalReason = {
+      ...reasonData,
+      id: 'hr-' + Date.now(),
+      statusId,
+      remarks: []
+    };
+    const updated = hierarchicalStatuses.map(s => {
+      if (s.id !== statusId) return s;
+      return {
+        ...s,
+        reasons: [...s.reasons, newReason]
+      };
+    });
+    setHierarchicalStatuses(updated);
+    try {
+      await saveHierarchicalDroplistsToFirestore(updated);
+      toast.success(`Reason WO "${newReason.name}" berhasil ditambahkan.`);
+      addAuditLog('Reason WO Created', 'global_config', newReason.id, `Created Reason WO ${newReason.name}`);
+    } catch (e: any) {
+      toast.error('Gagal menyimpan Reason WO: ' + (e?.message || e));
+    }
+  };
+
+  const updateHierarchicalReason = async (statusId: string, reasonId: string, updates: Partial<HierarchicalReason>) => {
+    const updated = hierarchicalStatuses.map(s => {
+      if (s.id !== statusId) return s;
+      return {
+        ...s,
+        reasons: s.reasons.map(r => (r.id === reasonId ? { ...r, ...updates } : r))
+      };
+    });
+    setHierarchicalStatuses(updated);
+    try {
+      await saveHierarchicalDroplistsToFirestore(updated);
+      toast.success('Reason WO diperbarui.');
+      addAuditLog('Reason WO Updated', 'global_config', reasonId, `Updated Reason WO ${reasonId}`);
+    } catch (e: any) {
+      toast.error('Gagal memperbarui Reason WO: ' + (e?.message || e));
+    }
+  };
+
+  const deleteHierarchicalReason = async (statusId: string, reasonId: string) => {
+    const updated = hierarchicalStatuses.map(s => {
+      if (s.id !== statusId) return s;
+      return {
+        ...s,
+        reasons: s.reasons.filter(r => r.id !== reasonId)
+      };
+    });
+    setHierarchicalStatuses(updated);
+    try {
+      await saveHierarchicalDroplistsToFirestore(updated);
+      toast.info('Reason WO telah dihapus.');
+      addAuditLog('Reason WO Deleted', 'global_config', reasonId, `Deleted Reason WO ${reasonId}`);
+    } catch (e: any) {
+      toast.error('Gagal menghapus Reason WO: ' + (e?.message || e));
+    }
+  };
+
+  const moveHierarchicalReason = async (fromStatusId: string, toStatusId: string, reasonId: string) => {
+    let movedReason: HierarchicalReason | null = null;
+    hierarchicalStatuses.forEach(s => {
+      if (s.id === fromStatusId) {
+        const found = s.reasons.find(r => r.id === reasonId);
+        if (found) movedReason = { ...found, statusId: toStatusId };
+      }
+    });
+    if (!movedReason) return;
+
+    const updated = hierarchicalStatuses.map(s => {
+      if (s.id === fromStatusId) {
+        return { ...s, reasons: s.reasons.filter(r => r.id !== reasonId) };
+      }
+      if (s.id === toStatusId) {
+        return { ...s, reasons: [...s.reasons, movedReason!] };
+      }
+      return s;
+    });
+    setHierarchicalStatuses(updated);
+    try {
+      await saveHierarchicalDroplistsToFirestore(updated);
+      toast.success('Reason WO dipindahkan.');
+    } catch (e: any) {
+      toast.error('Gagal memindahkan Reason WO: ' + (e?.message || e));
+    }
+  };
+
+  const addHierarchicalRemark = async (statusId: string, reasonId: string, remarkData: Omit<HierarchicalRemark, 'id' | 'reasonId'>) => {
+    const newRemark: HierarchicalRemark = {
+      ...remarkData,
+      id: 'hrm-' + Date.now(),
+      reasonId
+    };
+    const updated = hierarchicalStatuses.map(s => {
+      if (s.id !== statusId) return s;
+      return {
+        ...s,
+        reasons: s.reasons.map(r => {
+          if (r.id !== reasonId) return r;
+          return {
+            ...r,
+            remarks: [...r.remarks, newRemark]
+          };
+        })
+      };
+    });
+    setHierarchicalStatuses(updated);
+    try {
+      await saveHierarchicalDroplistsToFirestore(updated);
+      toast.success(`Remarks "${newRemark.name}" berhasil ditambahkan.`);
+      addAuditLog('Remark Created', 'global_config', newRemark.id, `Created Remark ${newRemark.name}`);
+    } catch (e: any) {
+      toast.error('Gagal menyimpan Remarks: ' + (e?.message || e));
+    }
+  };
+
+  const updateHierarchicalRemark = async (statusId: string, reasonId: string, remarkId: string, updates: Partial<HierarchicalRemark>) => {
+    const updated = hierarchicalStatuses.map(s => {
+      if (s.id !== statusId) return s;
+      return {
+        ...s,
+        reasons: s.reasons.map(r => {
+          if (r.id !== reasonId) return r;
+          return {
+            ...r,
+            remarks: r.remarks.map(rm => (rm.id === remarkId ? { ...rm, ...updates } : rm))
+          };
+        })
+      };
+    });
+    setHierarchicalStatuses(updated);
+    try {
+      await saveHierarchicalDroplistsToFirestore(updated);
+      toast.success('Remarks diperbarui.');
+      addAuditLog('Remark Updated', 'global_config', remarkId, `Updated Remark ${remarkId}`);
+    } catch (e: any) {
+      toast.error('Gagal memperbarui Remarks: ' + (e?.message || e));
+    }
+  };
+
+  const deleteHierarchicalRemark = async (statusId: string, reasonId: string, remarkId: string) => {
+    const updated = hierarchicalStatuses.map(s => {
+      if (s.id !== statusId) return s;
+      return {
+        ...s,
+        reasons: s.reasons.map(r => {
+          if (r.id !== reasonId) return r;
+          return {
+            ...r,
+            remarks: r.remarks.filter(rm => rm.id !== remarkId)
+          };
+        })
+      };
+    });
+    setHierarchicalStatuses(updated);
+    try {
+      await saveHierarchicalDroplistsToFirestore(updated);
+      toast.info('Remarks telah dihapus.');
+      addAuditLog('Remark Deleted', 'global_config', remarkId, `Deleted Remark ${remarkId}`);
+    } catch (e: any) {
+      toast.error('Gagal menghapus Remarks: ' + (e?.message || e));
+    }
+  };
+
+  const getReasonsForStatus = (statusNameOrId: string): HierarchicalReason[] => {
+    if (!statusNameOrId) return [];
+    const norm = statusNameOrId.trim().toLowerCase();
+    const matched = hierarchicalStatuses.find(
+      s => s.id === statusNameOrId || s.name.trim().toLowerCase() === norm || (s.code && s.code.trim().toLowerCase() === norm)
+    );
+    if (!matched) return [];
+    return (matched.reasons || []).filter(r => r.active !== false && (r as any).isActive !== false);
+  };
+
+  const getRemarksForReason = (statusNameOrId: string, reasonNameOrId: string): HierarchicalRemark[] => {
+    if (!statusNameOrId || !reasonNameOrId) return [];
+    const reasons = getReasonsForStatus(statusNameOrId);
+    const normR = reasonNameOrId.trim().toLowerCase();
+    const matchedR = reasons.find(r => r.id === reasonNameOrId || r.name.trim().toLowerCase() === normR);
+    if (!matchedR) return [];
+    return (matchedR.remarks || []).filter(rm => rm.active !== false && (rm as any).isActive !== false);
+  };
+
+  const reconcileDroplistsNow = async (): Promise<{ success: boolean; changedCount: number; message: string }> => {
+    try {
+      const { reconciled, changedCount } = reconcileDroplistData(hierarchicalStatuses, reportDropdownCategories);
+      if (changedCount > 0) {
+        setHierarchicalStatuses(reconciled);
+        await saveHierarchicalDroplistsToFirestore(reconciled);
+        addAuditLog(
+          'Droplist Data Reconciled',
+          'global_config',
+          'hierarchical_droplists',
+          `Rekonsiliasi data droplist: ${changedCount} opsi lama berhasil diselaraskan ke struktur hierarki Firestore.`
+        );
+        toast.success(`Rekonsiliasi selesai: ${changedCount} opsi lama berhasil diselaraskan ke hierarki Firestore.`, 'Rekonsiliasi Berhasil');
+        return { success: true, changedCount, message: `${changedCount} opsi berhasil direkonsiliasi ke struktur hierarki.` };
+      } else {
+        toast.info('Seluruh konfigurasi droplist sudah selaras dan tidak ada data yang tumpang tindih.', 'Data Terverifikasi');
+        return { success: true, changedCount: 0, message: 'Seluruh konfigurasi sudah selaras dan terhubung.' };
+      }
+    } catch (err: any) {
+      console.error('[Reconciliation] Error reconciling droplists:', err);
+      toast.error('Gagal melakukan rekonsiliasi data: ' + (err?.message || err));
+      return { success: false, changedCount: 0, message: err?.message || 'Gagal rekonsiliasi' };
+    }
+  };
+
 
   const getWhatsAppPreviewForTicket = (ticketId: string, templateId?: string) => {
     const t = getTicketById(ticketId);
@@ -3358,19 +5181,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleUserStatus,
         resetUserPassword,
         deleteUser,
+        updateUser,
+        executeComprehensiveDeduplication,
         contractors,
         addContractor,
         updateContractor,
+        deleteContractor,
         autoRegisterContractors,
         coverageAreas,
         addCoverageArea,
         updateCoverageArea,
+        deleteCoverageArea,
         rootCauseCategories,
         workResultsList,
         updateRootCauseCategories,
         saveTechnicalReport,
         saveProgressReport,
         verifyTechnicalReport,
+        startWorkOnTicket,
+        approveProgressReport,
+        rejectProgressReport,
         tickets,
         scopedTickets,
         getTicketById,
@@ -3411,6 +5241,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         canonicalFields,
         updateCanonicalFieldConfig,
         auditLogs,
+        addAuditLog,
         ticketActivities,
         waLogs,
         googleSheetsConfig,
@@ -3428,7 +5259,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loadCentralData,
         firestoreStatus,
         firestoreLoading,
-        isFirestoreReady
+        isFirestoreReady,
+        syncStatus,
+        lastSyncTime,
+        syncError,
+        refreshFirestoreData,
+        reportDropdownCategories,
+        isDropdownCategoriesLoading,
+        addReportDropdownCategory,
+        updateReportDropdownCategory,
+        deleteReportDropdownCategory,
+        toggleReportDropdownCategoryActive,
+        chatCategories,
+        addChatCategory,
+        updateChatCategory,
+        deleteChatCategory,
+        toggleChatCategoryActive,
+        setTicketChatCategory,
+        hierarchicalStatuses,
+        addHierarchicalStatus,
+        updateHierarchicalStatus,
+        deleteHierarchicalStatus,
+        addHierarchicalReason,
+        updateHierarchicalReason,
+        deleteHierarchicalReason,
+        moveHierarchicalReason,
+        addHierarchicalRemark,
+        updateHierarchicalRemark,
+        deleteHierarchicalRemark,
+        getReasonsForStatus,
+        getRemarksForReason,
+        reconcileDroplistsNow
       }}
     >
       {children}

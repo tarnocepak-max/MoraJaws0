@@ -16,6 +16,7 @@ import {
   Users
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
+import { getAuthHeaders } from '../../services/authService';
 
 interface SessionManagementModalProps {
   isOpen?: boolean;
@@ -48,12 +49,21 @@ export const SessionManagementModal: React.FC<SessionManagementModalProps> = ({ 
   const fetchSessionsAndConfig = async () => {
     setIsLoading(true);
     try {
+      const authHdrs = getAuthHeaders();
       const [sessRes, cfgRes] = await Promise.all([
         fetch('/api/sessions', {
-          headers: { 'x-user-role': currentUser.role, 'x-user-id': currentUser.id }
+          headers: {
+            ...authHdrs,
+            'x-user-role': currentUser.role,
+            'x-user-id': currentUser.id
+          }
         }),
         fetch('/api/sessions/config', {
-          headers: { 'x-user-role': currentUser.role, 'x-user-id': currentUser.id }
+          headers: {
+            ...authHdrs,
+            'x-user-role': currentUser.role,
+            'x-user-id': currentUser.id
+          }
         })
       ]);
 
@@ -84,6 +94,7 @@ export const SessionManagementModal: React.FC<SessionManagementModalProps> = ({ 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
           'x-user-role': currentUser.role,
           'x-user-id': currentUser.id
         },
@@ -109,6 +120,7 @@ export const SessionManagementModal: React.FC<SessionManagementModalProps> = ({ 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
           'x-user-role': currentUser.role,
           'x-user-id': currentUser.id
         },

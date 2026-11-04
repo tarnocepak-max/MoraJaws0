@@ -236,12 +236,212 @@ export function deduplicateTicketsInMemory(ticketList: Ticket[]): Ticket[] {
       const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
       const newTime = new Date(t.updatedAt || t.createdAt || 0).getTime();
 
-      // If existing has no installer but current one does, or current is newer:
-      if ((!existing.installerName && t.installerName) || newTime > existingTime) {
-        seen.set(key, { ...existing, ...t, id: existing.id || t.id });
+      // If existing has no installer but current one does, or current is newer/equal:
+      if ((!existing.installerName && t.installerName) || newTime >= existingTime) {
+        seen.set(key, { ...existing, ...t, id: t.id || existing.id });
       }
     }
   }
 
   return Array.from(seen.values());
 }
+
+export interface DuplicateAuditReport {
+  totalExamined: number;
+  totalValid: number;
+  duplicatesFound: number;
+  duplicatesCleaned: number;
+  conflictsFound: number;
+  manualReviewList: Array<{
+    woNumber: string;
+    reason: string;
+    conflictingDocs: Array<{ id: string; customerName: string; customerPhone?: string }>;
+  }>;
+  failedCount: number;
+  cleanedTicketList: Ticket[];
+  duplicateDocIdsToDelete: string[];
+  mergedMasterTickets: Ticket[];
+  // 7 standard metrics matching prompt specifications
+  totalInspected: number;
+  totalDuplicatesDetected: number;
+  totalDuplicatesCleaned: number;
+  totalConflicts: number;
+  totalManualReviewNeeded: number;
+  totalFailed: number;
+  conflictItems: Array<{ woNumber: string; reasons: string[] }>;
+}
+
+/**
+ * Enterprise Duplicate Audit & Reconciliation Engine
+ * Automatically audits all Work Orders, detects duplicate identities, evaluates data integrity,
+ * safely merges critical histories into the master document, and isolates genuine duplicates for cleanup.
+ */
+export function auditAndCleanDuplicates(
+  allTickets: Ticket[],
+  onLog?: (action: string, entity: string, entityId: string, details: string) => void
+): DuplicateAuditReport {
+  const totalExamined = allTickets.length;
+  const groups = new Map<string, Ticket[]>();
+
+  // 1. Group by normalized canonical WO Number
+  for (const t of allTickets) {
+    if (!t) continue;
+    const rawWo = t.woNumber || (t as any).workOrderNumber || (t as any).wo_no || '';
+    const norm = normalizeWoNumber(rawWo);
+    if (!norm) {
+      // Empty WO number: treat each as individual record to protect against accidental mass deletion
+      groups.set(`unidentified_${t.id || Math.random()}`, [t]);
+      continue;
+    }
+    if (!groups.has(norm)) {
+      groups.set(norm, []);
+    }
+    groups.get(norm)!.push(t);
+  }
+
+  let duplicatesFound = 0;
+  let duplicatesCleaned = 0;
+  let conflictsFound = 0;
+  const manualReviewList: DuplicateAuditReport['manualReviewList'] = [];
+  const duplicateDocIdsToDelete: string[] = [];
+  const mergedMasterTickets: Ticket[] = [];
+  const cleanedTicketList: Ticket[] = [];
+
+  for (const [key, list] of groups.entries()) {
+    if (list.length === 1) {
+      cleanedTicketList.push(list[0]);
+      continue;
+    }
+
+    // Duplicates found in this group
+    const dupsInGroup = list.length - 1;
+    duplicatesFound += dupsInGroup;
+
+    // 2. Check for serious context conflict
+    // If different customer names and different non-empty phone numbers, flag for review
+    const uniqueCustNames = new Set(list.map(t => (t.customerName || t.endUserName || '').trim().toLowerCase()).filter(Boolean));
+    const uniquePhones = new Set(list.map(t => (t.customerPhone || '').replace(/\D/g, '')).filter(p => p.length >= 8));
+
+    if (uniqueCustNames.size > 1 && uniquePhones.size > 1) {
+      conflictsFound++;
+      manualReviewList.push({
+        woNumber: key,
+        reason: 'Konflik identitas: Dokumen memiliki nama pelanggan dan nomor telepon berbeda untuk WO yang sama.',
+        conflictingDocs: list.map(t => ({
+          id: t.id,
+          customerName: t.customerName || t.endUserName || 'Tanpa Nama',
+          customerPhone: t.customerPhone
+        }))
+      });
+      // Retain all copies for manual admin inspection
+      cleanedTicketList.push(...list);
+      continue;
+    }
+
+    // 3. Score documents to pick the true Master Record
+    let bestScore = -1;
+    let masterIdx = 0;
+
+    list.forEach((t, idx) => {
+      let score = 0;
+      if (t.statusWOInstaller === 'Completed') score += 15;
+      else if (t.statusWOInstaller === 'Installed') score += 12;
+      else if (t.statusWOInstaller === 'On Site' || t.statusWOInstaller === 'En Route') score += 10;
+      else if (t.statusWOInstaller === 'Assigned') score += 8;
+
+      if (t.technicalReport) score += 10;
+      if (t.installerName && t.installerName.trim()) score += 6;
+      if (t.statusWhatsApp === 'confirmed') score += 4;
+      if (t.fdtCode || t.fatCode) score += 3;
+      if (t.idCustomer || t.customerId) score += 2;
+      if (t.remarksWOInstaller) score += 2;
+      if (t.remarksAgent) score += 2;
+
+      // Prefer canonical deterministic ID
+      if (t.id && t.id.startsWith('wo_')) score += 1;
+
+      // Timestamp bonus
+      const ts = new Date(t.updatedAt || t.createdAt || 0).getTime();
+      if (!isNaN(ts)) score += (ts / 1e13);
+
+      if (score > bestScore) {
+        bestScore = score;
+        masterIdx = idx;
+      }
+    });
+
+    const master = { ...list[masterIdx] };
+    const duplicates = list.filter((_, idx) => idx !== masterIdx);
+
+    // 4. Merge non-empty metadata from duplicates into master
+    duplicates.forEach(dup => {
+      if (!master.customerPhone && dup.customerPhone) master.customerPhone = dup.customerPhone;
+      if (!master.idCustomer && (dup.idCustomer || dup.customerId)) master.idCustomer = (dup.idCustomer || dup.customerId) as string;
+      if (!master.streetName && dup.streetName) master.streetName = dup.streetName;
+      if (!master.clusterName && dup.clusterName) master.clusterName = dup.clusterName;
+      if (!master.fdtCode && dup.fdtCode) master.fdtCode = dup.fdtCode;
+      if (!master.fatCode && dup.fatCode) master.fatCode = dup.fatCode;
+      if (!master.installerName && dup.installerName) {
+        master.installerName = dup.installerName;
+        master.installerContact = dup.installerContact;
+      }
+      if (!master.technicalReport && dup.technicalReport) master.technicalReport = dup.technicalReport;
+
+      // Merge remarks if duplicate had extra info
+      if (dup.remarksAgent && dup.remarksAgent !== master.remarksAgent) {
+        master.remarksAgent = master.remarksAgent
+          ? `${master.remarksAgent} | [Catatan Duplikat]: ${dup.remarksAgent}`
+          : dup.remarksAgent;
+      }
+      if (dup.remarksWOInstaller && dup.remarksWOInstaller !== master.remarksWOInstaller) {
+        master.remarksWOInstaller = master.remarksWOInstaller
+          ? `${master.remarksWOInstaller} | [Laporan Duplikat]: ${dup.remarksWOInstaller}`
+          : dup.remarksWOInstaller;
+      }
+
+      duplicateDocIdsToDelete.push(dup.id);
+      duplicatesCleaned++;
+    });
+
+    master.updatedAt = new Date().toISOString();
+    mergedMasterTickets.push(master);
+    cleanedTicketList.push(master);
+
+    if (onLog) {
+      onLog(
+        'Duplicate Cleaned & Merged',
+        'ticket',
+        master.id,
+        `Membersihkan ${duplicates.length} duplikasi WO ${key}. Dokumen utama ID ${master.id} dipertahankan dengan data terlengkap.`
+      );
+    }
+  }
+
+  const totalValid = cleanedTicketList.length;
+  const conflictItems = manualReviewList.map(m => ({
+    woNumber: m.woNumber,
+    reasons: [m.reason]
+  }));
+
+  return {
+    totalExamined,
+    totalValid,
+    duplicatesFound,
+    duplicatesCleaned,
+    conflictsFound,
+    manualReviewList,
+    failedCount: 0,
+    cleanedTicketList,
+    duplicateDocIdsToDelete,
+    mergedMasterTickets,
+    // 7 prompt metrics
+    totalInspected: totalExamined,
+    totalDuplicatesDetected: duplicatesFound,
+    totalDuplicatesCleaned: duplicatesCleaned,
+    totalConflicts: conflictsFound,
+    totalManualReviewNeeded: manualReviewList.length,
+    totalFailed: 0,
+    conflictItems
+  };
+}
+

@@ -25,7 +25,11 @@ import {
   ShieldCheck,
   Wrench,
   Check,
-  Calendar
+  Calendar,
+  ThumbsUp,
+  ThumbsDown,
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
 
 interface DashboardOverviewProps {
@@ -40,40 +44,32 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
   const [activeTab, setActiveTab] = useState<'contractors' | 'coverage_areas'>('contractors');
 
-  // Schedule Appointment Date Filtering (Asia/Jakarta WIB standard)
-  const [scheduleDateFilter, setScheduleDateFilter] = useState<string>(() => getJakartaDateString(0));
-  const [scheduleFilterMode, setScheduleFilterMode] = useState<'selected_date' | 'all'>('all');
-  const [currentTimeKey, setCurrentTimeKey] = useState<string>(() => getJakartaDateString(0));
+  // Auto-updating today date in Asia/Jakarta WIB (Requirement 1)
+  const [currentJakartaToday, setCurrentJakartaToday] = useState<string>(() => getJakartaDateString(0));
 
   // Auto-rollover at midnight WIB
   useEffect(() => {
     const timer = setInterval(() => {
       const liveToday = getJakartaDateString(0);
-      if (liveToday !== currentTimeKey) {
-        setCurrentTimeKey(liveToday);
-        setScheduleDateFilter(prev => (prev === currentTimeKey ? liveToday : prev));
+      if (liveToday !== currentJakartaToday) {
+        setCurrentJakartaToday(liveToday);
       }
     }, 30000);
     return () => clearInterval(timer);
-  }, [currentTimeKey]);
+  }, [currentJakartaToday]);
 
   // Role Scoping: Leader and Installer dashboard is strictly scoped to their contractor or area
   const isRoleRestricted = currentUser.role === 'leader' || currentUser.role === 'installer';
   const effectiveTickets = isRoleRestricted ? scopedTickets : tickets;
   const activeTickets = effectiveTickets.filter(t => !t.isArchived && !t.isDeleted);
 
-  // Filtered tickets based on role and scheduled appointment date
+  // Requirement 1: Entire indicator counts on dashboard strictly count WO with appointment date = today (Asia/Jakarta WIB)
   const displayTickets: Ticket[] = useMemo<Ticket[]>(() => {
-    if (scheduleFilterMode === 'selected_date') {
-      return activeTickets.filter((t: Ticket) => {
-        const ticketDate = getTicketAppointmentDate(t);
-        // Work Order tanpa tanggal jadwal harus ditangani dengan aman dan tidak boleh dianggap memiliki jadwal hari ini
-        if (!ticketDate) return false;
-        return ticketDate === scheduleDateFilter;
-      });
-    }
-    return activeTickets;
-  }, [activeTickets, scheduleFilterMode, scheduleDateFilter]);
+    return activeTickets.filter((t: Ticket) => {
+      const ticketDate = getTicketAppointmentDate(t);
+      return Boolean(ticketDate && ticketDate === currentJakartaToday);
+    });
+  }, [activeTickets, currentJakartaToday]);
 
   const userContractor = (currentUser.contractor || '').toLowerCase().trim();
   const userArea = (currentUser.area || '').toLowerCase().trim();
@@ -114,6 +110,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
   const pendingFailedCount = displayTickets.filter(
     t => t.statusWOInstaller === 'Pending Technical' || t.statusWOInstaller === 'Failed / Cancelled' || t.statusWOAgent === 'Cancelled'
   ).length;
+
+  // Dispatch Approval KPI Indicators (realtime from Firestore)
+  const butuhApprovalCount = displayTickets.filter(t => t.approvalStatus === 'BUTUH APPROVAL').length;
+  const approvedCount = displayTickets.filter(t => t.approvalStatus === 'APPROVED').length;
+  const rejectedCount = displayTickets.filter(t => t.approvalStatus === 'REJECTED').length;
+
+  const ticketsNeedingApproval = useMemo(() => {
+    return displayTickets.filter(t => t.approvalStatus === 'BUTUH APPROVAL');
+  }, [displayTickets]);
 
   const totalInstallers = isRoleRestricted
     ? users.filter(u => u.role === 'installer' && u.active && (
@@ -235,94 +240,215 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
         </div>
       </div>
 
-      {/* Super Admin Schedule Appointment Date Filter Bar */}
-      {currentUser.role === 'super_admin' && (
-        <div className="bg-white dark:bg-[#1a0f30] rounded-2xl border-2 border-[#D8CCF3] dark:border-[#3B1D78] p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#5B35B1] text-white flex items-center justify-center font-bold shadow-xs shrink-0">
-              <Calendar className="w-4 h-4" />
+      {/* Schedule Appointment Date Indicator Info Bar (Requirement 1) */}
+      <div className="bg-white dark:bg-[#1a0f30] rounded-2xl border-2 border-[#D8CCF3] dark:border-[#3B1D78] p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-[#5B35B1] text-white flex items-center justify-center font-bold shadow-xs shrink-0">
+            <Calendar className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-[#3B1D78] dark:text-[#E9E1FF] flex items-center gap-2">
+              <span>Indikator Work Order Appointment Hari Ini (WIB)</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#E9E1FF] text-[#3B1D78] dark:bg-[#3B1D78] dark:text-[#E9E1FF] border border-[#D8CCF3] dark:border-[#5B35B1]">
+                {formatAppointmentDateDisplay(currentJakartaToday)}
+              </span>
             </div>
-            <div>
-              <div className="text-xs font-bold text-[#3B1D78] dark:text-[#E9E1FF] flex items-center gap-2">
-                <span>Filter Schedule Appointment Date</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#E9E1FF] text-[#3B1D78] dark:bg-[#3B1D78] dark:text-[#E9E1FF] border border-[#D8CCF3] dark:border-[#5B35B1]">
-                  {scheduleFilterMode === 'selected_date' ? formatAppointmentDateDisplay(scheduleDateFilter) : 'Semua Tanggal'}
-                </span>
-              </div>
-              <p className="text-[11px] text-[#756B8D] dark:text-[#D8CCF3] mt-0.5">
-                {scheduleFilterMode === 'selected_date'
-                  ? `Akun Super Admin menampilkan ${displayTickets.length} Work Order sesuai jadwal appointment ${formatAppointmentDateDisplay(scheduleDateFilter)}.`
-                  : `Menampilkan seluruh ${displayTickets.length} Work Order aktif dari database (tanpa filter tanggal).`}
-              </p>
+            <p className="text-[11px] text-[#756B8D] dark:text-[#D8CCF3] mt-0.5">
+              Seluruh indikator dan monitoring pada dashboard menghitung total {displayTickets.length} Work Order dengan tanggal appointment hari ini. Total seluruh tiket historis dan mendatang tersimpan di database dan dapat dilihat pada menu <strong>Database Application</strong>.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => onNavigate('database')}
+            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F5F1FF] text-[#3B1D78] dark:bg-[#251247] dark:text-[#E9E1FF] border border-[#D8CCF3] dark:border-[#3B1D78] hover:bg-[#E9E1FF] transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Lihat Database Lengkap</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Dispatch Approval Workflow Hub (Realtime Firestore Integration) */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white uppercase tracking-wide">
+                Alur Approval & Verifikasi Dispatch
+              </h3>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                Realtime Firestore
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Sinkronisasi realtime laporan teknisi lapangan, proses verifikasi Dispatch, dan status penutupan tiket WO.
+            </p>
+          </div>
+          <button
+            onClick={() => onNavigate('tickets')}
+            className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-xl border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5 transition-colors self-start sm:self-auto cursor-pointer"
+          >
+            <span>Buka Halaman Tiket WO</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* 4 Status Workflow Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* BUTUH APPROVAL */}
+          <div
+            onClick={() => onNavigate('tickets')}
+            className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/60 hover:border-amber-400 transition-all cursor-pointer group shadow-2xs"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping inline-block" />
+                BUTUH APPROVAL
+              </span>
+              <Clock className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="text-2xl font-black font-mono text-amber-700 dark:text-amber-300">
+              {butuhApprovalCount}
+            </div>
+            <div className="text-[10.5px] text-amber-800/80 dark:text-amber-300/80 mt-1 flex items-center justify-between">
+              <span>Menunggu Dispatch</span>
+              <span className="group-hover:translate-x-0.5 transition-transform text-amber-600 font-bold">→</span>
             </div>
           </div>
 
-          {(() => {
-            const todayWib = getJakartaDateString(0);
-            const tomorrowWib = getJakartaDateString(1);
-            const todayParts = getJakartaDateParts(0);
-            const tomorrowParts = getJakartaDateParts(1);
+          {/* APPROVED */}
+          <div
+            onClick={() => onNavigate('tickets')}
+            className="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-700/60 hover:border-emerald-400 transition-all cursor-pointer group shadow-2xs"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
+                APPROVED
+              </span>
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="text-2xl font-black font-mono text-emerald-700 dark:text-emerald-300">
+              {approvedCount}
+            </div>
+            <div className="text-[10.5px] text-emerald-800/80 dark:text-emerald-300/80 mt-1 flex items-center justify-between">
+              <span>Laporan disetujui</span>
+              <span className="group-hover:translate-x-0.5 transition-transform text-emerald-600 font-bold">→</span>
+            </div>
+          </div>
 
-            return (
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScheduleDateFilter(todayWib);
-                    setScheduleFilterMode('selected_date');
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    scheduleFilterMode === 'selected_date' && scheduleDateFilter === todayWib
-                      ? 'bg-[#3B1D78] text-white shadow-xs'
-                      : 'bg-[#F5F1FF] text-[#3B1D78] dark:bg-[#251247] dark:text-[#E9E1FF] border border-[#D8CCF3] dark:border-[#3B1D78] hover:bg-[#E9E1FF]'
-                  }`}
-                >
-                  Hari Ini ({todayParts.labelShort})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScheduleDateFilter(tomorrowWib);
-                    setScheduleFilterMode('selected_date');
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    scheduleFilterMode === 'selected_date' && scheduleDateFilter === tomorrowWib
-                      ? 'bg-[#3B1D78] text-white shadow-xs'
-                      : 'bg-[#F5F1FF] text-[#3B1D78] dark:bg-[#251247] dark:text-[#E9E1FF] border border-[#D8CCF3] dark:border-[#3B1D78] hover:bg-[#E9E1FF]'
-                  }`}
-                >
-                  Besok ({tomorrowParts.labelShort})
-                </button>
-                <div className="flex items-center gap-1.5 bg-[#F5F1FF] dark:bg-[#251247] px-2.5 py-1 rounded-xl border border-[#D8CCF3] dark:border-[#3B1D78]">
-                  <span className="text-[10.5px] text-[#756B8D] font-medium">Pilih:</span>
-                  <input
-                    type="date"
-                    value={scheduleDateFilter}
-                    onChange={e => {
-                      if (e.target.value) {
-                        setScheduleDateFilter(e.target.value);
-                        setScheduleFilterMode('selected_date');
-                      }
-                    }}
-                    className="bg-transparent text-xs font-bold font-mono text-[#3B1D78] dark:text-[#E9E1FF] focus:outline-none cursor-pointer"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setScheduleFilterMode(prev => prev === 'all' ? 'selected_date' : 'all')}
-                  className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                    scheduleFilterMode === 'all'
-                      ? 'bg-[#5B35B1] text-white border-[#5B35B1] shadow-xs'
-                      : 'text-[#756B8D] dark:text-[#D8CCF3] border-[#D8CCF3] dark:border-[#3B1D78] hover:bg-[#E9E1FF]/50'
-                  }`}
-                >
-                  {scheduleFilterMode === 'all' ? 'Aktifkan Filter Jadwal' : 'Semua Tanggal'}
-                </button>
-              </div>
-            );
-          })()}
+          {/* REJECTED / PERLU REVISI */}
+          <div
+            onClick={() => onNavigate('tickets')}
+            className="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-300 dark:border-rose-700/60 hover:border-rose-400 transition-all cursor-pointer group shadow-2xs"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-bold text-rose-800 dark:text-rose-300">
+                REJECTED / REVISI
+              </span>
+              <AlertCircle className="w-4 h-4 text-rose-600 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="text-2xl font-black font-mono text-rose-700 dark:text-rose-300">
+              {rejectedCount}
+            </div>
+            <div className="text-[10.5px] text-rose-800/80 dark:text-rose-300/80 mt-1 flex items-center justify-between">
+              <span>Perlu perbaikan teknisi</span>
+              <span className="group-hover:translate-x-0.5 transition-transform text-rose-600 font-bold">→</span>
+            </div>
+          </div>
+
+          {/* CLOSED */}
+          <div
+            onClick={() => onNavigate('tickets')}
+            className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 hover:border-slate-400 transition-all cursor-pointer group shadow-2xs"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                CLOSED
+              </span>
+              <Check className="w-4 h-4 text-slate-600 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="text-2xl font-black font-mono text-slate-900 dark:text-white">
+              {closedCount}
+            </div>
+            <div className="text-[10.5px] text-slate-500 mt-1 flex items-center justify-between">
+              <span>WO resmi ditutup</span>
+              <span className="group-hover:translate-x-0.5 transition-transform text-slate-600 font-bold">→</span>
+            </div>
+          </div>
         </div>
-      )}
+
+        {/* Quick Review Table for Pending Approval WOs */}
+        {ticketsNeedingApproval.length > 0 && (
+          <div className="pt-2">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <span>WO Menunggu Approval Dispatch ({ticketsNeedingApproval.length})</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigate('tickets')}
+                className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
+              >
+                Lihat di Tabel Tiket →
+              </button>
+            </div>
+            <div className="overflow-x-auto rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/30 dark:bg-amber-950/20">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-amber-200 dark:border-amber-900/50 text-[10.5px] uppercase font-bold text-amber-900 dark:text-amber-300 bg-amber-100/50 dark:bg-amber-900/30">
+                    <th className="py-2 px-3">No. WO</th>
+                    <th className="py-2 px-3">Pelanggan</th>
+                    <th className="py-2 px-3">Teknisi Lapangan</th>
+                    <th className="py-2 px-3">Report Status</th>
+                    <th className="py-2 px-3">Waktu Lapor</th>
+                    <th className="py-2 px-3 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-amber-100 dark:divide-amber-900/30">
+                  {ticketsNeedingApproval.slice(0, 5).map(t => {
+                    const lastRep = t.progressReports?.[t.progressReports.length - 1];
+                    return (
+                      <tr key={t.id} className="hover:bg-amber-100/30 dark:hover:bg-amber-900/20 transition-colors">
+                        <td className="py-2 px-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                          {t.woNumber}
+                        </td>
+                        <td className="py-2 px-3 font-medium text-slate-800 dark:text-slate-200 truncate max-w-[140px]">
+                          {t.customerName}
+                        </td>
+                        <td className="py-2 px-3 text-slate-700 dark:text-slate-300">
+                          {t.installerName || lastRep?.submittedBy || '-'}
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="px-2 py-0.5 rounded-md font-bold text-[10.5px] bg-amber-200/60 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                            {lastRep?.reportStatus || t.statusWOInstaller}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-slate-500 font-mono text-[11px]">
+                          {lastRep?.timestamp ? new Date(lastRep.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                        </td>
+                        <td className="py-2 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => onNavigate('tickets')}
+                            className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                          >
+                            Review Tiket
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Primary KPI Grid (10 Metrik Utama Bagian G.1) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">

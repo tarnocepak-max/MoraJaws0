@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
 import { Ticket, TicketStatusWOInstaller, TechnicalReport } from '../../types/index.ts';
-import { StatusInstallerBadge, StatusWhatsAppBadge, StatusAgentBadge } from '../common/Badge';
+import { StatusInstallerBadge, StatusWhatsAppBadge, StatusAgentBadge, StatusApprovalBadge } from '../common/Badge';
 import { TicketLiveChat } from '../chat/TicketLiveChat';
 import { TechnicalReportForm } from '../tickets/TechnicalReportForm';
 import { InstallerTicketFullview } from './InstallerTicketFullview';
@@ -34,14 +35,17 @@ import {
   Layers,
   ArrowRight,
   ShieldAlert,
-  Sparkles
+  Sparkles,
+  Play,
+  AlertCircle
 } from 'lucide-react';
 
-export type StatusFilterCategory = 'all' | 'done' | 'pending' | 'reschedule' | 'cancel';
+export type StatusFilterCategory = 'all' | 'pending' | 'butuh_approval' | 'done' | 'reschedule' | 'cancel';
 
 interface InstallerPortalProps {
   onSelectTicket?: (ticket: Ticket, defaultTab?: 'overview' | 'report' | 'chat' | 'history') => void;
   onOpenWhatsApp: (ticket: Ticket) => void;
+  initialFilter?: StatusFilterCategory;
 }
 
 /**
@@ -81,7 +85,8 @@ export const classifyInstallerStatus = (ticket: Ticket): 'done' | 'pending' | 'r
     ticket.statusWOInstaller === 'Completed' ||
     ticket.statusWOInstaller === 'Installed' ||
     ticket.statusWOAgent === 'Resolved' ||
-    ticket.statusWOAgent === 'Closed';
+    ticket.statusWOAgent === 'Closed' ||
+    ticket.approvalStatus === 'APPROVED';
 
   if (isDone) return 'done';
 
@@ -89,13 +94,19 @@ export const classifyInstallerStatus = (ticket: Ticket): 'done' | 'pending' | 'r
   return 'pending';
 };
 
-export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket, onOpenWhatsApp }) => {
+export const InstallerPortal: React.FC<InstallerPortalProps> = ({
+  onSelectTicket,
+  onOpenWhatsApp,
+  initialFilter = 'all'
+}) => {
   const {
     tickets,
     updateTicketStatus,
+    startWorkOnTicket,
     currentUser,
     users
   } = useApp();
+  const { toast } = useToast();
 
   // Active installer identification
   const myInstallers = users.filter(u => u.role === 'installer');
@@ -119,14 +130,42 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
 
   // Filter tickets for this technician: ONLY work orders assigned to their account!
   const myTickets = useMemo(() => {
+    if (currentUser.role === 'installer') {
+      const myId = currentUser.id || '';
+      const myUsername = (currentUser.username || '').toLowerCase().trim();
+      const myName = (currentUser.name || '').toLowerCase().trim();
+
+      return tickets.filter(t => {
+        if (t.isArchived || t.isDeleted) return false;
+        if (!t.installerName && !t.assignedTo) return false;
+
+        // Check UID / assignedTo
+        if (myId && t.assignedTo === myId) return true;
+        if (myUsername && (t.assignedTo === myUsername || (t.assignedTo && t.assignedTo.toLowerCase() === myUsername))) return true;
+
+        // Check installerName
+        if (myName && isInstallerMatch(t.installerName, myName)) return true;
+        if (myUsername && isInstallerMatch(t.installerName, myUsername)) return true;
+
+        return false;
+      });
+    }
+
     return tickets.filter(
       t => !t.isArchived && !t.isDeleted && Boolean(t.installerName) && isInstallerMatch(t.installerName, effectiveInstallerName)
     );
-  }, [tickets, effectiveInstallerName]);
+  }, [tickets, currentUser, effectiveInstallerName]);
 
   // Status Filter State
-  const [statusFilter, setStatusFilter] = useState<StatusFilterCategory>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilterCategory>(initialFilter);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Sync filter when prop changes (navigating between Tugas Saya and Riwayat)
+  React.useEffect(() => {
+    if (initialFilter) {
+      setStatusFilter(initialFilter);
+    }
+  }, [initialFilter]);
 
   // Fullview ticket state for technician
   const [fullviewTicket, setFullviewTicket] = useState<Ticket | null>(null);
@@ -142,10 +181,14 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
   const counts = useMemo(() => {
     let done = 0;
     let pending = 0;
+    let butuh_approval = 0;
     let reschedule = 0;
     let cancel = 0;
 
     myTickets.forEach(t => {
+      if (t.approvalStatus === 'BUTUH APPROVAL') {
+        butuh_approval++;
+      }
       const cat = classifyInstallerStatus(t);
       if (cat === 'done') done++;
       else if (cat === 'pending') pending++;
@@ -157,6 +200,7 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
       all: myTickets.length,
       done,
       pending,
+      butuh_approval,
       reschedule,
       cancel
     };
@@ -166,7 +210,9 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
   const filteredTickets = useMemo(() => {
     return myTickets.filter(t => {
       // Status filter
-      if (statusFilter !== 'all') {
+      if (statusFilter === 'butuh_approval') {
+        if (t.approvalStatus !== 'BUTUH APPROVAL') return false;
+      } else if (statusFilter !== 'all') {
         const cat = classifyInstallerStatus(t);
         if (cat !== statusFilter) return false;
       }
@@ -266,9 +312,10 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
       </div>
 
       {/* ============================================================ */}
-      {/* 2. STATUS KPI COUNTERS: DONE, PENDING, RESCHEDULE, CANCEL    */}
       {/* ============================================================ */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+      {/* 2. STATUS KPI COUNTERS: BUTUH APPROVAL, PENDING, DONE, ETC   */}
+      {/* ============================================================ */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         {/* Total Card */}
         <button
           onClick={() => setStatusFilter('all')}
@@ -289,7 +336,7 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
               {counts.all}
             </span>
             <span className={`text-[11px] font-medium ${statusFilter === 'all' ? 'text-slate-300' : 'text-slate-400'}`}>
-              Tiket Ditugaskan
+              Tiket
             </span>
           </div>
           {statusFilter === 'all' && (
@@ -299,7 +346,74 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
           )}
         </button>
 
-        {/* 1. DONE (Selesai) */}
+        {/* 1. BUTUH APPROVAL (Laporan tersimpan menunggu Dispatch) */}
+        <button
+          onClick={() => setStatusFilter('butuh_approval')}
+          className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
+            statusFilter === 'butuh_approval'
+              ? 'bg-gradient-to-br from-amber-100 to-amber-50 dark:from-amber-950/90 dark:to-[#1E1135] border-amber-500 shadow-md ring-2 ring-amber-500/50'
+              : 'bg-white dark:bg-slate-900 border-amber-300/80 dark:border-amber-900/60 hover:border-amber-400 shadow-2xs'
+          }`}
+        >
+          {counts.butuh_approval > 0 && (
+            <span className="absolute top-2 right-2 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            </span>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1">
+              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span>Butuh Approval</span>
+            </span>
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-extrabold font-mono text-amber-800 dark:text-amber-300">
+              {counts.butuh_approval}
+            </span>
+            <span className="text-[11px] font-medium text-amber-700/80 dark:text-amber-400/80">
+              Menunggu Dispatch
+            </span>
+          </div>
+          {statusFilter === 'butuh_approval' && (
+            <div className="mt-2 text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span> Filter Aktif
+            </div>
+          )}
+        </button>
+
+        {/* 2. PENDING (Menunggu / Dalam Proses) */}
+        <button
+          onClick={() => setStatusFilter('pending')}
+          className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
+            statusFilter === 'pending'
+              ? 'bg-amber-50 dark:bg-amber-950/80 border-amber-500 shadow-md ring-2 ring-amber-500/50'
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-amber-300 dark:hover:border-amber-800 shadow-2xs'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+              <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span>Pending</span>
+            </span>
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-extrabold font-mono text-amber-700 dark:text-amber-300">
+              {counts.pending}
+            </span>
+            <span className="text-[11px] font-medium text-amber-600/80 dark:text-amber-400/80">
+              Pengerjaan
+            </span>
+          </div>
+          {statusFilter === 'pending' && (
+            <div className="mt-2 text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span> Filter Aktif
+            </div>
+          )}
+        </button>
+
+        {/* 3. DONE (Selesai) */}
         <button
           onClick={() => setStatusFilter('done')}
           className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
@@ -320,7 +434,7 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
               {counts.done}
             </span>
             <span className="text-[11px] font-medium text-emerald-600/80 dark:text-emerald-400/80">
-              WO Selesai
+              Disetujui
             </span>
           </div>
           {statusFilter === 'done' && (
@@ -330,38 +444,7 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
           )}
         </button>
 
-        {/* 2. PENDING (Menunggu / Dalam Proses) */}
-        <button
-          onClick={() => setStatusFilter('pending')}
-          className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
-            statusFilter === 'pending'
-              ? 'bg-amber-50 dark:bg-amber-950/80 border-amber-500 shadow-md ring-2 ring-amber-500/50'
-              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-amber-300 dark:hover:border-amber-800 shadow-2xs'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <span>Pending (Proses)</span>
-            </span>
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold font-mono text-amber-700 dark:text-amber-300">
-              {counts.pending}
-            </span>
-            <span className="text-[11px] font-medium text-amber-600/80 dark:text-amber-400/80">
-              Perlu Pengerjaan
-            </span>
-          </div>
-          {statusFilter === 'pending' && (
-            <div className="mt-2 text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span> Filter Aktif
-            </div>
-          )}
-        </button>
-
-        {/* 3. RESCHEDULE (Jadwal Ulang) */}
+        {/* 4. RESCHEDULE (Jadwal Ulang) */}
         <button
           onClick={() => setStatusFilter('reschedule')}
           className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
@@ -392,7 +475,7 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
           )}
         </button>
 
-        {/* 4. CANCEL (Dibatalkan) */}
+        {/* 5. CANCEL (Dibatalkan) */}
         <button
           onClick={() => setStatusFilter('cancel')}
           className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
@@ -462,6 +545,17 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
             }`}
           >
             Semua ({counts.all})
+          </button>
+          <button
+            onClick={() => setStatusFilter('butuh_approval')}
+            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors flex items-center gap-1 ${
+              statusFilter === 'butuh_approval'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-amber-100 text-amber-900 hover:bg-amber-200 dark:bg-amber-950/80 dark:text-amber-200 border border-amber-300/60'
+            }`}
+          >
+            <AlertCircle className="w-3 h-3" />
+            <span>Butuh Approval ({counts.butuh_approval})</span>
           </button>
           <button
             onClick={() => setStatusFilter('pending')}
@@ -570,6 +664,7 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
                       <StatusInstallerBadge status={ticket.statusWOInstaller} />
                       <StatusAgentBadge status={ticket.statusWOAgent} />
                       <StatusWhatsAppBadge status={ticket.statusWhatsApp} />
+                      <StatusApprovalBadge status={ticket.approvalStatus} />
                     </div>
                   </div>
 
@@ -698,7 +793,33 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
                     {/* Quick status progression buttons for field technician */}
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {ticket.statusWOInstaller === 'Assigned' && (
+                      {!ticket.workStartedAt && (ticket.statusWOInstaller === 'Assigned' || !ticket.statusWOInstaller) ? (
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const res = await startWorkOnTicket(ticket.id);
+                              if (res.success && res.ticket) {
+                                setFullviewTicket(res.ticket);
+                                toast.success(`Tiket WO ${ticket.woNumber} dibuka dan status pengerjaan telah dimulai.`, 'Mulai Dikerjakan');
+                              } else if (!res.success && res.error) {
+                                toast.error(res.error, 'Gagal Memulai Pengerjaan');
+                              } else {
+                                setFullviewTicket(ticket);
+                              }
+                            } catch {
+                              setFullviewTicket(ticket);
+                            }
+                          }}
+                          className="px-3.5 py-1.5 bg-gradient-to-r from-[#7C3AED] to-[#5B35B1] hover:from-[#6D28D9] hover:to-[#4C1D95] text-white text-xs font-extrabold rounded-lg flex items-center gap-1.5 shadow-md shadow-purple-500/20 active:scale-95 transition-all cursor-pointer"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>Mulai Kerjakan</span>
+                        </button>
+                      ) : null}
+
+                      {ticket.statusWOInstaller === 'Assigned' && !ticket.workStartedAt && (
                         <button
                           onClick={() => handleQuickStatus(ticket.id, 'En Route', 'Teknisi berangkat menuju lokasi pelanggan')}
                           className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-colors"
@@ -718,13 +839,13 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({ onSelectTicket
                         </button>
                       )}
 
-                      {ticket.statusWOInstaller === 'On Site' && (
+                      {(ticket.statusWOInstaller === 'On Site' || ticket.workStartedAt) && ticket.statusWOInstaller !== 'Completed' && (
                         <button
                           onClick={() => handleOpenTicket(ticket)}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-colors"
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
                         >
                           <Check className="w-3.5 h-3.5" />
-                          <span>Isi Laporan / Selesai</span>
+                          <span>{ticket.approvalStatus === 'BUTUH APPROVAL' ? 'Lihat Laporan' : 'Isi Laporan / Selesai'}</span>
                         </button>
                       )}
 

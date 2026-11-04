@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Ticket, TechnicalReport } from '../../types/index.ts';
 import { useApp } from '../../context/AppContext';
+import { useMoraJawsSound } from '../../context/SoundContext';
+import { getSafePreviewUrl } from '../../services/storageCompatibility';
 import {
   Wrench,
   CheckCircle2,
@@ -28,6 +30,7 @@ export const TechnicalReportForm: React.FC<TechnicalReportFormProps> = ({ ticket
     saveTechnicalReport,
     verifyTechnicalReport
   } = useApp();
+  const { playReportSavedSound, playErrorSound } = useMoraJawsSound();
 
   const existingReport = ticket.technicalReport;
 
@@ -130,11 +133,13 @@ export const TechnicalReportForm: React.FC<TechnicalReportFormProps> = ({ ticket
     });
 
     if (result.success) {
+      playReportSavedSound();
       setIsEditing(false);
       setNotice({ type: 'success', text: 'Laporan teknis pekerjaan & root cause berhasil disimpan!' });
       setTimeout(() => setNotice(null), 3500);
       onSuccess?.();
     } else {
+      playErrorSound();
       setNotice({ type: 'error', text: result.error || 'Gagal menyimpan laporan.' });
       setTimeout(() => setNotice(null), 3500);
     }
@@ -253,7 +258,7 @@ export const TechnicalReportForm: React.FC<TechnicalReportFormProps> = ({ ticket
                     onClick={() => setZoomImage(existingReport.photoBeforeUrl!)}
                     className="cursor-pointer group relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 h-40 bg-slate-100 dark:bg-slate-800"
                   >
-                    <img src={existingReport.photoBeforeUrl} alt="Foto Sebelum" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    <img src={getSafePreviewUrl(existingReport.photoBeforeUrl)} alt="Foto Sebelum" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
                       <Maximize2 className="w-5 h-5" />
                     </div>
@@ -272,7 +277,7 @@ export const TechnicalReportForm: React.FC<TechnicalReportFormProps> = ({ ticket
                     onClick={() => setZoomImage(existingReport.photoAfterUrl!)}
                     className="cursor-pointer group relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 h-40 bg-slate-100 dark:bg-slate-800"
                   >
-                    <img src={existingReport.photoAfterUrl} alt="Foto Sesudah" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    <img src={getSafePreviewUrl(existingReport.photoAfterUrl)} alt="Foto Sesudah" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
                       <Maximize2 className="w-5 h-5" />
                     </div>
@@ -444,7 +449,7 @@ export const TechnicalReportForm: React.FC<TechnicalReportFormProps> = ({ ticket
               </label>
               {photoBeforeUrl ? (
                 <div className="relative group rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600 h-32">
-                  <img src={photoBeforeUrl} alt="Foto Sebelum" className="w-full h-full object-cover" />
+                  <img src={getSafePreviewUrl(photoBeforeUrl)} alt="Foto Sebelum" className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => setPhotoBeforeUrl('')}
@@ -474,7 +479,7 @@ export const TechnicalReportForm: React.FC<TechnicalReportFormProps> = ({ ticket
               </label>
               {photoAfterUrl ? (
                 <div className="relative group rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600 h-32">
-                  <img src={photoAfterUrl} alt="Foto Sesudah" className="w-full h-full object-cover" />
+                  <img src={getSafePreviewUrl(photoAfterUrl)} alt="Foto Sesudah" className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => setPhotoAfterUrl('')}
@@ -523,7 +528,7 @@ export const TechnicalReportForm: React.FC<TechnicalReportFormProps> = ({ ticket
             >
               <X className="w-5 h-5" />
             </button>
-            <img src={zoomImage} alt="Bukti Foto Zoom" className="max-w-full max-h-[85vh] object-contain rounded-lg" />
+            <img src={getSafePreviewUrl(zoomImage)} alt="Bukti Foto Zoom" className="max-w-full max-h-[85vh] object-contain rounded-lg" />
           </div>
         </div>
       )}

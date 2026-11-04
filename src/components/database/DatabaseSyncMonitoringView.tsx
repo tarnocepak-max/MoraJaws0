@@ -22,6 +22,7 @@ import {
   FileDown
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
+import { getAuthHeaders } from '../../services/authService';
 
 export const DatabaseSyncMonitoringView: React.FC = () => {
   const { currentUser, googleSheetsConfig } = useApp();
@@ -52,12 +53,21 @@ export const DatabaseSyncMonitoringView: React.FC = () => {
   const fetchStatusAndHistory = async () => {
     setIsLoading(true);
     try {
+      const authHdrs = getAuthHeaders();
       const [statusRes, historyRes] = await Promise.all([
         fetch('/api/sync/status', {
-          headers: { 'x-user-role': currentUser.role, 'x-user-id': currentUser.id }
+          headers: {
+            ...authHdrs,
+            'x-user-role': currentUser.role,
+            'x-user-id': currentUser.id
+          }
         }),
         fetch('/api/sync/history', {
-          headers: { 'x-user-role': currentUser.role, 'x-user-id': currentUser.id }
+          headers: {
+            ...authHdrs,
+            'x-user-role': currentUser.role,
+            'x-user-id': currentUser.id
+          }
         })
       ]);
 
@@ -95,6 +105,7 @@ export const DatabaseSyncMonitoringView: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
           'x-user-role': currentUser.role,
           'x-user-id': currentUser.id
         }
@@ -129,6 +140,7 @@ export const DatabaseSyncMonitoringView: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
           'x-user-role': currentUser.role,
           'x-user-id': currentUser.id
         },

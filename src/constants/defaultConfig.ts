@@ -8,8 +8,14 @@ import {
   Ticket,
   Contractor,
   CoverageArea,
-  RootCauseCategory
+  RootCauseCategory,
+  User,
+  NavCategoryConfig,
+  StandaloneMenuItem,
+  NavSubmenuItem,
+  NavigationFirestoreDoc
 } from '../types';
+import { DEFAULT_PASSWORD_HASH } from '../services/authService';
 
 export const DEFAULT_COLUMNS: ColumnConfig[] = [
   { key: 'woNumber', label: 'WO Number', visible: true, order: 1, width: 140, sticky: 'left', format: 'code', sortable: true, filterable: true },
@@ -238,8 +244,314 @@ export const DEFAULT_UI_CONFIG: UIConfiguration = {
       actionButtonsLayout: 'inline_icons',
       multiColumnDetail: true
     }
+  },
+  navigationSettings: {
+    categories: {
+      contractor_area: { accordionEnabled: true },
+      installer: { accordionEnabled: true },
+      menu_tambahan: { accordionEnabled: true }
+    },
+    allowMultipleOpenGroups: true
   }
 };
+
+export const DEFAULT_CANONICAL_CATEGORIES: NavCategoryConfig[] = [
+  {
+    id: 'contractor_area',
+    name: 'Contractor & Area',
+    icon: 'Building2',
+    order: 1,
+    isActive: true,
+    mode: 'accordion',
+    allowMultipleOpen: true
+  },
+  {
+    id: 'installer',
+    name: 'Installer',
+    icon: 'Wrench',
+    order: 2,
+    isActive: true,
+    mode: 'accordion',
+    allowMultipleOpen: true
+  },
+  {
+    id: 'menu_tambahan',
+    name: 'Menu Tambahan',
+    icon: 'Sliders',
+    order: 3,
+    isActive: true,
+    mode: 'accordion',
+    allowMultipleOpen: true
+  }
+];
+
+export const DEFAULT_STANDALONE_MENUS: StandaloneMenuItem[] = [
+  {
+    id: 'dashboard',
+    label: 'Dashboard Monitoring',
+    icon: 'LayoutDashboard',
+    order: 1,
+    visible: true,
+    roles: ['super_admin', 'dispatch', 'leader', 'management_data', 'it_support']
+  },
+  {
+    id: 'tickets',
+    label: 'Ticket MyRepublic',
+    icon: 'Ticket',
+    order: 2,
+    visible: true,
+    roles: ['super_admin', 'dispatch']
+  },
+  {
+    id: 'report_data_wo',
+    label: 'Report Data WO',
+    icon: 'FileSpreadsheet',
+    order: 3,
+    visible: true,
+    roles: ['super_admin', 'dispatch', 'management_data']
+  },
+  {
+    id: 'import',
+    label: 'Import Data WO',
+    icon: 'FileSpreadsheet',
+    order: 4,
+    visible: true,
+    roles: ['super_admin', 'dispatch', 'management_data']
+  },
+  {
+    id: 'contact_centre',
+    label: 'Contact Centre',
+    icon: 'MessageSquare',
+    order: 5,
+    visible: true,
+    roles: ['super_admin', 'dispatch', 'leader']
+  },
+  {
+    id: 'schedule',
+    label: 'Schedule',
+    icon: 'Calendar',
+    order: 6,
+    visible: true,
+    roles: ['super_admin', 'dispatch', 'leader']
+  },
+  {
+    id: 'users',
+    label: 'Management User',
+    icon: 'Users2',
+    order: 7,
+    visible: true,
+    roles: ['super_admin']
+  }
+];
+
+export const DEFAULT_INSTALLER_STANDALONE_MENUS: StandaloneMenuItem[] = [
+  {
+    id: 'installer_portal',
+    label: 'Dashboard Installer',
+    icon: 'LayoutDashboard',
+    order: 1,
+    visible: true,
+    roles: ['installer']
+  },
+  {
+    id: 'installer_tasks',
+    label: 'Tugas Saya',
+    icon: 'CheckCircle2',
+    order: 2,
+    visible: true,
+    roles: ['installer']
+  }
+];
+
+export const DEFAULT_SUBMENU_ITEMS: NavSubmenuItem[] = [
+  // 1. Contractor & Area
+  {
+    id: 'wo_assignment',
+    label: 'Assign WO',
+    icon: 'UserCheck',
+    categoryId: 'contractor_area',
+    order: 1,
+    visible: true,
+    roles: ['super_admin', 'dispatch', 'leader']
+  },
+  {
+    id: 'progress_dashboard',
+    label: 'Dashboard Progress WO',
+    icon: 'BarChart3',
+    categoryId: 'contractor_area',
+    order: 2,
+    visible: true,
+    roles: ['super_admin', 'dispatch', 'leader']
+  },
+  {
+    id: 'contractor_recap',
+    label: 'Rekap Total WO per Kontraktor',
+    icon: 'FileText',
+    categoryId: 'contractor_area',
+    order: 3,
+    visible: true,
+    roles: ['super_admin', 'dispatch', 'leader', 'management_data']
+  },
+  {
+    id: 'location_basecamp',
+    label: 'Kontraktor & Basecamp',
+    icon: 'Building2',
+    categoryId: 'contractor_area',
+    order: 4,
+    visible: true,
+    roles: ['super_admin', 'dispatch', 'leader']
+  },
+  {
+    id: 'quota_settings',
+    label: 'Pengaturan Kuota & Kolom Visibilitas',
+    icon: 'SlidersHorizontal',
+    categoryId: 'contractor_area',
+    order: 5,
+    visible: true,
+    roles: ['super_admin', 'leader']
+  },
+
+  // 2. Installer (Strict Access: Only super_admin and installer)
+  {
+    id: 'installer_mgmt',
+    label: 'Pendaftaran Akun Teknisi',
+    icon: 'UserPlus',
+    categoryId: 'installer',
+    order: 1,
+    visible: true,
+    roles: ['super_admin', 'leader']
+  },
+  {
+    id: 'report_installer',
+    label: 'Report Installer',
+    icon: 'FileText',
+    categoryId: 'installer',
+    order: 2,
+    visible: true,
+    roles: ['super_admin', 'installer']
+  },
+
+  // 3. Menu Tambahan
+  {
+    id: 'setup',
+    label: 'PUSAT SETUP',
+    icon: 'Sliders',
+    categoryId: 'menu_tambahan',
+    order: 1,
+    visible: true,
+    highlight: true,
+    roles: ['super_admin', 'dispatch', 'leader', 'management_data', 'it_support']
+  },
+  {
+    id: 'nav_config',
+    label: 'Konfigurasi Menu Navigasi',
+    icon: 'FolderTree',
+    categoryId: 'menu_tambahan',
+    order: 2,
+    visible: true,
+    roles: ['super_admin']
+  },
+  {
+    id: 'management_role',
+    label: 'Role & Permission',
+    icon: 'ShieldCheck',
+    categoryId: 'menu_tambahan',
+    order: 3,
+    visible: true,
+    roles: ['super_admin']
+  },
+  {
+    id: 'droplist_management',
+    label: 'Kategori Report',
+    icon: 'ListOrdered',
+    categoryId: 'menu_tambahan',
+    order: 4,
+    visible: true,
+    roles: ['super_admin', 'dispatch', 'management_data']
+  },
+  {
+    id: 'templates',
+    label: 'Template WhatsApp',
+    icon: 'MessageSquareQuote',
+    categoryId: 'menu_tambahan',
+    order: 5,
+    visible: true,
+    roles: ['super_admin', 'dispatch']
+  },
+  {
+    id: 'sound_settings',
+    label: 'Pengaturan Notifikasi',
+    icon: 'Bell',
+    categoryId: 'menu_tambahan',
+    order: 6,
+    visible: true,
+    roles: ['super_admin', 'dispatch', 'leader']
+  },
+  {
+    id: 'audit_logs',
+    label: 'Audit Trail Log',
+    icon: 'History',
+    categoryId: 'menu_tambahan',
+    order: 7,
+    visible: true,
+    roles: ['super_admin', 'it_support']
+  },
+  {
+    id: 'login_logs',
+    label: 'Riwayat Sesi Login',
+    icon: 'KeyRound',
+    categoryId: 'menu_tambahan',
+    order: 8,
+    visible: true,
+    roles: ['super_admin', 'dispatch', 'it_support']
+  },
+  {
+    id: 'system_health',
+    label: 'Kesehatan Sistem',
+    icon: 'Activity',
+    categoryId: 'menu_tambahan',
+    order: 9,
+    visible: true,
+    roles: ['super_admin', 'it_support']
+  },
+  {
+    id: 'offline_sync',
+    label: 'Sinkronisasi Offline',
+    icon: 'RefreshCw',
+    categoryId: 'menu_tambahan',
+    order: 10,
+    visible: true,
+    roles: ['super_admin', 'dispatch', 'leader']
+  },
+  {
+    id: 'database_management',
+    label: 'Database Application',
+    icon: 'Database',
+    categoryId: 'menu_tambahan',
+    order: 11,
+    visible: true,
+    roles: ['super_admin']
+  }
+];
+
+export const DEFAULT_NAVIGATION_DOC: NavigationFirestoreDoc = {
+  categories: DEFAULT_CANONICAL_CATEGORIES,
+  standaloneMenus: DEFAULT_STANDALONE_MENUS,
+  submenuItems: DEFAULT_SUBMENU_ITEMS,
+  accordionSettings: {
+    allowMultipleOpenGroups: true
+  },
+  navigationVersion: 2,
+  updatedAt: new Date().toISOString(),
+  updatedBy: 'System'
+};
+
+export const DEFAULT_NAVIGATION_CATEGORIES = {
+  contractor_area: { accordionEnabled: true },
+  installer: { accordionEnabled: true },
+  menu_tambahan: { accordionEnabled: true }
+};
+
 
 export const STANDARD_HEADER_MAPPINGS: HeaderMapping[] = [
   {
@@ -730,4 +1042,155 @@ export const DEFAULT_WORK_RESULTS: string[] = [
   'Perlu Eskalasi',
   'Perlu Kunjungan Ulang'
 ];
+
+export const DEFAULT_USERS: User[] = [
+  {
+    id: 'u-ray',
+    userId: 'u-ray',
+    name: 'Ray (Super Admin)',
+    username: 'ray',
+    email: 'rayjs666@gmail.com',
+    role: 'super_admin',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    lastLoginAt: '2026-01-01T00:00:00Z',
+    loginCount: 1,
+    mustChangePassword: false,
+    createdAt: '2026-01-01T00:00:00Z'
+  },
+  {
+    id: 'u-1',
+    userId: 'u-1',
+    name: 'Alamsyah (Super Admin)',
+    username: 'superadmin',
+    email: 'tarnocepak@gmail.com',
+    role: 'super_admin',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    lastLoginAt: '2026-01-01T00:00:00Z',
+    loginCount: 1,
+    mustChangePassword: false,
+    createdAt: '2026-01-01T00:00:00Z'
+  },
+  {
+    id: 'u-mgmt',
+    userId: 'u-mgmt',
+    name: 'Staff Management Data',
+    username: 'datamgmt',
+    email: 'data.ops@morajaws.net',
+    role: 'management_data',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    lastLoginAt: '2026-01-01T00:00:00Z',
+    loginCount: 1,
+    mustChangePassword: false,
+    createdAt: '2026-01-01T00:00:00Z'
+  },
+  {
+    id: 'u-dispatch-1',
+    userId: 'u-dispatch-1',
+    name: 'Siti Rahma (Dispatcher)',
+    username: 'dispatch',
+    email: 'dispatch@morajaws.net',
+    role: 'dispatch',
+    phone: '081299001122',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    lastLoginAt: '2026-01-01T00:00:00Z',
+    loginCount: 1,
+    mustChangePassword: false,
+    createdAt: '2026-01-01T00:00:00Z'
+  },
+  {
+    id: 'u-leader-1',
+    userId: 'u-leader-1',
+    name: 'Hendra Gunawan (Leader MJS)',
+    username: 'leadermjs',
+    email: 'hendra@mjs.morajaws.net',
+    role: 'leader',
+    contractor: 'PT Mitra Jaringan Solusi',
+    contractorId: 'c-mjs',
+    area: 'Jakarta Selatan',
+    phone: '081288990011',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    lastLoginAt: '2026-01-01T00:00:00Z',
+    loginCount: 1,
+    mustChangePassword: false,
+    createdAt: '2026-01-01T00:00:00Z'
+  },
+  {
+    id: 'u-installer-1',
+    userId: 'u-installer-1',
+    name: 'Andi Saputra',
+    username: 'installer1',
+    email: 'andi@installer.morajaws.net',
+    role: 'installer',
+    contractor: 'PT Mitra Jaringan Solusi',
+    contractorId: 'c-mjs',
+    area: 'Jakarta Selatan',
+    phone: '081299883344',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    lastLoginAt: '2026-01-01T00:00:00Z',
+    loginCount: 1,
+    mustChangePassword: false,
+    createdAt: '2026-01-01T00:00:00Z'
+  },
+  {
+    id: 'u-leader-2',
+    userId: 'u-leader-2',
+    name: 'Dedi Kurniawan (Leader KCS)',
+    username: 'leaderkcs',
+    email: 'dedi@kcs.morajaws.net',
+    role: 'leader',
+    contractor: 'PT Kencana Solusindo',
+    contractorId: 'c-kcs',
+    area: 'Jakarta Barat',
+    phone: '085711223344',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    lastLoginAt: '2026-01-01T00:00:00Z',
+    loginCount: 1,
+    mustChangePassword: false,
+    createdAt: '2026-01-01T00:00:00Z'
+  },
+  {
+    id: 'u-installer-2',
+    userId: 'u-installer-2',
+    name: 'Budi Santoso',
+    username: 'installer2',
+    email: 'budi@installer.morajaws.net',
+    role: 'installer',
+    contractor: 'PT Kencana Solusindo',
+    contractorId: 'c-kcs',
+    area: 'Jakarta Barat',
+    phone: '085711224455',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    lastLoginAt: '2026-01-01T00:00:00Z',
+    loginCount: 1,
+    mustChangePassword: false,
+    createdAt: '2026-01-01T00:00:00Z'
+  },
+  {
+    id: 'u-inactive-1',
+    userId: 'u-inactive-1',
+    name: 'Bambang Sudirgo (Akun Nonaktif)',
+    username: 'staf_nonaktif',
+    email: 'bambang.nonaktif@morajaws.net',
+    role: 'installer',
+    contractor: 'PT Kencana Solusindo',
+    contractorId: 'c-kcs',
+    area: 'Jakarta Barat',
+    phone: '085711229988',
+    active: false,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    lastLoginAt: '2026-01-01T00:00:00Z',
+    loginCount: 0,
+    mustChangePassword: false,
+    createdAt: '2026-01-01T00:00:00Z'
+  }
+];
+
 

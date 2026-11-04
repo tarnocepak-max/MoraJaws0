@@ -172,6 +172,25 @@
         "status": { "type": "string", "enum": ["OPEN", "INVESTIGATING", "RESOLVED"] }
       },
       "required": ["id", "errorCode", "module", "message", "timestamp"]
+    },
+    "ReportDropdownCategory": {
+      "title": "ReportDropdownCategory",
+      "description": "Installer progress report dropdown choices (report_status, reason_report, rootcause)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "categoryType": { "type": "string", "enum": ["report_status", "reason_report", "rootcause"] },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "sortOrder": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "isDeleted": { "type": "boolean" }
+      },
+      "required": ["id", "categoryType", "name", "isActive"]
     }
   },
   "firestore": {
@@ -214,6 +233,10 @@
     "/appSettings/{settingId}": {
       "schema": "AppSetting",
       "description": "Global persistent application and UI builder configuration"
+    },
+    "/report_dropdown_categories/{categoryId}": {
+      "schema": "ReportDropdownCategory",
+      "description": "Installer progress report dropdown categories for status, reason, and rootcause"
     }
   }
 }

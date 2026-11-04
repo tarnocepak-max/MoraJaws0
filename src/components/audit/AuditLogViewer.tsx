@@ -1,12 +1,22 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { History, Search, Download, ShieldCheck, User, Lock, ShieldAlert } from 'lucide-react';
+import { SortableColumnHeader } from '../common/SortableColumnHeader';
+import { SortState, getNextSortDirection, sortDataArray } from '../../utils/tableSorting';
 
 export const AuditLogViewer: React.FC = () => {
   const { auditLogs, currentUser } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEntity, setSelectedEntity] = useState('ALL');
+  const [sortState, setSortState] = useState<SortState>({ column: 'timestamp', direction: 'desc' });
+
+  const handleSort = (colKey: string) => {
+    setSortState(prev => {
+      const nextDir = getNextSortDirection(prev.column, prev.direction, colKey);
+      return { column: nextDir ? colKey : null, direction: nextDir };
+    });
+  };
 
   const filteredLogs = useMemo(() => {
     return auditLogs.filter(log => {
@@ -22,6 +32,12 @@ export const AuditLogViewer: React.FC = () => {
       return true;
     });
   }, [auditLogs, selectedEntity, searchTerm]);
+
+  const sortedLogs = useMemo(() => {
+    return sortDataArray(filteredLogs, sortState, (log, col) => {
+      return (log as any)[col];
+    });
+  }, [filteredLogs, sortState]);
 
   if (currentUser.role !== 'super_admin') {
     return (
@@ -122,23 +138,77 @@ export const AuditLogViewer: React.FC = () => {
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-slate-50 dark:bg-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase">
               <tr>
-                <th className="py-2.5 px-3">Timestamp</th>
-                <th className="py-2.5 px-3">Action</th>
-                <th className="py-2.5 px-3">Entity</th>
-                <th className="py-2.5 px-3">Details</th>
-                <th className="py-2.5 px-3">Performed By</th>
-                <th className="py-2.5 px-3">Role</th>
+                <th className="py-2.5 px-3">
+                  <SortableColumnHeader
+                    label="Timestamp"
+                    columnKey="timestamp"
+                    currentSortColumn={sortState.column}
+                    currentDirection={sortState.direction}
+                    dataType="date"
+                    onSort={handleSort}
+                  />
+                </th>
+                <th className="py-2.5 px-3">
+                  <SortableColumnHeader
+                    label="Action"
+                    columnKey="action"
+                    currentSortColumn={sortState.column}
+                    currentDirection={sortState.direction}
+                    dataType="text"
+                    onSort={handleSort}
+                  />
+                </th>
+                <th className="py-2.5 px-3">
+                  <SortableColumnHeader
+                    label="Entity"
+                    columnKey="entity"
+                    currentSortColumn={sortState.column}
+                    currentDirection={sortState.direction}
+                    dataType="text"
+                    onSort={handleSort}
+                  />
+                </th>
+                <th className="py-2.5 px-3">
+                  <SortableColumnHeader
+                    label="Details"
+                    columnKey="details"
+                    currentSortColumn={sortState.column}
+                    currentDirection={sortState.direction}
+                    dataType="text"
+                    onSort={handleSort}
+                  />
+                </th>
+                <th className="py-2.5 px-3">
+                  <SortableColumnHeader
+                    label="Performed By"
+                    columnKey="performedBy"
+                    currentSortColumn={sortState.column}
+                    currentDirection={sortState.direction}
+                    dataType="text"
+                    onSort={handleSort}
+                  />
+                </th>
+                <th className="py-2.5 px-3">
+                  <SortableColumnHeader
+                    label="Role"
+                    columnKey="userRole"
+                    currentSortColumn={sortState.column}
+                    currentDirection={sortState.direction}
+                    dataType="text"
+                    onSort={handleSort}
+                  />
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredLogs.length === 0 ? (
+              {sortedLogs.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-400">
                     Tidak ada catatan audit yang cocok.
                   </td>
                 </tr>
               ) : (
-                filteredLogs.map(log => (
+                sortedLogs.map(log => (
                   <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="py-2.5 px-3 font-mono text-slate-500 whitespace-nowrap">
                       {new Date(log.timestamp).toLocaleString()}

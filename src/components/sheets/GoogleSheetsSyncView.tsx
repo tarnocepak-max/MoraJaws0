@@ -37,6 +37,7 @@ import {
   getDirectGoogleOAuthUrl
 } from '../../services/googleSheetsService.ts';
 import { GoogleSpreadsheetMeta } from '../../types/sheets.ts';
+import { getAuthHeaders } from '../../services/authService';
 
 export const GoogleSheetsSyncView: React.FC = () => {
   const {
@@ -188,7 +189,8 @@ export const GoogleSheetsSyncView: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { 'x-google-access-token': token, 'Authorization': `Bearer ${token}` } : {})
+          ...getAuthHeaders(),
+          ...(token ? { 'x-google-access-token': token } : {})
         },
         body: JSON.stringify({
           spreadsheetId: cleanId,
@@ -235,7 +237,9 @@ export const GoogleSheetsSyncView: React.FC = () => {
   const handleRefreshStatus = async () => {
     setIsRefreshingStatus(true);
     try {
-      const res = await fetch('/api/integrations/google-sheets/status');
+      const res = await fetch('/api/integrations/google-sheets/status', {
+        headers: getAuthHeaders()
+      });
       if (res.ok) {
         const data = await res.json();
         setBackendStatus(data.status || 'Unknown');
@@ -340,7 +344,8 @@ export const GoogleSheetsSyncView: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { 'x-google-access-token': token, 'Authorization': `Bearer ${token}` } : {})
+          ...getAuthHeaders(),
+          ...(token ? { 'x-google-access-token': token } : {})
         },
         body: JSON.stringify({
           mode: direction === 'import_only' ? 'pull' : direction === 'export_only' ? 'push' : 'both',

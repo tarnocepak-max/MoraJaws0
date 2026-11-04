@@ -11,6 +11,12 @@ import {
   getTicketAppointmentDate
 } from '../../services/appointmentDateParser';
 import {
+  getTicketWorkStatus,
+  formatJakartaTimestamp,
+  formatJakartaTimeOnly,
+  formatWorkDuration
+} from '../../services/workSessionService';
+import {
   Users2,
   CheckCircle2,
   UserCheck,
@@ -59,6 +65,12 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { openCustomerAddressInGoogleMaps } from '../../services/mapsService';
+import { SortableColumnHeader } from '../common/SortableColumnHeader';
+import {
+  SortState,
+  getNextSortDirection,
+  sortDataArray
+} from '../../utils/tableSorting';
 import {
   LeaderColumnSettingsModal,
   DEFAULT_LEADER_COLUMNS,
@@ -66,10 +78,14 @@ import {
 } from './LeaderColumnSettingsModal';
 import { InstallerDetailModal } from './InstallerDetailModal';
 import { UploadAssignModal } from './UploadAssignModal';
+import { LeaderProgressDashboardView } from './LeaderProgressDashboardView';
+import { ContractorAreaRecapView } from '../reports/ContractorAreaRecapView';
 
 interface LeaderPortalProps {
   onSelectTicket: (ticket: Ticket) => void;
   onOpenWhatsApp?: (ticket: Ticket) => void;
+  activeLeaderTab?: 'dashboard' | 'wo_assignment' | 'progress_dashboard' | 'installer_mgmt' | 'quota_settings' | 'contractor_recap';
+  onLeaderTabChange?: (tab: 'dashboard' | 'wo_assignment' | 'progress_dashboard' | 'installer_mgmt' | 'quota_settings' | 'contractor_recap') => void;
 }
 
 interface QuotaSettings {
@@ -95,7 +111,12 @@ export type LeaderStatusFilter =
   | 'problem'
   | 'idle_installers';
 
-export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) => {
+export const LeaderPortal: React.FC<LeaderPortalProps> = ({
+  onSelectTicket,
+  onOpenWhatsApp,
+  activeLeaderTab,
+  onLeaderTabChange
+}) => {
   const {
     tickets,
     assignTicketPersonnel,
@@ -111,8 +132,22 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
     areasList
   } = useApp();
 
-  // Navigation tab in portal: Dedicated tabs for Assign WO, Pendaftaran Akun Teknisi, and Dashboard Progress WO
-  const [activeTab, setActiveTab] = useState<'wo_assignment' | 'installer_mgmt' | 'progress_dashboard' | 'quota_settings'>('wo_assignment');
+  // Navigation tab in portal: Dedicated tabs for Dashboard Leader, Assign WO, Pendaftaran Akun Teknisi, Dashboard Progress WO, Quota, and Rekap Area
+  const [internalTab, setInternalTab] = useState<'dashboard' | 'wo_assignment' | 'installer_mgmt' | 'progress_dashboard' | 'quota_settings' | 'contractor_recap'>(
+    activeLeaderTab || 'wo_assignment'
+  );
+  const activeTab = activeLeaderTab || internalTab;
+
+  useEffect(() => {
+    if (activeLeaderTab) {
+      setInternalTab(activeLeaderTab);
+    }
+  }, [activeLeaderTab]);
+
+  const setActiveTab = (tab: 'dashboard' | 'wo_assignment' | 'installer_mgmt' | 'progress_dashboard' | 'quota_settings' | 'contractor_recap') => {
+    setInternalTab(tab);
+    if (onLeaderTabChange) onLeaderTabChange(tab);
+  };
 
   // Sub-view in Monitoring tab: 'installer_summary' (table of installers) vs 'wo_detail' (table of work orders)
   const [monitoringView, setMonitoringView] = useState<'installer_summary' | 'wo_detail'>('installer_summary');
@@ -167,11 +202,19 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
       const saved = localStorage.getItem(COLUMN_STORAGE_KEY);
       if (saved) {
         const parsed: ColumnConfig[] = JSON.parse(saved);
-        const map = new Map(parsed.map(c => [c.id, c.visible]));
-        return DEFAULT_LEADER_COLUMNS.map(c => ({
-          ...c,
-          visible: map.has(c.id) ? !!map.get(c.id) : c.visible
-        }));
+        const orderedCols: ColumnConfig[] = [];
+        parsed.forEach(c => {
+          const def = DEFAULT_LEADER_COLUMNS.find(d => d.id === c.id);
+          if (def) {
+            orderedCols.push({ ...def, visible: c.visible });
+          }
+        });
+        DEFAULT_LEADER_COLUMNS.forEach(def => {
+          if (!orderedCols.some(c => c.id === def.id)) {
+            orderedCols.push(def);
+          }
+        });
+        return orderedCols;
       }
     } catch (e) {}
     return DEFAULT_LEADER_COLUMNS;
@@ -206,9 +249,40 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
   const [statusFilter, setStatusFilter] = useState<LeaderStatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedInstallerFilter, setSelectedInstallerFilter] = useState<string>('ALL');
-  const [dateFilterType, setDateFilterType] = useState<'all' | 'today' | 'tomorrow' | 'custom'>('all');
-  const [customDateStart, setCustomDateStart] = useState<string>('');
-  const [customDateEnd, setCustomDateEnd] = useState<string>('');
+  
+  // Date Range Filter for Assign WO (Strict Asia/Jakarta Appointment Date - Default Today)
+  const todayWIB = getJakartaDateString(0);
+  const [dateFilterType, setDateFilterTypeState] = useState<'all' | 'today' | 'tomorrow' | 'custom'>('today');
+  const [customDateStart, setCustomDateStart] = useState<string>(todayWIB);
+  const [customDateEnd, setCustomDateEnd] = useState<string>(todayWIB);
+  const [appliedDateStart, setAppliedDateStart] = useState<string>(todayWIB);
+  const [appliedDateEnd, setAppliedDateEnd] = useState<string>(todayWIB);
+
+  const setDateFilterType = (type: 'all' | 'today' | 'tomorrow' | 'custom') => {
+    setDateFilterTypeState(type);
+    if (type === 'all') {
+      setAppliedDateStart('');
+      setAppliedDateEnd('');
+    } else if (type === 'today') {
+      const today = getJakartaDateString(0);
+      setAppliedDateStart(today);
+      setAppliedDateEnd(today);
+    } else if (type === 'tomorrow') {
+      const tomorrow = getJakartaDateString(1);
+      setAppliedDateStart(tomorrow);
+      setAppliedDateEnd(tomorrow);
+    } else if (type === 'custom') {
+      setAppliedDateStart(customDateStart);
+      setAppliedDateEnd(customDateEnd);
+    }
+  };
+
+  useEffect(() => {
+    if (dateFilterType === 'custom') {
+      setAppliedDateStart(customDateStart);
+      setAppliedDateEnd(customDateEnd);
+    }
+  }, [dateFilterType, customDateStart, customDateEnd]);
 
   // Pagination & Rows per page
   const [rowsPerPage, setRowsPerPage] = useState<number>(25);
@@ -413,7 +487,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
     return quotaSettings.customInstallerLimits[installerName] || quotaSettings.defaultMaxDailyQuota;
   };
 
-  // 10 ACCURATE SUMMARY METRICS (Based directly on database values)
+  // 10 ACCURATE SUMMARY METRICS (Requirement 1: Strictly counts WO with appointment date = today in Asia/Jakarta WIB)
   const summaryMetrics = useMemo(() => {
     let unassigned = 0;
     let assigned = 0;
@@ -423,7 +497,10 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
     let pending = 0;
     let problem = 0;
 
-    contractorTickets.forEach(t => {
+    const todayDateStr = getJakartaDateString(0);
+    const todayContractorTickets = contractorTickets.filter(t => getTicketAppointmentDate(t) === todayDateStr);
+
+    todayContractorTickets.forEach(t => {
       const { category } = classifyTicketOperational(t);
       if (category === 'unassigned') {
         unassigned++;
@@ -439,9 +516,9 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
 
     const activeInstallers = myInstallers.filter(u => u.active).length;
 
-    // Installers with 0 active tickets assigned
+    // Installers with 0 active tickets assigned for today
     const installerActiveTicketsMap = new Map<string, number>();
-    contractorTickets.forEach(t => {
+    todayContractorTickets.forEach(t => {
       if (t.installerName && t.statusWOInstaller !== 'Completed' && t.statusWOInstaller !== 'Failed / Cancelled') {
         const key = t.installerName.toLowerCase().trim();
         installerActiveTicketsMap.set(key, (installerActiveTicketsMap.get(key) || 0) + 1);
@@ -454,7 +531,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
     }).length;
 
     return {
-      total: contractorTickets.length,
+      total: todayContractorTickets.length,
       unassigned,
       assigned,
       waiting,
@@ -467,10 +544,13 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
     };
   }, [contractorTickets, myInstallers]);
 
-  // INSTALLER PROGRESS MONITORING ROWS (Section 4 & 5)
+  // INSTALLER PROGRESS MONITORING ROWS (Section 4 & 5 - strictly counts appointment date today)
   const installerProgressRows = useMemo(() => {
+    const todayDateStr = getJakartaDateString(0);
+    const todayContractorTickets = contractorTickets.filter(t => getTicketAppointmentDate(t) === todayDateStr);
+
     return myInstallers.map(inst => {
-      const instTickets = contractorTickets.filter(
+      const instTickets = todayContractorTickets.filter(
         t => t.installerName?.toLowerCase().trim() === inst.name.toLowerCase().trim()
       );
 
@@ -525,20 +605,11 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
         }
       }
 
-      // Date Range Filter (Strict Asia/Jakarta WIB calendar date comparison)
+      // Date Range Filter (Strict Asia/Jakarta Appointment Date - Default Today or Applied Range)
       const ticketDate = getTicketAppointmentDate(t);
-      const todayStr = getJakartaDateString(0);
-      const tmrStr = getJakartaDateString(1);
-
-      if (dateFilterType === 'today') {
-        if (!ticketDate || ticketDate !== todayStr) return false;
-      } else if (dateFilterType === 'tomorrow') {
-        if (!ticketDate || ticketDate !== tmrStr) return false;
-      } else if (dateFilterType === 'custom') {
-        if (!ticketDate) return false;
-        if (customDateStart && ticketDate < customDateStart) return false;
-        if (customDateEnd && ticketDate > customDateEnd) return false;
-      }
+      if (!ticketDate) return false;
+      if (appliedDateStart && ticketDate < appliedDateStart) return false;
+      if (appliedDateEnd && ticketDate > appliedDateEnd) return false;
 
       // Search query filter (WO Number, Customer ID, Customer Name, Phone, Installer, Cluster, Street)
       if (searchQuery.trim()) {
@@ -563,26 +634,106 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
     contractorTickets,
     statusFilter,
     selectedInstallerFilter,
-    dateFilterType,
-    customDateStart,
-    customDateEnd,
+    appliedDateStart,
+    appliedDateEnd,
     searchQuery
   ]);
 
-  // Paginated Rows
-  const totalPages = rowsPerPage === -1 ? 1 : Math.max(1, Math.ceil(filteredTickets.length / rowsPerPage));
-  const paginatedTickets = useMemo(() => {
-    if (rowsPerPage === -1) return filteredTickets;
-    const start = (currentPage - 1) * rowsPerPage;
-    return filteredTickets.slice(start, start + rowsPerPage);
-  }, [filteredTickets, currentPage, rowsPerPage]);
+  // Sorting State for Leader Assign WO Table
+  const [sortState, setSortState] = useState<SortState>({
+    column: null,
+    direction: null
+  });
 
-  // Checkbox selection helpers
+  const handleSort = (columnKey: string) => {
+    setSortState(prev => {
+      const nextDir = getNextSortDirection(prev.column, prev.direction, columnKey);
+      return {
+        column: nextDir ? columnKey : null,
+        direction: nextDir
+      };
+    });
+    setCurrentPage(1);
+  };
+
+  // Sorted Work Orders
+  const sortedTickets = useMemo(() => {
+    if (!sortState.column || !sortState.direction) {
+      return filteredTickets;
+    }
+
+    return sortDataArray(filteredTickets, sortState, (t: Ticket, col: string) => {
+      switch (col) {
+        case 'woNumber':
+          return t.woNumber || '';
+        case 'date':
+          return t.date || '';
+        case 'idCustomer':
+          return t.idCustomer || t.customerId || '';
+        case 'customerName':
+          return t.customerName || '';
+        case 'customerPhone':
+          return t.customerPhone || '';
+        case 'area':
+          return t.area || '';
+        case 'clusterName':
+          return t.clusterName || '';
+        case 'streetName':
+          return t.streetName || t.clusterName || '';
+        case 'appointmentDate':
+          return getTicketAppointmentDate(t) || t.appointmentDate || t.date || '';
+        case 'slotTime':
+          return t.slotTime || '';
+        case 'contractor':
+          return t.contactorName || t.contractorName || '';
+        case 'installer':
+          return t.installerName || '';
+        case 'status': {
+          const { label } = classifyTicketOperational(t);
+          return label || t.statusWOInstaller || '';
+        }
+        case 'workStatus': {
+          const ws = getTicketWorkStatus(t);
+          return ws.status;
+        }
+        case 'checkInAt':
+          return t.checkInAt || '';
+        case 'checkOutAt':
+          return t.checkOutAt || '';
+        case 'workDuration':
+          return t.workDurationMinutes || 0;
+        case 'progress': {
+          const { progressPercent } = classifyTicketOperational(t);
+          return progressPercent;
+        }
+        case 'lastUpdate':
+          return t.updatedAt || t.dateUpload || t.createdAt || '';
+        default:
+          return (t as any)[col] || '';
+      }
+    });
+  }, [filteredTickets, sortState]);
+
+  // Paginated Rows
+  const totalPages = rowsPerPage === -1 ? 1 : Math.max(1, Math.ceil(sortedTickets.length / rowsPerPage));
+  const paginatedTickets = useMemo(() => {
+    if (rowsPerPage === -1) return sortedTickets;
+    const start = (currentPage - 1) * rowsPerPage;
+    return sortedTickets.slice(start, start + rowsPerPage);
+  }, [sortedTickets, currentPage, rowsPerPage]);
+
+  // Checkbox selection helpers (Realtime "Selected Data: N")
+  const isAllPageSelected =
+    paginatedTickets.length > 0 &&
+    paginatedTickets.every(t => selectedTicketIds.includes(t.id));
+
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      setSelectedTicketIds(filteredTickets.map(t => t.id));
+      const pageIds = paginatedTickets.map(t => t.id);
+      setSelectedTicketIds(prev => Array.from(new Set([...prev, ...pageIds])));
     } else {
-      setSelectedTicketIds([]);
+      const pageIdSet = new Set(paginatedTickets.map(t => t.id));
+      setSelectedTicketIds(prev => prev.filter(id => !pageIdSet.has(id)));
     }
   };
 
@@ -725,9 +876,9 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
 
   // Export handlers (Copy, CSV, Excel, Print)
   const handleExportCopy = () => {
-    if (filteredTickets.length === 0) return;
+    if (sortedTickets.length === 0) return;
     const headers = ['WO Number', 'Tanggal', 'Customer ID', 'Customer Name', 'Phone', 'Slot', 'Cluster', 'Street', 'Teknisi', 'Status'];
-    const rows = filteredTickets.map(t => [
+    const rows = sortedTickets.map(t => [
       t.woNumber,
       t.appointmentDate || t.date,
       t.idCustomer,
@@ -741,13 +892,13 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
     ]);
     const tsv = [headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
     navigator.clipboard.writeText(tsv);
-    toast.success(`${filteredTickets.length} baris data berhasil disalin ke clipboard (TSV format).`, 'Data Disalin');
+    toast.success(`${sortedTickets.length} baris data berhasil disalin ke clipboard (TSV format).`, 'Data Disalin');
   };
 
   const handleExportCSV = () => {
-    if (filteredTickets.length === 0) return;
+    if (sortedTickets.length === 0) return;
     const worksheet = XLSX.utils.json_to_sheet(
-      filteredTickets.map(t => ({
+      sortedTickets.map(t => ({
         'WO Number': t.woNumber,
         'Tanggal WO': t.date,
         'Appointment Date': t.appointmentDate || t.date,
@@ -776,9 +927,9 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
   };
 
   const handleExportExcel = () => {
-    if (filteredTickets.length === 0) return;
+    if (sortedTickets.length === 0) return;
     const worksheet = XLSX.utils.json_to_sheet(
-      filteredTickets.map(t => ({
+      sortedTickets.map(t => ({
         'WO Number': t.woNumber,
         'Tanggal WO': t.date,
         'Appointment Date': t.appointmentDate || t.date,
@@ -809,10 +960,585 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
     window.print();
   };
 
-  // Check if column is visible
+  const handleExportPDF = () => {
+    window.print();
+  };
+
+  const handleApplyDateSearch = () => {
+    setAppliedDateStart(customDateStart);
+    setAppliedDateEnd(customDateEnd);
+    setCurrentPage(1);
+    toast.info(`Menampilkan Work Order tanggal ${customDateStart} s/d ${customDateEnd}.`, 'Filter Tanggal');
+  };
+
+  const handleResetDateToday = () => {
+    setCustomDateStart(todayWIB);
+    setCustomDateEnd(todayWIB);
+    setAppliedDateStart(todayWIB);
+    setAppliedDateEnd(todayWIB);
+    setCurrentPage(1);
+    toast.info(`Menampilkan Work Order hari ini (${todayWIB}).`, 'Filter Hari Ini');
+  };
+
+  // Check if column is visible and get ordered visible columns
   const isColVisible = (id: string) => {
     const col = tableColumns.find(c => c.id === id);
     return col ? col.visible : true;
+  };
+  const visibleColumns = useMemo(() => tableColumns.filter(c => c.visible), [tableColumns]);
+
+  const renderHeaderCell = (col: ColumnConfig) => {
+    switch (col.id) {
+      case 'checkbox':
+        return (
+          <th key={col.id} className="py-2.5 px-3 text-center w-8">
+            <input
+              type="checkbox"
+              checked={
+                sortedTickets.length > 0 &&
+                selectedTicketIds.length === sortedTickets.length
+              }
+              onChange={handleSelectAll}
+              className="w-4 h-4 text-indigo-600 rounded border-slate-300 dark:border-slate-700 cursor-pointer"
+            />
+          </th>
+        );
+      case 'woNumber':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[130px]">
+            <SortableColumnHeader
+              label="WO Number"
+              columnKey="woNumber"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="wo_number"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'date':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[120px]">
+            <SortableColumnHeader
+              label="Tanggal WO"
+              columnKey="date"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="date"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'idCustomer':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[110px]">
+            <SortableColumnHeader
+              label="Customer ID"
+              columnKey="idCustomer"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="number"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'customerName':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[150px]">
+            <SortableColumnHeader
+              label="Nama Pelanggan"
+              columnKey="customerName"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="text"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'customerPhone':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[120px]">
+            <SortableColumnHeader
+              label="Kontak"
+              columnKey="customerPhone"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="text"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'area':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[100px]">
+            <SortableColumnHeader
+              label="Area"
+              columnKey="area"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="text"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'clusterName':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[130px]">
+            <SortableColumnHeader
+              label="Cluster"
+              columnKey="clusterName"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="text"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'streetName':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[180px]">
+            <SortableColumnHeader
+              label="Alamat / Street Name"
+              columnKey="streetName"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="text"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'appointmentDate':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[130px]">
+            <SortableColumnHeader
+              label="Appointment"
+              columnKey="appointmentDate"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="date"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'slotTime':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[120px] whitespace-nowrap">
+            <SortableColumnHeader
+              label="Slot Time"
+              columnKey="slotTime"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="time_slot"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'contractor':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[130px]">
+            <SortableColumnHeader
+              label="Kontraktor"
+              columnKey="contractor"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="text"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'installer':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[170px]">
+            <SortableColumnHeader
+              label="Teknisi / Installer"
+              columnKey="installer"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="text"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'status':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[130px]">
+            <SortableColumnHeader
+              label="Status WO"
+              columnKey="status"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="status"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'workStatus':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[120px] text-center">
+            <SortableColumnHeader
+              label="Status Kerja"
+              columnKey="workStatus"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="text"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'checkInAt':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[120px]">
+            <SortableColumnHeader
+              label="Check-in"
+              columnKey="checkInAt"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="date"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'checkOutAt':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[120px]">
+            <SortableColumnHeader
+              label="Check-out"
+              columnKey="checkOutAt"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="date"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'workDuration':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[110px]">
+            <SortableColumnHeader
+              label="Durasi Kerja"
+              columnKey="workDuration"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="number"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'progress':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[130px]">
+            <SortableColumnHeader
+              label="Progress"
+              columnKey="progress"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="number"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'lastUpdate':
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[120px]">
+            <SortableColumnHeader
+              label="Update"
+              columnKey="lastUpdate"
+              currentSortColumn={sortState.column}
+              currentDirection={sortState.direction}
+              dataType="date"
+              onSort={handleSort}
+            />
+          </th>
+        );
+      case 'action':
+        return (
+          <th key={col.id} className="py-2.5 px-3 text-center min-w-[120px]">
+            Action
+          </th>
+        );
+      default:
+        return (
+          <th key={col.id} className="py-2.5 px-3 min-w-[100px]">
+            {col.label}
+          </th>
+        );
+    }
+  };
+
+  const renderBodyCell = (
+    col: ColumnConfig,
+    t: Ticket,
+    isSelected: boolean,
+    isExpanded: boolean,
+    label: string,
+    progressPercent: number
+  ) => {
+    switch (col.id) {
+      case 'checkbox':
+        return (
+          <td key={col.id} className="py-2.5 px-3 text-center">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => handleToggleSelectTicket(t.id)}
+              className="w-4 h-4 text-indigo-600 rounded border-slate-300 dark:border-slate-700"
+            />
+          </td>
+        );
+      case 'woNumber':
+        return (
+          <td key={col.id} className="py-2.5 px-3 font-mono font-semibold">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => toggleRowExpansion(t.id)}
+                className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                title="Buka / Tutup Rincian Alamat & Teknis"
+              >
+                {isExpanded ? (
+                  <ChevronDown className="w-3.5 h-3.5 text-indigo-600" />
+                ) : (
+                  <ChevronRight className="w-3.5 h-3.5" />
+                )}
+              </button>
+              <span
+                onClick={() => onSelectTicket(t)}
+                className="text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+              >
+                {t.woNumber}
+              </span>
+            </div>
+          </td>
+        );
+      case 'date':
+        return (
+          <td key={col.id} className="py-2.5 px-3 font-mono text-slate-500 whitespace-nowrap">
+            {t.date || '-'}
+          </td>
+        );
+      case 'idCustomer':
+        return (
+          <td key={col.id} className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
+            {t.idCustomer}
+          </td>
+        );
+      case 'customerName':
+        return (
+          <td key={col.id} className="py-2.5 px-3 font-medium text-slate-900 dark:text-white">
+            {t.customerName}
+          </td>
+        );
+      case 'customerPhone':
+        return (
+          <td key={col.id} className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
+            {t.customerPhone}
+          </td>
+        );
+      case 'area':
+        return (
+          <td key={col.id} className="py-2.5 px-3">
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10.5px] font-semibold bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+              {t.area || '-'}
+            </span>
+          </td>
+        );
+      case 'clusterName':
+        return (
+          <td key={col.id} className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
+            {t.clusterName || '-'}
+          </td>
+        );
+      case 'streetName':
+        return (
+          <td key={col.id} className="py-2.5 px-3 text-slate-600 dark:text-slate-400 max-w-xs">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openCustomerAddressInGoogleMaps(t);
+              }}
+              className="flex items-center gap-1.5 text-left text-slate-700 dark:text-slate-200 hover:text-purple-700 dark:hover:text-purple-300 transition-colors group cursor-pointer max-w-full"
+              title="Klik untuk membuka lokasi di Google Maps"
+            >
+              <MapPin className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0 group-hover:scale-110 transition-transform" />
+              <span className="truncate group-hover:underline">{t.streetName || t.clusterName || '-'}</span>
+            </button>
+          </td>
+        );
+      case 'appointmentDate':
+        return (
+          <td key={col.id} className="py-2.5 px-3 font-mono whitespace-nowrap text-slate-700 dark:text-slate-300">
+            {t.appointmentDate || t.date || '-'}
+          </td>
+        );
+      case 'slotTime':
+        return (
+          <td key={col.id} className="py-2.5 px-3 font-medium whitespace-nowrap text-slate-800 dark:text-slate-200">
+            {t.slotTime}
+          </td>
+        );
+      case 'contractor':
+        return (
+          <td key={col.id} className="py-2.5 px-3 text-slate-500">
+            {t.contactorName || t.contractorName || '-'}
+          </td>
+        );
+      case 'installer':
+        return (
+          <td key={col.id} className="py-2.5 px-3">
+            <select
+              value={t.installerName || ''}
+              onChange={e => {
+                if (e.target.value !== t.installerName) {
+                  handleAssignTicket(t, e.target.value, t.slotTime);
+                }
+              }}
+              className={`w-full px-2 py-1 text-xs rounded-lg border font-medium ${
+                t.installerName
+                  ? 'bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700'
+                  : 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800 font-bold'
+              }`}
+            >
+              <option value="">{t.installerName ? 'Ganti Teknisi...' : 'Pilih Teknisi...'}</option>
+              {myInstallers.map(inst => {
+                const targetDate = t.appointmentDate || t.date || scheduleDate;
+                const currentCount = getInstallerWOCountForDate(inst.name, targetDate);
+                const maxLimit = getMaxQuotaForInstaller(inst.name);
+                return (
+                  <option key={inst.id} value={inst.name}>
+                    {inst.name} ({currentCount}/{maxLimit} WO)
+                  </option>
+                );
+              })}
+            </select>
+          </td>
+        );
+      case 'status':
+        return (
+          <td key={col.id} className="py-2.5 px-3 whitespace-nowrap">
+            <StatusInstallerBadge status={t.statusWOInstaller} />
+          </td>
+        );
+      case 'workStatus': {
+        const ws = getTicketWorkStatus(t);
+        return (
+          <td key={col.id} className="py-2.5 px-3 text-center whitespace-nowrap">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              ws.status === 'Selesai'
+                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                : ws.status === 'Sedang Dikerjakan'
+                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+            }`}>
+              {ws.status}
+            </span>
+          </td>
+        );
+      }
+      case 'checkInAt':
+        return (
+          <td key={col.id} className="py-2.5 px-3 font-mono text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
+            {t.checkInAt ? formatJakartaTimeOnly(t.checkInAt) : '-'}
+          </td>
+        );
+      case 'checkOutAt':
+        return (
+          <td key={col.id} className="py-2.5 px-3 font-mono text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
+            {t.checkOutAt ? formatJakartaTimeOnly(t.checkOutAt) : '-'}
+          </td>
+        );
+      case 'workDuration':
+        return (
+          <td key={col.id} className="py-2.5 px-3 text-[11px] font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
+            {getTicketWorkStatus(t).durationFormatted}
+          </td>
+        );
+      case 'progress':
+        return (
+          <td key={col.id} className="py-2.5 px-3 align-middle">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="font-semibold text-slate-600 dark:text-slate-400">{label}</span>
+                <span className="font-mono font-bold">{progressPercent}%</span>
+              </div>
+              <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${
+                    progressPercent === 100
+                      ? 'bg-emerald-500'
+                      : progressPercent > 50
+                      ? 'bg-blue-500'
+                      : progressPercent > 0
+                      ? 'bg-amber-500'
+                      : 'bg-slate-300'
+                  }`}
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+          </td>
+        );
+      case 'lastUpdate':
+        return (
+          <td key={col.id} className="py-2.5 px-3 font-mono text-[10.5px] text-slate-400 whitespace-nowrap">
+            {t.updatedAt?.slice(5, 16).replace('T', ' ') || '-'}
+          </td>
+        );
+      case 'action':
+        return (
+          <td key={col.id} className="py-2.5 px-3 text-center">
+            <div className="flex items-center justify-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onSelectTicket(t)}
+                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded text-slate-700 dark:text-slate-200 font-semibold text-xs cursor-pointer"
+              >
+                Detail
+              </button>
+
+              {t.installerName && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenReassignModal(t)}
+                    className="px-2 py-1 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 rounded font-semibold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                    title="Reassign / Alihkan penugasan WO ke teknisi lain"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Reassign</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const instUser = myInstallers.find(u => u.name === t.installerName);
+                      if (instUser) {
+                        const msg = buildInstallerAssignmentMessage(t, instUser);
+                        setAssignmentNoticeModal({
+                          ticket: t,
+                          installer: instUser,
+                          renderedMessage: msg,
+                          targetPhone: instUser.phone || ''
+                        });
+                      }
+                    }}
+                    className="p-1 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 hover:bg-emerald-100 rounded cursor-pointer"
+                    title="Kirim pesan WhatsApp penugasan ke teknisi"
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
+            </div>
+          </td>
+        );
+      default:
+        return (
+          <td key={col.id} className="py-2.5 px-3">
+            {String((t as any)[col.id] || '-')}
+          </td>
+        );
+    }
   };
 
   // Add technician submit
@@ -831,12 +1557,14 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
     });
 
     if (res.success) {
-      triggerNotice('success', `Teknisi ${instName} berhasil didaftarkan ke ${leaderContractor}! Password default: 12345678`);
+      toast.success('BERHASIL – Akun Installer berhasil dibuat.', 'Pendaftaran Sukses');
+      triggerNotice('success', `Teknisi ${instName} berhasil didaftarkan ke ${displayContractor}! Password default: 12345678`);
       setInstName('');
       setInstUsername('');
       setInstPhone('');
       setInstEmail('');
     } else {
+      toast.error(res.error || 'Gagal menambahkan installer.', 'Pendaftaran Gagal');
       triggerNotice('error', res.error || 'Gagal menambahkan installer.');
     }
   };
@@ -855,7 +1583,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                  Dashboard Leader
+                  Portal & Dashboard Leader
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
                   {displayContractor}
@@ -885,6 +1613,82 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
             </button>
           </div>
         </div>
+
+        {/* Tab Navigation Ribbon for Leader */}
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setActiveTab('wo_assignment')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'wo_assignment'
+                ? 'bg-[#5B35B1] text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            <UserCheck className="w-4 h-4" />
+            <span>Assign Work Order</span>
+            {summaryMetrics.unassigned > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-amber-500 text-white font-black">
+                {summaryMetrics.unassigned}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('progress_dashboard')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'progress_dashboard'
+                ? 'bg-[#5B35B1] text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Dashboard Progress WO</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('installer_mgmt')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'installer_mgmt'
+                ? 'bg-[#5B35B1] text-white shadow-xs'
+                : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
+            }`}
+          >
+            <UserPlus className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Kelola & Tambah Teknisi</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-emerald-600 text-white font-bold">
+              {myInstallers.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('contractor_recap')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'contractor_recap'
+                ? 'bg-[#5B35B1] text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Rekap Total WO</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('quota_settings')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'quota_settings'
+                ? 'bg-[#5B35B1] text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            <Sliders className="w-4 h-4" />
+            <span>Pengaturan Kuota</span>
+          </button>
+        </div>
       </div>
 
       {/* Notice Banner */}
@@ -906,84 +1710,354 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
       )}
 
       {/* ============================================================ */}
-      {/* TABS NAVIGATION UTAMA PORTAL LEADER                          */}
-      {/* 1. Assign WO                                                */}
-      {/* 2. Pendaftaran Akun Teknisi                                  */}
-      {/* 3. Dashboard Progress WO                                     */}
-      {/* 4. Pengaturan Kuota & Kolom                                  */}
+      {/* DASHBOARD LEADER VIEW (BAGIAN 3.2: 10 KPI, SLA, BEBAN TEKNISI)*/}
       {/* ============================================================ */}
-      <div className="flex flex-wrap items-center gap-2 border-b-2 border-[#D8CCF3] dark:border-purple-900/60 pb-1 text-xs font-semibold">
-        {/* TAB 1: ASSIGN WO */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('wo_assignment')}
-          className={`px-4 py-2.5 rounded-t-xl border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
-            activeTab === 'wo_assignment'
-              ? 'border-[#5B35B1] bg-[#F5F1FF] dark:bg-[#251545] text-[#3B1D78] dark:text-purple-300 font-bold shadow-xs'
-              : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-[#5B35B1] hover:bg-[#F5F1FF]/60 dark:hover:bg-purple-950/40'
-          }`}
-        >
-          <UserCheck className="w-4 h-4 text-[#5B35B1] dark:text-purple-300" />
-          <span>Assign WO</span>
-          {summaryMetrics.unassigned > 0 ? (
-            <span className="px-2 py-0.5 rounded-full text-[10.5px] bg-amber-500 text-white font-mono font-bold animate-pulse">
-              {summaryMetrics.unassigned} Belum Di-assign
-            </span>
-          ) : (
-            <span className="px-1.5 py-0.5 rounded-full text-[10.5px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-mono">
-              Semua Ditugaskan
-            </span>
-          )}
-        </button>
+      {activeTab === 'dashboard' && (
+        <div className="space-y-5">
+          {/* 10 ACCURATE SUMMARY METRIC CARDS */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+            {/* 1. Total WO */}
+            <div className="bg-white dark:bg-[#1A0E2E] p-4 rounded-2xl border-2 border-[#D8CCF3] dark:border-purple-900/60 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-slate-500 dark:text-purple-300">
+                <span className="text-xs font-semibold">Total WO Masuk</span>
+                <Layers className="w-4 h-4 text-[#5B35B1]" />
+              </div>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black font-mono text-[#21183A] dark:text-white">
+                  {summaryMetrics.total}
+                </span>
+                <span className="text-[10px] text-slate-400">Total WO</span>
+              </div>
+            </div>
 
-        {/* TAB 2: PENDAFTARAN AKUN TEKNISI */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('installer_mgmt')}
-          className={`px-4 py-2.5 rounded-t-xl border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
-            activeTab === 'installer_mgmt'
-              ? 'border-emerald-600 bg-emerald-50/80 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-bold shadow-xs'
-              : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-emerald-700 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/30'
-          }`}
-        >
-          <UserPlus className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <span>Pendaftaran Akun Teknisi</span>
-          <span className="px-2 py-0.5 rounded-full text-[10.5px] bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono font-bold">
-            {myInstallers.length} Teknisi
-          </span>
-        </button>
+            {/* 2. Belum Di-assign (HIGHLIGHT) */}
+            <div
+              onClick={() => setActiveTab('wo_assignment')}
+              className={`p-4 rounded-2xl border-2 shadow-xs flex flex-col justify-between cursor-pointer transition-transform hover:scale-[1.02] ${
+                summaryMetrics.unassigned > 0
+                  ? 'bg-amber-500/10 border-amber-500/60 text-amber-900 dark:text-amber-200 animate-pulse'
+                  : 'bg-white dark:bg-[#1A0E2E] border-[#D8CCF3] dark:border-purple-900/60'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-600 dark:text-amber-400">Belum Di-assign</span>
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black font-mono text-amber-600 dark:text-amber-300">
+                  {summaryMetrics.unassigned}
+                </span>
+                <span className="text-[10px] font-bold text-amber-600 underline">Tugaskan Sekarang →</span>
+              </div>
+            </div>
 
-        {/* TAB 3: DASHBOARD PROGRESS WO */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('progress_dashboard')}
-          className={`px-4 py-2.5 rounded-t-xl border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
-            activeTab === 'progress_dashboard'
-              ? 'border-[#5B35B1] bg-[#F5F1FF] dark:bg-[#251545] text-[#3B1D78] dark:text-purple-300 font-bold shadow-xs'
-              : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-[#5B35B1] hover:bg-[#F5F1FF]/60 dark:hover:bg-purple-950/40'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4 text-[#5B35B1] dark:text-purple-300" />
-          <span>Dashboard Progress WO</span>
-          <span className="px-2 py-0.5 rounded-full text-[10.5px] bg-[#E9E1FF] dark:bg-purple-900/60 text-[#3B1D78] dark:text-purple-200 font-mono font-bold">
-            Live SLA
-          </span>
-        </button>
+            {/* 3. Sudah Di-assign */}
+            <div className="bg-white dark:bg-[#1A0E2E] p-4 rounded-2xl border-2 border-[#D8CCF3] dark:border-purple-900/60 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-slate-500 dark:text-purple-300">
+                <span className="text-xs font-semibold">Sudah Di-assign</span>
+                <UserCheck className="w-4 h-4 text-indigo-500" />
+              </div>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black font-mono text-indigo-600 dark:text-indigo-300">
+                  {summaryMetrics.assigned}
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {summaryMetrics.total > 0 ? Math.round((summaryMetrics.assigned / summaryMetrics.total) * 100) : 0}%
+                </span>
+              </div>
+            </div>
 
-        {/* TAB 4: PENGATURAN KUOTA & KOLOM */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('quota_settings')}
-          className={`px-4 py-2.5 rounded-t-xl border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
-            activeTab === 'quota_settings'
-              ? 'border-purple-600 bg-purple-50/80 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-bold shadow-xs'
-              : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-purple-700 hover:bg-purple-50/40'
-          }`}
-        >
-          <Sliders className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-          <span>Pengaturan Kuota & Kolom</span>
-        </button>
-      </div>
+            {/* 4. Menunggu Pengerjaan */}
+            <div className="bg-white dark:bg-[#1A0E2E] p-4 rounded-2xl border-2 border-[#D8CCF3] dark:border-purple-900/60 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-slate-500 dark:text-purple-300">
+                <span className="text-xs font-semibold">Menunggu</span>
+                <Clock className="w-4 h-4 text-slate-500" />
+              </div>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black font-mono text-slate-700 dark:text-slate-300">
+                  {summaryMetrics.waiting}
+                </span>
+                <span className="text-[10px] text-slate-400">Antrean</span>
+              </div>
+            </div>
+
+            {/* 5. Sedang Dikerjakan */}
+            <div className="bg-white dark:bg-[#1A0E2E] p-4 rounded-2xl border-2 border-blue-300 dark:border-blue-900/60 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-blue-600 dark:text-blue-400">
+                <span className="text-xs font-semibold">Sedang Dikerjakan</span>
+                <Activity className="w-4 h-4 text-blue-500" />
+              </div>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black font-mono text-blue-600 dark:text-blue-300">
+                  {summaryMetrics.inProgress}
+                </span>
+                <span className="text-[10px] text-blue-400">On Site / En Route</span>
+              </div>
+            </div>
+
+            {/* 6. Selesai (Completed) */}
+            <div className="bg-white dark:bg-[#1A0E2E] p-4 rounded-2xl border-2 border-emerald-300 dark:border-emerald-900/60 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
+                <span className="text-xs font-semibold">Selesai (Completed)</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              </div>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-300">
+                  {summaryMetrics.completed}
+                </span>
+                <span className="text-[10px] text-emerald-500 font-bold">
+                  {summaryMetrics.total > 0 ? Math.round((summaryMetrics.completed / summaryMetrics.total) * 100) : 0}% Rate
+                </span>
+              </div>
+            </div>
+
+            {/* 7. Tertunda / Pending */}
+            <div className="bg-white dark:bg-[#1A0E2E] p-4 rounded-2xl border-2 border-amber-300 dark:border-amber-900/60 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-amber-600 dark:text-amber-400">
+                <span className="text-xs font-semibold">Tertunda / Reschedule</span>
+                <RotateCcw className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black font-mono text-amber-600 dark:text-amber-300">
+                  {summaryMetrics.pending}
+                </span>
+                <span className="text-[10px] text-amber-400">Pending</span>
+              </div>
+            </div>
+
+            {/* 8. Bermasalah / Batal */}
+            <div className="bg-white dark:bg-[#1A0E2E] p-4 rounded-2xl border-2 border-rose-300 dark:border-rose-900/60 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-rose-600 dark:text-rose-400">
+                <span className="text-xs font-semibold">Bermasalah / Batal</span>
+                <XCircle className="w-4 h-4 text-rose-500" />
+              </div>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black font-mono text-rose-600 dark:text-rose-300">
+                  {summaryMetrics.problem}
+                </span>
+                <span className="text-[10px] text-rose-400">Kendala</span>
+              </div>
+            </div>
+
+            {/* 9. Teknisi Aktif */}
+            <div className="bg-white dark:bg-[#1A0E2E] p-4 rounded-2xl border-2 border-[#D8CCF3] dark:border-purple-900/60 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-slate-500 dark:text-purple-300">
+                <span className="text-xs font-semibold">Teknisi Aktif</span>
+                <Users2 className="w-4 h-4 text-emerald-500" />
+              </div>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-300">
+                  {summaryMetrics.activeInstallers}
+                </span>
+                <span className="text-[10px] text-slate-400">Mengerjakan</span>
+              </div>
+            </div>
+
+            {/* 10. Teknisi Siaga / Idle */}
+            <div className="bg-white dark:bg-[#1A0E2E] p-4 rounded-2xl border-2 border-[#D8CCF3] dark:border-purple-900/60 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-slate-500 dark:text-purple-300">
+                <span className="text-xs font-semibold">Teknisi Siaga / Idle</span>
+                <UserPlus className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black font-mono text-amber-600 dark:text-amber-300">
+                  {summaryMetrics.idleInstallers}
+                </span>
+                <span className="text-[10px] text-slate-400">Siap Ditugaskan</span>
+              </div>
+            </div>
+          </div>
+
+          {/* SLA PROGRESS BAR & BREAKDOWN */}
+          <div className="bg-white dark:bg-[#1A0E2E] p-5 rounded-2xl border-2 border-[#D8CCF3] dark:border-purple-900/60 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="font-bold text-sm text-[#21183A] dark:text-white flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-[#5B35B1]" />
+                  <span>SLA & Progres Penyelesaian Work Order</span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Tingkat penyelesaian instalasi harian mitra kontraktor {displayContractor}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl font-black font-mono text-[#5B35B1] dark:text-purple-300">
+                  {summaryMetrics.total > 0 ? Math.round((summaryMetrics.completed / summaryMetrics.total) * 100) : 0}%
+                </span>
+                <span className="text-xs text-slate-400">Terselesaikan</span>
+              </div>
+            </div>
+
+            {/* Multi-segment Progress Bar */}
+            <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex shadow-inner">
+              <div
+                style={{ width: `${summaryMetrics.total > 0 ? (summaryMetrics.completed / summaryMetrics.total) * 100 : 0}%` }}
+                className="bg-emerald-500 transition-all duration-500"
+                title={`Selesai: ${summaryMetrics.completed}`}
+              />
+              <div
+                style={{ width: `${summaryMetrics.total > 0 ? (summaryMetrics.inProgress / summaryMetrics.total) * 100 : 0}%` }}
+                className="bg-blue-500 transition-all duration-500"
+                title={`Sedang Dikerjakan: ${summaryMetrics.inProgress}`}
+              />
+              <div
+                style={{ width: `${summaryMetrics.total > 0 ? (summaryMetrics.waiting / summaryMetrics.total) * 100 : 0}%` }}
+                className="bg-slate-400 transition-all duration-500"
+                title={`Menunggu: ${summaryMetrics.waiting}`}
+              />
+              <div
+                style={{ width: `${summaryMetrics.total > 0 ? (summaryMetrics.pending / summaryMetrics.total) * 100 : 0}%` }}
+                className="bg-amber-500 transition-all duration-500"
+                title={`Pending: ${summaryMetrics.pending}`}
+              />
+              <div
+                style={{ width: `${summaryMetrics.total > 0 ? (summaryMetrics.problem / summaryMetrics.total) * 100 : 0}%` }}
+                className="bg-rose-500 transition-all duration-500"
+                title={`Bermasalah: ${summaryMetrics.problem}`}
+              />
+            </div>
+
+            {/* Legend */}
+            <div className="flex flex-wrap items-center gap-4 text-xs pt-1">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                <span className="text-slate-600 dark:text-slate-300">Selesai ({summaryMetrics.completed})</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                <span className="text-slate-600 dark:text-slate-300">Sedang Dikerjakan ({summaryMetrics.inProgress})</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
+                <span className="text-slate-600 dark:text-slate-300">Menunggu ({summaryMetrics.waiting})</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                <span className="text-slate-600 dark:text-slate-300">Pending ({summaryMetrics.pending})</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                <span className="text-slate-600 dark:text-slate-300">Bermasalah ({summaryMetrics.problem})</span>
+              </div>
+            </div>
+          </div>
+
+          {/* DAFTAR BEBAN KERJA TEKNISI */}
+          <div className="bg-white dark:bg-[#1A0E2E] rounded-2xl border-2 border-[#D8CCF3] dark:border-purple-900/60 shadow-xs p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div>
+                <h3 className="font-bold text-sm text-[#21183A] dark:text-white flex items-center gap-2">
+                  <Users2 className="w-4 h-4 text-[#5B35B1]" />
+                  <span>Daftar Beban Kerja & Status Teknisi Mitra</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#E9E1FF] dark:bg-purple-900/60 text-[#3B1D78] dark:text-purple-200">
+                    {myInstallers.length} Teknisi Terdaftar
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Pemantauan real-time kapasitas pengerjaan dan kuota harian teknisi
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('wo_assignment')}
+                  className="px-3.5 py-1.5 text-xs font-bold text-white bg-[#5B35B1] hover:bg-[#3B1D78] rounded-xl shadow-xs transition-all cursor-pointer"
+                >
+                  Buka Menu Assign WO →
+                </button>
+              </div>
+            </div>
+
+            {/* Table of Installers */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-[#F5F1FF] dark:bg-[#251545] text-slate-700 dark:text-purple-200 uppercase font-semibold">
+                  <tr>
+                    <th className="py-2.5 px-3">Teknisi</th>
+                    <th className="py-2.5 px-3">Kontak WhatsApp</th>
+                    <th className="py-2.5 px-3 text-center">Status</th>
+                    <th className="py-2.5 px-3 text-center">WO Aktif</th>
+                    <th className="py-2.5 px-3 text-center">Beban / Kuota</th>
+                    <th className="py-2.5 px-3 text-center">Progres Selesai</th>
+                    <th className="py-2.5 px-3 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {installerProgressRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-6 text-center text-slate-400">
+                        Belum ada teknisi yang terdaftar untuk kontraktor ini. Silakan tambahkan akun teknisi melalui menu Pendaftaran Akun Teknisi.
+                      </td>
+                    </tr>
+                  ) : (
+                    installerProgressRows.map(row => {
+                      const isActive = row.inProgress > 0 || row.notStarted > 0;
+                      return (
+                        <tr key={row.installer.id} className="hover:bg-slate-50 dark:hover:bg-purple-950/20 transition-colors">
+                          <td className="py-3 px-3 font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-lg bg-purple-100 dark:bg-purple-950 text-purple-600 flex items-center justify-center font-bold text-xs shrink-0">
+                              {row.installer.name.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <div>{row.installer.name}</div>
+                              <div className="text-[10px] text-slate-400 font-normal">@{row.installer.username}</div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 font-mono text-slate-600 dark:text-slate-300">
+                            {row.installer.phone || '-'}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            {isActive ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300">
+                                Aktif ({row.inProgress > 0 ? 'Sedang di Lokasi' : 'Siap Menuju'})
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300">
+                                Siaga (Idle)
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono font-bold text-slate-800 dark:text-slate-200">
+                            {row.totalWO}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono">
+                            <span className={row.totalWO >= row.maxQuota ? 'text-rose-600 font-bold' : 'text-slate-700 dark:text-slate-300'}>
+                              {row.totalWO} / {row.maxQuota} WO
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <div className="w-16 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                <div
+                                  style={{ width: `${row.progressPercent}%` }}
+                                  className="h-full bg-emerald-500 rounded-full"
+                                />
+                              </div>
+                              <span className="font-mono text-[11px] text-slate-600 dark:text-slate-300 font-semibold">
+                                {row.progressPercent}%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedInstallerForDetail(row.installer)}
+                              className="px-2.5 py-1 text-xs font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950 hover:bg-purple-100 rounded-lg border border-purple-200 dark:border-purple-800 transition-colors cursor-pointer"
+                            >
+                              Lihat Detail
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ============================================================ */}
       {/* TAB 1: MENU KHUSUS ASSIGN WO                                 */}
@@ -1148,17 +2222,17 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-[#1A0E2E] rounded-2xl border-2 border-[#D8CCF3] dark:border-purple-900/60 shadow-xs space-y-4 p-4 sm:p-5">
-              {/* Header Susunan WO Leader & Tombol Aksi Penugasan */}
+          <div className="bg-white dark:bg-[#1A0E2E] rounded-2xl border-2 border-[#EC91C0] dark:border-[#A80F62]/60 shadow-xs space-y-4 p-4 sm:p-5">
+              {/* Header Susunan Assign Data WO Leader & Tombol Aksi Penugasan */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shadow-xs shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-[#FCE4F1] dark:bg-[#A80F62]/40 text-[#D81B83] dark:text-[#EC91C0] flex items-center justify-center font-bold shadow-xs shrink-0 border border-[#EC91C0]/60">
                     <UserCheck className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                      <span>Susunan Work Order Leader</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#E9E1FF] dark:bg-purple-900/60 text-[#3B1D78] dark:text-purple-200">
+                      <span>Assign Data WO</span>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#FCE4F1] text-[#A80F62] border border-[#EC91C0]">
                         {filteredTickets.length} WO
                       </span>
                     </h3>
@@ -1168,69 +2242,137 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
                   </div>
                 </div>
 
-                {/* Tombol Aksi: Upload Assign WO & Assign Data WO */}
+                {/* Tombol Aksi: Upload Assign WO (Magenta Theme) */}
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => setIsUploadAssignModalOpen(true)}
-                    className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-xl transition-all shadow-xs cursor-pointer"
+                    className="flex items-center gap-2 px-4 py-2 text-xs font-bold bg-[#D81B83] hover:bg-[#C21875] text-white border border-[#EC91C0] rounded-xl transition-all shadow-sm cursor-pointer hover:scale-[1.02] active:scale-95"
                     title="Unggah berkas Excel/CSV untuk penugasan massal"
                   >
-                    <FileUp className="w-3.5 h-3.5 text-emerald-600" />
+                    <FileUp className="w-4 h-4 text-white" />
                     <span>Upload Assign WO</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (selectedTicketIds.length === 0 && summaryMetrics.unassigned > 0) {
-                        // Pick first unassigned ticket by default
-                        const firstUn = contractorTickets.find(t => !t.installerName);
-                        if (firstUn) setSelectedTicketIds([firstUn.id]);
-                      }
-                      setIsBulkAssignModalOpen(true);
-                    }}
-                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
-                  >
-                    <UserCheck className="w-4 h-4" />
-                    <span>Assign Data WO {selectedTicketIds.length > 0 && `(${selectedTicketIds.length})`}</span>
                   </button>
                 </div>
               </div>
 
               {/* 7A. TOOLBAR 3 BAGIAN (KIRI, TENGAH, KANAN) */}
               <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800 text-xs">
-                {/* Bagian Kiri: Rows Selector & Counts */}
+                {/* Bagian Kiri: Rows Selector & Selected Data Counter */}
                 <div className="flex flex-wrap items-center gap-2.5">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500">Tampilkan:</span>
+                    <span className="text-slate-500 font-medium">Show Entries:</span>
                     <select
                       value={rowsPerPage}
                       onChange={e => {
                         setRowsPerPage(Number(e.target.value));
                         setCurrentPage(1);
                       }}
-                      className="px-2.5 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-medium text-xs"
+                      className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-medium text-xs focus:ring-1 focus:ring-[#D81B83]"
                     >
                       <option value={10}>10</option>
                       <option value={25}>25</option>
                       <option value={50}>50</option>
                       <option value={100}>100</option>
-                      <option value={-1}>Semua ({filteredTickets.length})</option>
+                      <option value={-1}>All ({filteredTickets.length})</option>
                     </select>
                   </div>
 
                   <span className="text-slate-300 dark:text-slate-700">|</span>
 
-                  <span className="font-mono text-slate-600 dark:text-slate-300">
+                  <span className="font-mono text-slate-600 dark:text-slate-300 text-xs">
                     Total: <strong className="font-bold text-slate-900 dark:text-white">{filteredTickets.length}</strong> WO
                   </span>
 
                   {selectedTicketIds.length > 0 && (
-                    <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-md font-bold font-mono">
-                      {selectedTicketIds.length} Dipilih
+                    <span className="px-2.5 py-1 bg-[#FCE4F1] dark:bg-[#A80F62]/40 text-[#A80F62] dark:text-[#FCE4F1] border border-[#EC91C0] rounded-xl font-bold font-mono text-xs shadow-xs animate-in zoom-in-95 duration-100">
+                      Selected Data: {selectedTicketIds.length}
                     </span>
                   )}
+                </div>
+
+                {/* Date Filter Bar: "Select WO Date", Start Date, End Date, tombol Cari (Magenta) */}
+                <div className="flex flex-wrap items-center gap-2 p-2 bg-[#FCE4F1]/40 dark:bg-[#251545] rounded-xl border border-[#EC91C0]/60 text-xs">
+                  <div className="flex items-center gap-1 text-[11px] font-bold text-[#A80F62] dark:text-pink-300 shrink-0">
+                    <Calendar className="w-3.5 h-3.5 text-[#D81B83]" />
+                    <span>Select WO Date:</span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => { setDateFilterType('all'); setCurrentPage(1); }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                        dateFilterType === 'all'
+                          ? 'bg-[#D81B83] text-white shadow-xs font-bold'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setDateFilterType('today'); setCurrentPage(1); }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                        dateFilterType === 'today'
+                          ? 'bg-[#D81B83] text-white shadow-xs font-bold'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setDateFilterType('tomorrow'); setCurrentPage(1); }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                        dateFilterType === 'tomorrow'
+                          ? 'bg-[#D81B83] text-white shadow-xs font-bold'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Tomorrow
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setDateFilterType('custom'); setCurrentPage(1); }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                        dateFilterType === 'custom'
+                          ? 'bg-[#D81B83] text-white shadow-xs font-bold'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Range
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 pl-1">
+                    <input
+                      type="date"
+                      value={customDateStart}
+                      onChange={e => { setCustomDateStart(e.target.value); setDateFilterType('custom'); }}
+                      placeholder="Start Date"
+                      className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-[11px] font-mono focus:ring-1 focus:ring-[#D81B83]"
+                      title="Start Date"
+                    />
+                    <span className="text-slate-400 text-[11px]">s/d</span>
+                    <input
+                      type="date"
+                      value={customDateEnd}
+                      onChange={e => { setCustomDateEnd(e.target.value); setDateFilterType('custom'); }}
+                      placeholder="End Date"
+                      className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-[11px] font-mono focus:ring-1 focus:ring-[#D81B83]"
+                      title="End Date"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setDateFilterType('custom'); setCurrentPage(1); }}
+                      className="px-3 py-1 bg-[#D81B83] hover:bg-[#C21875] text-white font-bold text-[11px] rounded-lg shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                      title="Cari berdasarkan tanggal WO"
+                    >
+                      <Search className="w-3 h-3" />
+                      <span>Cari</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Bagian Tengah: Search & Filters */}
@@ -1284,7 +2426,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
                     ))}
                   </select>
 
-                  {(statusFilter !== 'all' || selectedInstallerFilter !== 'ALL' || searchQuery) && (
+                  {(statusFilter !== 'all' || selectedInstallerFilter !== 'ALL' || searchQuery || Boolean(sortState.column)) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1292,13 +2434,28 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
                         setSelectedInstallerFilter('ALL');
                         setSearchQuery('');
                         setDateFilterType('all');
+                        setSortState({ column: null, direction: null });
                         setCurrentPage(1);
                       }}
                       className="p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 border rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-                      title="Reset seluruh filter"
+                      title="Reset seluruh filter dan pengurutan kolom"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                     </button>
+                  )}
+
+                  {sortState.column && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800/60 rounded-lg text-[11px] text-[#5B35B1] dark:text-[#D8B4FE] font-medium animate-in fade-in">
+                      <span>Urut: <strong>{tableColumns.find(c => c.id === sortState.column)?.label || sortState.column}</strong> ({sortState.direction === 'asc' ? 'A-Z ↑' : 'Z-A ↓'})</span>
+                      <button
+                        type="button"
+                        onClick={() => setSortState({ column: null, direction: null })}
+                        className="hover:text-rose-600 dark:hover:text-rose-400 p-0.5 rounded cursor-pointer transition-colors"
+                        title="Hapus urutan kolom"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
                   )}
                 </div>
 
@@ -1376,6 +2533,38 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
                   </div>
                 </div>
               </div>
+
+              {/* ============================================================ */}
+              {/* AREA SEBELUM TABEL WO: INDIKATOR CHECKLIST & TOMBOL ASSIGN   */}
+              {/* ============================================================ */}
+              {selectedTicketIds.length > 0 && (
+                <div className="sticky top-2 z-25 flex flex-wrap items-center justify-between gap-3 p-3.5 bg-gradient-to-r from-[#210D44] via-[#35105E] to-[#4C1D95] rounded-2xl border-2 border-[#D8B4FE]/60 shadow-xl text-white animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xs">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-500/25 border border-emerald-400/70 text-emerald-300 font-bold text-xs shadow-xs">
+                      <Check className="w-4 h-4 text-emerald-400 stroke-[3]" />
+                      <span>[✓ {selectedTicketIds.length} WO Dipilih]</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTicketIds([])}
+                      className="text-xs text-[#D8B4FE] hover:text-white underline cursor-pointer transition-colors"
+                    >
+                      Batalkan Pilihan
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsBulkAssignModalOpen(true)}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#7135B5] to-[#A855F7] hover:from-[#5B35B1] hover:to-[#9333EA] text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg border border-[#D8B4FE]/50 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+                    >
+                      <UserCheck className="w-4 h-4 text-[#E9D5FF]" />
+                      <span>ASSIGN DATA WO ({selectedTicketIds.length})</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* TABLE CONTAINER / MOBILE CARDS */}
               {filteredTickets.length === 0 ? (
@@ -1492,36 +2681,9 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
                 /* DESKTOP & TABLET STRUCTURED TABLE */
                 <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
                   <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-slate-100 dark:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase sticky top-0 z-10">
+                    <thead className="bg-[#D81B83] text-white text-[11px] font-bold uppercase sticky top-0 z-10 border-b-2 border-[#A80F62] shadow-sm [&_button]:text-white [&_button:hover]:text-[#FCE4F1] [&_svg]:text-white/90">
                       <tr>
-                        {isColVisible('checkbox') && (
-                          <th className="py-2.5 px-3 text-center w-8">
-                            <input
-                              type="checkbox"
-                              checked={
-                                filteredTickets.length > 0 &&
-                                selectedTicketIds.length === filteredTickets.length
-                              }
-                              onChange={handleSelectAll}
-                              className="w-4 h-4 text-indigo-600 rounded border-slate-300 dark:border-slate-700"
-                            />
-                          </th>
-                        )}
-                        {isColVisible('woNumber') && <th className="py-2.5 px-3">WO Number</th>}
-                        {isColVisible('date') && <th className="py-2.5 px-3">Tanggal WO</th>}
-                        {isColVisible('idCustomer') && <th className="py-2.5 px-3">Customer ID</th>}
-                        {isColVisible('customerName') && <th className="py-2.5 px-3">Nama Pelanggan</th>}
-                        {isColVisible('customerPhone') && <th className="py-2.5 px-3">Kontak</th>}
-                        {isColVisible('clusterName') && <th className="py-2.5 px-3">Cluster</th>}
-                        {isColVisible('streetName') && <th className="py-2.5 px-3 min-w-[180px]">Alamat / Street Name</th>}
-                        {isColVisible('appointmentDate') && <th className="py-2.5 px-3">Appointment</th>}
-                        {isColVisible('slotTime') && <th className="py-2.5 px-3 whitespace-nowrap">Slot Time</th>}
-                        {isColVisible('contractor') && <th className="py-2.5 px-3">Kontraktor</th>}
-                        {isColVisible('installer') && <th className="py-2.5 px-3 min-w-[170px]">Teknisi / Installer</th>}
-                        {isColVisible('status') && <th className="py-2.5 px-3">Status WO</th>}
-                        {isColVisible('progress') && <th className="py-2.5 px-3 min-w-[130px]">Progress</th>}
-                        {isColVisible('lastUpdate') && <th className="py-2.5 px-3">Update</th>}
-                        {isColVisible('action') && <th className="py-2.5 px-3 text-center min-w-[120px]">Action</th>}
+                        {visibleColumns.map(col => renderHeaderCell(col))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1537,243 +2699,15 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
                                 isSelected ? 'bg-indigo-50/40 dark:bg-indigo-950/20' : ''
                               }`}
                             >
-                              {/* 1. Checkbox */}
-                              {isColVisible('checkbox') && (
-                                <td className="py-2.5 px-3 text-center">
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => handleToggleSelectTicket(t.id)}
-                                    className="w-4 h-4 text-indigo-600 rounded border-slate-300 dark:border-slate-700"
-                                  />
-                                </td>
-                              )}
-
-                              {/* 2. WO Number */}
-                              {isColVisible('woNumber') && (
-                                <td className="py-2.5 px-3 font-mono font-semibold">
-                                  <div className="flex items-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleRowExpansion(t.id)}
-                                      className="text-slate-400 hover:text-slate-700 p-0.5"
-                                      title="Buka / Tutup Rincian Alamat & Teknis"
-                                    >
-                                      {isExpanded ? (
-                                        <ChevronDown className="w-3.5 h-3.5 text-indigo-600" />
-                                      ) : (
-                                        <ChevronRight className="w-3.5 h-3.5" />
-                                      )}
-                                    </button>
-                                    <span
-                                      onClick={() => onSelectTicket(t)}
-                                      className="text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                                    >
-                                      {t.woNumber}
-                                    </span>
-                                  </div>
-                                </td>
-                              )}
-
-                              {/* 3. Tanggal WO */}
-                              {isColVisible('date') && (
-                                <td className="py-2.5 px-3 font-mono text-slate-500 whitespace-nowrap">
-                                  {t.date || '-'}
-                                </td>
-                              )}
-
-                              {/* 4. Customer ID */}
-                              {isColVisible('idCustomer') && (
-                                <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
-                                  {t.idCustomer}
-                                </td>
-                              )}
-
-                              {/* 5. Customer Name */}
-                              {isColVisible('customerName') && (
-                                <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-white">
-                                  {t.customerName}
-                                </td>
-                              )}
-
-                              {/* 6. Customer Phone */}
-                              {isColVisible('customerPhone') && (
-                                <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                                  {t.customerPhone}
-                                </td>
-                              )}
-
-                              {/* 7. Cluster Name */}
-                              {isColVisible('clusterName') && (
-                                <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
-                                  {t.clusterName || '-'}
-                                </td>
-                              )}
-
-                              {/* 8. Street Name / Alamat */}
-                              {isColVisible('streetName') && (
-                                <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 max-w-xs">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openCustomerAddressInGoogleMaps(t);
-                                    }}
-                                    className="flex items-center gap-1.5 text-left text-slate-700 dark:text-slate-200 hover:text-purple-700 dark:hover:text-purple-300 transition-colors group cursor-pointer max-w-full"
-                                    title="Klik untuk membuka lokasi di Google Maps"
-                                  >
-                                    <MapPin className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0 group-hover:scale-110 transition-transform" />
-                                    <span className="truncate group-hover:underline">{t.streetName || t.clusterName || '-'}</span>
-                                  </button>
-                                </td>
-                              )}
-
-                              {/* 9. Appointment Date */}
-                              {isColVisible('appointmentDate') && (
-                                <td className="py-2.5 px-3 font-mono whitespace-nowrap text-slate-700 dark:text-slate-300">
-                                  {t.appointmentDate || t.date || '-'}
-                                </td>
-                              )}
-
-                              {/* 10. Slot Time */}
-                              {isColVisible('slotTime') && (
-                                <td className="py-2.5 px-3 font-medium whitespace-nowrap text-slate-800 dark:text-slate-200">
-                                  {t.slotTime}
-                                </td>
-                              )}
-
-                              {/* 11. Contractor */}
-                              {isColVisible('contractor') && (
-                                <td className="py-2.5 px-3 text-slate-500">
-                                  {t.contactorName}
-                                </td>
-                              )}
-
-                              {/* 12. Installer Quick Dropdown */}
-                              {isColVisible('installer') && (
-                                <td className="py-2.5 px-3">
-                                  <select
-                                    value={t.installerName || ''}
-                                    onChange={e => {
-                                      if (e.target.value !== t.installerName) {
-                                        handleAssignTicket(t, e.target.value, t.slotTime);
-                                      }
-                                    }}
-                                    className={`w-full px-2 py-1 text-xs rounded-lg border font-medium ${
-                                      t.installerName
-                                        ? 'bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700'
-                                        : 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800 font-bold'
-                                    }`}
-                                  >
-                                    <option value="">{t.installerName ? 'Ganti Teknisi...' : 'Pilih Teknisi...'}</option>
-                                    {myInstallers.map(inst => {
-                                      const targetDate = t.appointmentDate || t.date || scheduleDate;
-                                      const currentCount = getInstallerWOCountForDate(inst.name, targetDate);
-                                      const maxLimit = getMaxQuotaForInstaller(inst.name);
-                                      return (
-                                        <option key={inst.id} value={inst.name}>
-                                          {inst.name} ({currentCount}/{maxLimit} WO)
-                                        </option>
-                                      );
-                                    })}
-                                  </select>
-                                </td>
-                              )}
-
-                              {/* 13. Status WO */}
-                              {isColVisible('status') && (
-                                <td className="py-2.5 px-3 whitespace-nowrap">
-                                  <StatusInstallerBadge status={t.statusWOInstaller} />
-                                </td>
-                              )}
-
-                              {/* 14. Progress Bar Mini */}
-                              {isColVisible('progress') && (
-                                <td className="py-2.5 px-3 align-middle">
-                                  <div className="space-y-1">
-                                    <div className="flex items-center justify-between text-[10px]">
-                                      <span className="font-semibold text-slate-600 dark:text-slate-400">{label}</span>
-                                      <span className="font-mono font-bold">{progressPercent}%</span>
-                                    </div>
-                                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                                      <div
-                                        className={`h-full rounded-full ${
-                                          progressPercent === 100
-                                            ? 'bg-emerald-500'
-                                            : progressPercent > 50
-                                            ? 'bg-blue-500'
-                                            : progressPercent > 0
-                                            ? 'bg-amber-500'
-                                            : 'bg-slate-300'
-                                        }`}
-                                        style={{ width: `${progressPercent}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                </td>
-                              )}
-
-                              {/* 15. Last Update */}
-                              {isColVisible('lastUpdate') && (
-                                <td className="py-2.5 px-3 font-mono text-[10.5px] text-slate-400 whitespace-nowrap">
-                                  {t.updatedAt?.slice(5, 16).replace('T', ' ') || '-'}
-                                </td>
-                              )}
-
-                              {/* 16. Actions */}
-                              {isColVisible('action') && (
-                                <td className="py-2.5 px-3 text-center">
-                                  <div className="flex items-center justify-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => onSelectTicket(t)}
-                                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded text-slate-700 dark:text-slate-200 font-semibold text-xs"
-                                    >
-                                      Detail
-                                    </button>
-
-                                    {t.installerName && (
-                                      <>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleOpenReassignModal(t)}
-                                          className="px-2 py-1 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 rounded font-semibold text-xs flex items-center gap-1 transition-colors"
-                                          title="Reassign / Alihkan penugasan WO ke teknisi lain"
-                                        >
-                                          <RotateCcw className="w-3 h-3" />
-                                          <span>Reassign</span>
-                                        </button>
-
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const instUser = myInstallers.find(u => u.name === t.installerName);
-                                            if (instUser) {
-                                              const msg = buildInstallerAssignmentMessage(t, instUser);
-                                              setAssignmentNoticeModal({
-                                                ticket: t,
-                                                installer: instUser,
-                                                renderedMessage: msg,
-                                                targetPhone: instUser.phone || ''
-                                              });
-                                            }
-                                          }}
-                                          className="p-1 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 hover:bg-emerald-100 rounded"
-                                          title="Kirim pesan WhatsApp penugasan ke teknisi"
-                                        >
-                                          <Phone className="w-3.5 h-3.5" />
-                                        </button>
-                                      </>
-                                    )}
-                                  </div>
-                                </td>
+                              {visibleColumns.map(col =>
+                                renderBodyCell(col, t, isSelected, isExpanded, label, progressPercent)
                               )}
                             </tr>
 
                             {/* 7C. EXPANDABLE ROW (Detailed View on Row Expansion) */}
                             {isExpanded && (
                               <tr className="bg-slate-50/80 dark:bg-slate-800/40">
-                                <td colSpan={tableColumns.filter(c => c.visible).length} className="p-4">
+                                <td colSpan={visibleColumns.length} className="p-4">
                                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                                     <div className="space-y-1.5">
                                       <span className="font-bold text-slate-800 dark:text-slate-200 block">
@@ -1877,650 +2811,166 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
       )}
 
       {/* ============================================================ */}
-      {/* TAB 3: DASHBOARD PROGRESS WO & REALTIME SLA                  */}
+      {/* TAB 2: DASHBOARD PROGRESS WO                                 */}
       {/* ============================================================ */}
       {activeTab === 'progress_dashboard' && (
-        <div className="space-y-6">
-          {/* Header Dashboard Progress */}
-          <div className="bg-white dark:bg-[#1A0E2E] rounded-2xl border-2 border-[#D8CCF3] dark:border-purple-900/60 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-bold text-[#3B1D78] dark:text-purple-200 flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-[#5B35B1]" />
-                <span>Dashboard Progress WO & Pemantauan SLA Lapangan</span>
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Pantau metrik kecepatan penyelesaian penugasan WO, kendala lapangan, beban harian teknisi, dan matriks jadwal.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setStatusFilter('unassigned');
-                  setActiveTab('wo_assignment');
-                }}
-                className="px-3.5 py-1.5 bg-[#5B35B1] hover:bg-[#3B1D78] text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <UserCheck className="w-3.5 h-3.5" />
-                <span>Buka Penugasan WO</span>
-              </button>
-            </div>
-          </div>
+        <LeaderProgressDashboardView
+          onSelectTicket={onSelectTicket}
+          onOpenWhatsApp={onOpenWhatsApp}
+        />
+      )}
 
-          {/* 10 KARTU METRIK INTERAKTIF */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 sm:gap-3">
-            {/* 1. Total WO */}
-            <button
-              type="button"
-              onClick={() => {
-                setStatusFilter('all');
-                setActiveTab('wo_assignment');
-              }}
-              className={`p-3 sm:p-3.5 rounded-xl border-2 text-left transition-all relative overflow-hidden flex flex-col justify-between cursor-pointer ${
-                statusFilter === 'all'
-                  ? 'bg-[#3B1D78] text-white border-[#3B1D78] shadow-md ring-2 ring-[#5B35B1]/50'
-                  : 'bg-white dark:bg-[#1A0E2E] border-[#D8CCF3] dark:border-purple-900/60 hover:border-[#5B35B1] hover:shadow-xs'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className={`text-[11px] font-semibold ${statusFilter === 'all' ? 'text-purple-200' : 'text-slate-500'}`}>
-                  1. Total WO
-                </span>
-                <Layers className={`w-3.5 h-3.5 ${statusFilter === 'all' ? 'text-purple-300' : 'text-[#5B35B1]'}`} />
-              </div>
-              <div className="mt-1.5 text-2xl font-black font-mono">
-                {summaryMetrics.total}
-              </div>
-              <div className="mt-1 text-[10px] text-slate-400 font-medium">
-                Semua Data Mitra
-              </div>
-            </button>
-
-            {/* 2. WO Belum Di-assign */}
-            <button
-              type="button"
-              onClick={() => {
-                setStatusFilter('unassigned');
-                setActiveTab('wo_assignment');
-              }}
-              className={`p-3 sm:p-3.5 rounded-xl border-2 text-left transition-all relative overflow-hidden flex flex-col justify-between cursor-pointer ${
-                statusFilter === 'unassigned'
-                  ? 'bg-amber-500 text-white border-amber-600 shadow-md ring-2 ring-amber-500/50'
-                  : 'bg-white dark:bg-[#1A0E2E] border-amber-200 dark:border-amber-900/50 hover:border-amber-400 hover:shadow-xs'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className={`text-[11px] font-bold ${statusFilter === 'unassigned' ? 'text-amber-100' : 'text-amber-600 dark:text-amber-400'}`}>
-                  2. Belum Di-assign
-                </span>
-                <Clock className={`w-3.5 h-3.5 ${statusFilter === 'unassigned' ? 'text-white' : 'text-amber-500'}`} />
-              </div>
-              <div className={`mt-1.5 text-2xl font-black font-mono ${statusFilter === 'unassigned' ? 'text-white' : 'text-amber-600 dark:text-amber-400'}`}>
-                {summaryMetrics.unassigned}
-              </div>
-              <div className={`mt-1 text-[10px] font-medium ${statusFilter === 'unassigned' ? 'text-amber-100' : 'text-slate-400'}`}>
-                Klik untuk Assign Langsung
-              </div>
-            </button>
-
-            {/* 3. WO Sudah Di-assign */}
-            <button
-              type="button"
-              onClick={() => {
-                setStatusFilter('assigned');
-                setActiveTab('wo_assignment');
-              }}
-              className={`p-3 sm:p-3.5 rounded-xl border-2 text-left transition-all relative overflow-hidden flex flex-col justify-between cursor-pointer ${
-                statusFilter === 'assigned'
-                  ? 'bg-[#5B35B1] text-white border-[#3B1D78] shadow-md ring-2 ring-[#5B35B1]/50'
-                  : 'bg-white dark:bg-[#1A0E2E] border-[#D8CCF3] dark:border-purple-900/60 hover:border-[#5B35B1] hover:shadow-xs'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className={`text-[11px] font-bold ${statusFilter === 'assigned' ? 'text-purple-100' : 'text-[#5B35B1] dark:text-purple-300'}`}>
-                  3. Sudah Di-assign
-                </span>
-                <UserCheck className={`w-3.5 h-3.5 ${statusFilter === 'assigned' ? 'text-white' : 'text-[#5B35B1]'}`} />
-              </div>
-              <div className={`mt-1.5 text-2xl font-black font-mono ${statusFilter === 'assigned' ? 'text-white' : 'text-[#5B35B1] dark:text-purple-300'}`}>
-                {summaryMetrics.assigned}
-              </div>
-              <div className={`mt-1 text-[10px] font-medium ${statusFilter === 'assigned' ? 'text-purple-100' : 'text-slate-400'}`}>
-                {summaryMetrics.total > 0 ? `${Math.round((summaryMetrics.assigned / summaryMetrics.total) * 100)}% dari Total` : '0%'}
-              </div>
-            </button>
-
-            {/* 4. WO Menunggu Pengerjaan */}
-            <button
-              type="button"
-              onClick={() => {
-                setStatusFilter('waiting');
-                setActiveTab('wo_assignment');
-              }}
-              className={`p-3 sm:p-3.5 rounded-xl border-2 text-left transition-all relative overflow-hidden flex flex-col justify-between cursor-pointer ${
-                statusFilter === 'waiting'
-                  ? 'bg-slate-700 text-white border-slate-800 shadow-md ring-2 ring-slate-500/50'
-                  : 'bg-white dark:bg-[#1A0E2E] border-slate-200 dark:border-slate-800 hover:border-slate-400 hover:shadow-xs'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className={`text-[11px] font-semibold ${statusFilter === 'waiting' ? 'text-slate-200' : 'text-slate-600 dark:text-slate-400'}`}>
-                  4. Menunggu
-                </span>
-                <Clock className="w-3.5 h-3.5 text-slate-400" />
-              </div>
-              <div className={`mt-1.5 text-2xl font-black font-mono ${statusFilter === 'waiting' ? 'text-white' : 'text-slate-700 dark:text-slate-300'}`}>
-                {summaryMetrics.waiting}
-              </div>
-              <div className={`mt-1 text-[10px] font-medium ${statusFilter === 'waiting' ? 'text-slate-300' : 'text-slate-400'}`}>
-                Belum Mulai Berangkat
-              </div>
-            </button>
-
-            {/* 5. WO Sedang Dikerjakan */}
-            <button
-              type="button"
-              onClick={() => {
-                setStatusFilter('in_progress');
-                setActiveTab('wo_assignment');
-              }}
-              className={`p-3 sm:p-3.5 rounded-xl border-2 text-left transition-all relative overflow-hidden flex flex-col justify-between cursor-pointer ${
-                statusFilter === 'in_progress'
-                  ? 'bg-blue-600 text-white border-blue-700 shadow-md ring-2 ring-blue-500/50'
-                  : 'bg-white dark:bg-[#1A0E2E] border-blue-200 dark:border-blue-900/50 hover:border-blue-400 hover:shadow-xs'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className={`text-[11px] font-bold ${statusFilter === 'in_progress' ? 'text-blue-100' : 'text-blue-600 dark:text-blue-400'}`}>
-                  5. Sedang Dikerjakan
-                </span>
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
-              </div>
-              <div className={`mt-1.5 text-2xl font-black font-mono ${statusFilter === 'in_progress' ? 'text-white' : 'text-blue-600 dark:text-blue-400'}`}>
-                {summaryMetrics.inProgress}
-              </div>
-              <div className={`mt-1 text-[10px] font-medium ${statusFilter === 'in_progress' ? 'text-blue-100' : 'text-slate-400'}`}>
-                En Route / On Site
-              </div>
-            </button>
-
-            {/* 6. WO Selesai */}
-            <button
-              type="button"
-              onClick={() => {
-                setStatusFilter('completed');
-                setActiveTab('wo_assignment');
-              }}
-              className={`p-3 sm:p-3.5 rounded-xl border-2 text-left transition-all relative overflow-hidden flex flex-col justify-between cursor-pointer ${
-                statusFilter === 'completed'
-                  ? 'bg-emerald-600 text-white border-emerald-700 shadow-md ring-2 ring-emerald-500/50'
-                  : 'bg-white dark:bg-[#1A0E2E] border-emerald-200 dark:border-emerald-900/50 hover:border-emerald-400 hover:shadow-xs'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className={`text-[11px] font-bold ${statusFilter === 'completed' ? 'text-emerald-100' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                  6. WO Selesai
-                </span>
-                <CheckCircle2 className={`w-3.5 h-3.5 ${statusFilter === 'completed' ? 'text-white' : 'text-emerald-500'}`} />
-              </div>
-              <div className={`mt-1.5 text-2xl font-black font-mono ${statusFilter === 'completed' ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                {summaryMetrics.completed}
-              </div>
-              <div className={`mt-1 text-[10px] font-semibold ${statusFilter === 'completed' ? 'text-emerald-100' : 'text-emerald-600'}`}>
-                {summaryMetrics.total > 0 ? `${Math.round((summaryMetrics.completed / summaryMetrics.total) * 100)}% Rasio Tuntas` : '0%'}
-              </div>
-            </button>
-
-            {/* 7. WO Tertunda */}
-            <button
-              type="button"
-              onClick={() => {
-                setStatusFilter('pending');
-                setActiveTab('wo_assignment');
-              }}
-              className={`p-3 sm:p-3.5 rounded-xl border-2 text-left transition-all relative overflow-hidden flex flex-col justify-between cursor-pointer ${
-                statusFilter === 'pending'
-                  ? 'bg-amber-600 text-white border-amber-700 shadow-md ring-2 ring-amber-500/50'
-                  : 'bg-white dark:bg-[#1A0E2E] border-slate-200 dark:border-slate-800 hover:border-amber-400 hover:shadow-xs'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className={`text-[11px] font-bold ${statusFilter === 'pending' ? 'text-amber-100' : 'text-amber-600 dark:text-amber-400'}`}>
-                  7. WO Tertunda
-                </span>
-                <RotateCcw className={`w-3.5 h-3.5 ${statusFilter === 'pending' ? 'text-white' : 'text-amber-500'}`} />
-              </div>
-              <div className={`mt-1.5 text-2xl font-black font-mono ${statusFilter === 'pending' ? 'text-white' : 'text-amber-600 dark:text-amber-400'}`}>
-                {summaryMetrics.pending}
-              </div>
-              <div className={`mt-1 text-[10px] font-medium ${statusFilter === 'pending' ? 'text-amber-100' : 'text-slate-400'}`}>
-                Reschedule / Pending
-              </div>
-            </button>
-
-            {/* 8. WO Bermasalah */}
-            <button
-              type="button"
-              onClick={() => {
-                setStatusFilter('problem');
-                setActiveTab('wo_assignment');
-              }}
-              className={`p-3 sm:p-3.5 rounded-xl border-2 text-left transition-all relative overflow-hidden flex flex-col justify-between cursor-pointer ${
-                statusFilter === 'problem'
-                  ? 'bg-rose-600 text-white border-rose-700 shadow-md ring-2 ring-rose-500/50'
-                  : 'bg-white dark:bg-[#1A0E2E] border-rose-200 dark:border-rose-900/50 hover:border-rose-400 hover:shadow-xs'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className={`text-[11px] font-bold ${statusFilter === 'problem' ? 'text-rose-100' : 'text-rose-600 dark:text-rose-400'}`}>
-                  8. WO Bermasalah
-                </span>
-                <XCircle className={`w-3.5 h-3.5 ${statusFilter === 'problem' ? 'text-white' : 'text-rose-500'}`} />
-              </div>
-              <div className={`mt-1.5 text-2xl font-black font-mono ${statusFilter === 'problem' ? 'text-white' : 'text-rose-600 dark:text-rose-400'}`}>
-                {summaryMetrics.problem}
-              </div>
-              <div className={`mt-1 text-[10px] font-medium ${statusFilter === 'problem' ? 'text-rose-100' : 'text-slate-400'}`}>
-                Gagal / Batal
-              </div>
-            </button>
-
-            {/* 9. Total Installer */}
-            <div className="p-3 sm:p-3.5 rounded-xl border-2 bg-white dark:bg-[#1A0E2E] border-[#D8CCF3] dark:border-purple-900/60 flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-[#3B1D78] dark:text-purple-300">
-                  9. Total Installer
-                </span>
-                <Users2 className="w-3.5 h-3.5 text-[#5B35B1]" />
-              </div>
-              <div className="mt-1.5 text-2xl font-black font-mono text-slate-900 dark:text-white">
-                {summaryMetrics.activeInstallers}
-              </div>
-              <div className="mt-1 text-[10px] text-slate-400 font-medium">
-                Akun Terdaftar
-              </div>
-            </div>
-
-            {/* 10. Installer Tanpa WO */}
-            <div
-              className={`p-3 sm:p-3.5 rounded-xl border-2 flex flex-col justify-between ${
-                summaryMetrics.idleInstallers > 0
-                  ? 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800'
-                  : 'bg-white dark:bg-[#1A0E2E] border-[#D8CCF3] dark:border-purple-900/60'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
-                  10. Installer Tanpa WO
-                </span>
-                <UserCheck className="w-3.5 h-3.5 text-amber-500" />
-              </div>
-              <div className="mt-1.5 text-2xl font-black font-mono text-amber-700 dark:text-amber-400">
-                {summaryMetrics.idleInstallers}
-              </div>
-              <div className="mt-1 text-[10px] text-slate-400 font-medium">
-                Kapasitas Bebas
-              </div>
-            </div>
-          </div>
-
-          {/* Kotak Perhatian Leader & Korlap */}
-          {(summaryMetrics.unassigned > 0 || summaryMetrics.problem > 0) && (
-            <div className="p-4 rounded-xl border-2 border-amber-300 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs">
-              <div className="flex items-start sm:items-center gap-3">
-                <div className="p-2 bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 rounded-lg shrink-0">
-                  <AlertTriangle className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-amber-950 dark:text-amber-200">
-                    Perlu Perhatian Operasional Leader & Korlap
-                  </h4>
-                  <p className="text-amber-800 dark:text-amber-300 text-[11px] mt-0.5">
-                    Terdapat <strong className="font-mono">{summaryMetrics.unassigned} WO belum ditugaskan</strong> dan <strong className="font-mono">{summaryMetrics.problem} WO bermasalah/batal</strong> yang membutuhkan tindak lanjut operasional.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStatusFilter('unassigned');
-                    setActiveTab('wo_assignment');
-                  }}
-                  className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-xs transition-colors text-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <UserCheck className="w-3.5 h-3.5" />
-                  <span>Tugaskan WO Belum Di-assign ({summaryMetrics.unassigned})</span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* TABEL EVALUASI & BEBAN KERJA TEKNISI */}
-          <div className="bg-white dark:bg-[#1A0E2E] rounded-2xl border-2 border-[#D8CCF3] dark:border-purple-900/60 shadow-xs overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#E9E1FF] dark:border-purple-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#F5F1FF]/60 dark:bg-[#251545]/40">
-              <div>
-                <h3 className="font-bold text-xs text-[#3B1D78] dark:text-purple-200">
-                  Tabel Evaluasi & Beban Kerja Teknisi ({myInstallers.length} Teknisi Terdaftar)
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Progress (%) = Jumlah WO Selesai / Total WO yang Ditugaskan × 100%.
-                </p>
-              </div>
-
-              <div className="text-xs text-slate-500 font-mono">
-                Batas Kuota: <strong className="text-[#5B35B1] font-bold">{quotaSettings.defaultMaxDailyQuota} WO/Hari</strong>
-              </div>
-            </div>
-
-            {myInstallers.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 text-xs">
-                Belum ada teknisi yang terdaftar di bawah kontraktor {leaderContractor}. Silakan tambahkan pada tab "Pendaftaran Akun Teknisi".
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-[#F5F1FF] dark:bg-[#251545] text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase">
-                    <tr>
-                      <th className="py-3 px-3 text-center w-10">No</th>
-                      <th className="py-3 px-3 min-w-[170px]">Installer / Teknisi</th>
-                      <th className="py-3 px-3">Kontraktor</th>
-                      <th className="py-3 px-3 text-center font-mono">Total WO</th>
-                      <th className="py-3 px-3 text-center text-slate-600 font-mono">Belum Mulai</th>
-                      <th className="py-3 px-3 text-center text-blue-600 font-mono">Proses</th>
-                      <th className="py-3 px-3 text-center text-emerald-600 font-mono">Selesai</th>
-                      <th className="py-3 px-3 text-center text-amber-600 font-mono">Tertunda</th>
-                      <th className="py-3 px-3 min-w-[200px]">Progress Visual</th>
-                      <th className="py-3 px-3 text-center min-w-[140px]">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {installerProgressRows.map((row, idx) => {
-                      const isIdle = row.totalWO === 0;
-                      return (
-                        <tr key={row.installer.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
-                          <td className="py-3 px-3 text-center font-mono text-slate-400">{idx + 1}</td>
-                          <td className="py-3 px-3">
-                            <div
-                              onClick={() => setSelectedInstallerForDetail(row.installer)}
-                              className="font-bold text-slate-900 dark:text-white hover:text-[#5B35B1] cursor-pointer flex items-center gap-1.5"
-                            >
-                              <span>{row.installer.name}</span>
-                              <span className={`w-2 h-2 rounded-full ${row.installer.active ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                            </div>
-                            <div className="text-[11px] font-mono text-slate-400">@{row.installer.username}</div>
-                            {row.installer.phone && (
-                              <div className="text-[10.5px] text-emerald-600 font-mono mt-0.5 flex items-center gap-1">
-                                <Phone className="w-3 h-3" />
-                                <span>{row.installer.phone}</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{leaderContractor}</td>
-                          <td className="py-3 px-3 text-center font-mono font-bold text-slate-900 dark:text-white">
-                            {row.totalWO}
-                          </td>
-                          <td className="py-3 px-3 text-center font-mono text-slate-600 dark:text-slate-400">
-                            {row.notStarted}
-                          </td>
-                          <td className="py-3 px-3 text-center font-mono font-bold text-blue-600 dark:text-blue-400">
-                            {row.inProgress}
-                          </td>
-                          <td className="py-3 px-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                            {row.finished}
-                          </td>
-                          <td className="py-3 px-3 text-center font-mono text-amber-600 dark:text-amber-400">
-                            {row.pending}
-                          </td>
-                          <td className="py-3 px-3 align-middle">
-                            {isIdle ? (
-                              <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500">
-                                Belum Ada Tugas
-                              </span>
-                            ) : (
-                              <div className="space-y-1">
-                                <div className="flex items-center justify-between text-[11px]">
-                                  <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                    {row.finished} dari {row.totalWO} WO selesai
-                                  </span>
-                                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                                    {row.progressPercent}%
-                                  </span>
-                                </div>
-                                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full transition-all duration-500 ${
-                                      row.progressPercent === 100
-                                        ? 'bg-emerald-500'
-                                        : row.progressPercent > 50
-                                        ? 'bg-blue-500'
-                                        : row.progressPercent > 0
-                                        ? 'bg-amber-500'
-                                        : 'bg-slate-400'
-                                    }`}
-                                    style={{ width: `${Math.min(100, row.progressPercent)}%` }}
-                                  />
-                                </div>
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedInstallerForDetail(row.installer)}
-                                className="px-2.5 py-1 bg-[#F5F1FF] text-[#5B35B1] hover:bg-[#E9E1FF] font-semibold rounded-lg text-xs cursor-pointer"
-                              >
-                                Detail
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setBulkTargetInstaller(row.installer.name);
-                                  setIsBulkAssignModalOpen(true);
-                                }}
-                                className="px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold rounded-lg text-xs cursor-pointer"
-                              >
-                                + Assign
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* MATRIKS JADWAL & KAPASITAS TEKNISI */}
+      {/* ============================================================ */}
+      {/* TAB 3: PENDAFTARAN AKUN TEKNISI (BAGIAN 3.1 & 3.2)           */}
+      {/* ============================================================ */}
+      {activeTab === 'installer_mgmt' && (
+        <div className="space-y-5">
           <div className="bg-white dark:bg-[#1A0E2E] rounded-2xl border-2 border-[#D8CCF3] dark:border-purple-900/60 p-5 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E9E1FF] dark:border-purple-900/40">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold shadow-xs">
+                <UserPlus className="w-5 h-5" />
+              </div>
               <div>
-                <h4 className="font-bold text-[#3B1D78] dark:text-purple-200 text-xs flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-[#5B35B1]" />
-                  <span>Jadwal Harian & Utilisasi Beban Teknisi ({leaderContractor})</span>
-                </h4>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Batas kuota harian: <strong className="text-[#5B35B1]">{quotaSettings.defaultMaxDailyQuota} WO/teknisi</strong>. Klik slot kosong untuk langsung menugaskan WO.
+                <h3 className="font-bold text-sm text-[#21183A] dark:text-white">
+                  Pendaftaran Akun Teknisi Mitra
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Daftarkan teknisi baru di bawah naungan kontraktor <strong>{displayContractor}</strong>.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleAddInstaller} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nama Lengkap Teknisi *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Budi Santoso"
+                  value={instName}
+                  onChange={e => setInstName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Username Login *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: budi_mjs"
+                  value={instUsername}
+                  onChange={e => setInstUsername(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  No. Telepon WhatsApp *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: 08123456789"
+                  value={instPhone}
+                  onChange={e => setInstPhone(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Email (Opsional)
+                </label>
+                <input
+                  type="email"
+                  placeholder="budi@mitra.com"
+                  value={instEmail}
+                  onChange={e => setInstEmail(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                />
+              </div>
+
+              <div className="sm:col-span-2 lg:col-span-4 flex items-center justify-between pt-2">
+                <span className="text-[11px] text-slate-400">
+                  Password awal default adalah <code className="font-mono font-bold text-purple-600 bg-purple-50 dark:bg-purple-950 px-1.5 py-0.5 rounded">12345678</code>
+                </span>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-2"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Daftarkan Akun Teknisi</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* List of Registered Installers */}
+          <div className="bg-white dark:bg-[#1A0E2E] rounded-2xl border-2 border-[#D8CCF3] dark:border-purple-900/60 p-5 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-sm text-[#21183A] dark:text-white">
+                  Daftar Teknisi Terdaftar ({myInstallers.length})
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Semua teknisi aktif di bawah naungan kontraktor {displayContractor}
                 </p>
               </div>
 
-              {/* Date Filter */}
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-slate-500 font-medium">Tanggal Operasi:</span>
-                <button
-                  type="button"
-                  onClick={() => setScheduleDate(getJakartaDateString(0))}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    scheduleDate === getJakartaDateString(0)
-                      ? 'bg-[#5B35B1] text-white font-bold'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  Hari Ini ({getJakartaDateParts(0).labelShort})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setScheduleDate(getJakartaDateString(1))}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    scheduleDate === getJakartaDateString(1)
-                      ? 'bg-[#5B35B1] text-white font-bold'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  Besok ({getJakartaDateParts(1).labelShort})
-                </button>
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
-                  type="date"
-                  value={scheduleDate}
-                  onChange={e => setScheduleDate(e.target.value)}
-                  className="px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-200"
+                  type="text"
+                  placeholder="Cari teknisi..."
+                  value={installerSearch}
+                  onChange={e => setInstallerSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs"
                 />
               </div>
             </div>
 
-            {/* Timetable Matrix */}
-            <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-[#F5F1FF] dark:bg-[#251545] text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-[#F5F1FF] dark:bg-[#251545] text-slate-700 dark:text-purple-200 uppercase font-semibold">
                   <tr>
-                    <th className="py-3 px-3 min-w-[160px]">Teknisi Lapangan</th>
-                    {STANDARD_SLOTS.map(slot => (
-                      <th key={slot} className="py-3 px-3 min-w-[190px] text-center border-l border-slate-200 dark:border-slate-700">
-                        {slot}
-                      </th>
-                    ))}
-                    <th className="py-3 px-3 min-w-[120px] text-center border-l border-slate-200 dark:border-slate-700">
-                      Beban / Kuota
-                    </th>
+                    <th className="py-2 px-3">Nama</th>
+                    <th className="py-2 px-3">Username</th>
+                    <th className="py-2 px-3">No. WhatsApp</th>
+                    <th className="py-2 px-3">Area</th>
+                    <th className="py-2 px-3 text-center">Beban WO</th>
+                    <th className="py-2 px-3 text-right">Aksi</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {myInstallers.map(inst => {
-                    const instDateTickets = contractorTickets.filter(
-                      t => t.installerName === inst.name && (t.date === scheduleDate || t.appointmentDate === scheduleDate)
-                    );
-                    const maxQuota = getMaxQuotaForInstaller(inst.name);
-                    const isQuotaFull = instDateTickets.length >= maxQuota;
-
-                    return (
-                      <tr key={inst.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                        <td className="py-3 px-3 font-medium text-slate-900 dark:text-white">
-                          <div className="font-bold text-xs">{inst.name}</div>
-                          <div className="text-[11px] font-mono text-slate-400">@{inst.username}</div>
-                          {inst.phone && (
-                            <div className="text-[10.5px] text-emerald-600 font-mono mt-0.5 flex items-center gap-1">
-                              <Phone className="w-3 h-3" />
-                              <span>{inst.phone}</span>
-                            </div>
-                          )}
-                        </td>
-
-                        {STANDARD_SLOTS.map(slot => {
-                          const slotKey = slot.substring(0, 5);
-                          const slotTickets = instDateTickets.filter(
-                            t => (t.slotTime || '').includes(slotKey)
-                          );
-
-                          return (
-                            <td key={slot} className="py-2.5 px-3 border-l border-slate-200 dark:border-slate-700 align-top">
-                              {slotTickets.length === 0 ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedSlotForAssign({ installer: inst.name, slot })}
-                                  disabled={isQuotaFull}
-                                  className={`w-full h-full min-h-[58px] p-2 rounded-lg border border-dashed flex flex-col items-center justify-center gap-1 transition-colors text-[11px] cursor-pointer ${
-                                    isQuotaFull
-                                      ? 'border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/20 text-slate-400 cursor-not-allowed'
-                                      : 'border-[#D8CCF3] dark:border-slate-700 hover:border-[#5B35B1] hover:bg-[#F5F1FF]/60 dark:hover:bg-purple-950/30 text-slate-400 hover:text-[#5B35B1]'
-                                  }`}
-                                >
-                                  {isQuotaFull ? (
-                                    <span className="text-[10px] text-rose-500 font-semibold">Kuota Penuh</span>
-                                  ) : (
-                                    <>
-                                      <span className="font-semibold text-emerald-600 text-[10.5px] flex items-center gap-1">
-                                        <Check className="w-3 h-3" /> Slot Bebas
-                                      </span>
-                                      <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                                        <Plus className="w-2.5 h-2.5" /> Tugaskan WO
-                                      </span>
-                                    </>
-                                  )}
-                                </button>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  {slotTickets.map(t => (
-                                    <div
-                                      key={t.id}
-                                      className="p-2 rounded-lg bg-[#F5F1FF] dark:bg-purple-950/60 border border-[#D8CCF3] dark:border-purple-800 text-xs space-y-1 shadow-2xs"
-                                    >
-                                      <div className="flex items-center justify-between">
-                                        <span
-                                          onClick={() => onSelectTicket(t)}
-                                          className="font-mono font-bold text-[#5B35B1] dark:text-purple-300 hover:underline cursor-pointer"
-                                        >
-                                          {t.woNumber}
-                                        </span>
-                                        <StatusInstallerBadge status={t.statusWOInstaller} />
-                                      </div>
-                                      <div className="font-medium text-slate-800 dark:text-slate-200 truncate">{t.customerName}</div>
-                                      <div className="text-[10px] text-slate-500 truncate">{t.clusterName || t.area}</div>
-                                      <div className="flex items-center justify-between pt-1 border-t border-[#E9E1FF] dark:border-purple-900 text-[10px]">
-                                        <button
-                                          type="button"
-                                          onClick={() => onSelectTicket(t)}
-                                          className="text-[#5B35B1] dark:text-purple-400 font-semibold hover:underline cursor-pointer"
-                                        >
-                                          Detail
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const instUser = myInstallers.find(u => u.name === t.installerName);
-                                            if (instUser) {
-                                              const msg = buildInstallerAssignmentMessage(t, instUser);
-                                              setAssignmentNoticeModal({
-                                                ticket: t,
-                                                installer: instUser,
-                                                renderedMessage: msg,
-                                                targetPhone: instUser.phone || ''
-                                              });
-                                            }
-                                          }}
-                                          className="text-emerald-600 font-semibold hover:underline flex items-center gap-0.5 cursor-pointer"
-                                        >
-                                          <Phone className="w-2.5 h-2.5" />
-                                          <span>WA</span>
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </td>
-                          );
-                        })}
-
-                        <td className="py-3 px-3 text-center border-l border-slate-200 dark:border-slate-700 align-middle">
-                          <span
-                            className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                              instDateTickets.length >= maxQuota
-                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                                : instDateTickets.length > 0
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                            }`}
-                          >
-                            {instDateTickets.length} / {maxQuota} WO
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {myInstallers
+                    .filter(u => !installerSearch || u.name.toLowerCase().includes(installerSearch.toLowerCase()) || u.username.toLowerCase().includes(installerSearch.toLowerCase()))
+                    .map(u => {
+                      const woCount = contractorTickets.filter(t => t.installerName?.toLowerCase().trim() === u.name.toLowerCase().trim() && t.statusWOInstaller !== 'Completed').length;
+                      return (
+                        <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-purple-950/20">
+                          <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">{u.name}</td>
+                          <td className="py-2.5 px-3 font-mono text-purple-700 dark:text-purple-300">@{u.username}</td>
+                          <td className="py-2.5 px-3 font-mono">{u.phone || '-'}</td>
+                          <td className="py-2.5 px-3">{u.area || displayArea}</td>
+                          <td className="py-2.5 px-3 text-center font-mono font-bold">{woCount} WO</td>
+                          <td className="py-2.5 px-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedInstallerForDetail(u)}
+                              className="px-2.5 py-1 text-xs font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950 hover:bg-purple-100 rounded-lg border border-purple-200 dark:border-purple-800 cursor-pointer"
+                            >
+                              Detail
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
@@ -2529,215 +2979,100 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({ onSelectTicket }) =>
       )}
 
       {/* ============================================================ */}
-      {/* TAB 3: MANAJEMEN TIM TEKNISI                                 */}
+      {/* TAB: REKAPITULASI AREA & KONTRAKTOR                          */}
       {/* ============================================================ */}
-      {activeTab === 'installer_mgmt' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Add Installer Form */}
-          <div className="lg:col-span-1 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-4 text-xs h-fit">
-            <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold">
-                <UserPlus className="w-4 h-4" />
+      {activeTab === 'contractor_recap' && (
+        <ContractorAreaRecapView />
+      )}
+      {/* ============================================================ */}
+      {/* TAB 4: PENGATURAN KUOTA & KOLOM VISIBILITAS                  */}
+      {/* ============================================================ */}
+      {activeTab === 'quota_settings' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
+          {/* Card 1: Batas Kuota Beban Teknisi */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-5">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="p-2.5 bg-purple-100 dark:bg-purple-950 text-purple-600 rounded-xl">
+                <Sliders className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="font-bold text-slate-900 dark:text-white text-xs">
-                  Tambah Akun Installer Baru
-                </h4>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  Pengaturan Batas Kuota Beban Teknisi
+                </h3>
                 <p className="text-[11px] text-slate-500">
-                  Kontraktor otomatis terikat: <strong className="text-emerald-600">{leaderContractor}</strong>
+                  Kontrol limit maksimal penugasan Work Order per hari untuk teknisi di bawah {leaderContractor}
                 </p>
               </div>
             </div>
 
-            <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-400 flex items-start gap-2">
-              <Shield className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-              <span>
-                <strong>Otoritas Terbatas:</strong> Sebagai Leader, Anda hanya berwenang membuat dan mengelola akun <strong>Installer (Teknisi)</strong> pada mitra kontraktor ini.
-              </span>
+            <div className="space-y-4">
+              <div>
+                <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1">
+                  Batas Default Maksimal WO per Hari:
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={quotaSettings.defaultMaxDailyQuota}
+                    onChange={e => saveQuotaSettings({ defaultMaxDailyQuota: Number(e.target.value) })}
+                    className="w-24 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border rounded-lg font-mono font-bold text-sm"
+                  />
+                  <span className="text-slate-500">WO per hari per teknisi</span>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                      Mode Pembatasan Ketat (Strict Limit Enforcement)
+                    </span>
+                    <span className="text-[11px] text-slate-500 block">
+                      Jika aktif: sistem akan menolak penugasan jika kuota teknisi telah penuh. Jika mati: sistem memberikan pop-up peringatan konfirmasi.
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={quotaSettings.enforceStrictLimit}
+                    onChange={e => saveQuotaSettings({ enforceStrictLimit: e.target.checked })}
+                    className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Pengaturan Kolom Visibilitas Tabel */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-5">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="p-2.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-600 rounded-xl">
+                <Table className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  Pengaturan Kolom Visibilitas Tabel
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Kustomisasi kolom yang tampil pada tabel Assign WO dan Dashboard Leader
+                </p>
+              </div>
             </div>
 
-            <form onSubmit={handleAddInstaller} className="space-y-3">
-              <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                  Nama Lengkap Teknisi <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Budi Santoso"
-                  value={instName}
-                  onChange={e => setInstName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                  Username Unik <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: budi.santoso"
-                  value={instUsername}
-                  onChange={e => setInstUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-mono text-slate-800 dark:text-slate-200"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                  Nomor Telepon / WhatsApp <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="tel"
-                  required
-                  placeholder="Contoh: 081234567890"
-                  value={instPhone}
-                  onChange={e => setInstPhone(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                  Alamat Email (Opsional)
-                </label>
-                <input
-                  type="email"
-                  placeholder="teknisi@mitra.com"
-                  value={instEmail}
-                  onChange={e => setInstEmail(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200"
-                />
-              </div>
+            <div className="space-y-4">
+              <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+                Pilih kolom mana saja yang ingin Anda tampilkan atau sembunyikan sesuai alur kerja lapangan: ID Customer, WO Number, Alamat, Status, Teknisi, Slot Waktu, Kontak, dan Tanggal WO.
+              </p>
 
               <button
-                type="submit"
-                className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-sm transition-all"
+                type="button"
+                onClick={() => setIsColumnModalOpen(true)}
+                className="w-full py-2.5 px-4 bg-[#5B35B1] hover:bg-[#3B1D78] text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
               >
-                Daftarkan Teknisi
+                <Sliders className="w-4 h-4" />
+                <span>Buka Pengaturan Kolom Tabel</span>
               </button>
-            </form>
-          </div>
-
-          {/* List of Installers */}
-          <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-4 text-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h4 className="font-bold text-slate-900 dark:text-white text-xs flex items-center gap-2">
-                <Users2 className="w-4 h-4 text-emerald-600" />
-                <span>Daftar Tim Teknisi Aktif ({myInstallers.length})</span>
-              </h4>
-
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
-                <input
-                  type="text"
-                  placeholder="Cari nama / username..."
-                  value={installerSearch}
-                  onChange={e => setInstallerSearch(e.target.value)}
-                  className="pl-8 pr-3 py-1 bg-slate-50 dark:bg-slate-800 border rounded-lg text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="divide-y border rounded-xl overflow-hidden">
-              {myInstallers
-                .filter(u =>
-                  u.name.toLowerCase().includes(installerSearch.toLowerCase()) ||
-                  u.username.toLowerCase().includes(installerSearch.toLowerCase())
-                )
-                .map(inst => {
-                  const instTickets = contractorTickets.filter(t => t.installerName === inst.name);
-                  return (
-                    <div
-                      key={inst.id}
-                      className="p-3.5 bg-white dark:bg-slate-900 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                    >
-                      <div>
-                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                          <span>{inst.name}</span>
-                          <span className="font-mono text-slate-400 font-normal">@{inst.username}</span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 mt-0.5">
-                          WhatsApp: {inst.phone || '-'} · Area: {inst.area || 'Semua'}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono font-bold text-indigo-600 text-[11px]">
-                          {instTickets.length} WO Ditugaskan
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedInstallerForDetail(inst)}
-                          className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 rounded-lg font-semibold text-xs"
-                        >
-                          Detail 7 Tab
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================ */}
-      {/* TAB 4: PENGATURAN KUOTA BEBAN TEKNISI                        */}
-      {/* ============================================================ */}
-      {activeTab === 'quota_settings' && (
-        <div className="max-w-2xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-5 text-xs">
-          <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="p-2.5 bg-purple-100 dark:bg-purple-950 text-purple-600 rounded-xl">
-              <Sliders className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                Pengaturan Batas Kuota Beban Teknisi
-              </h3>
-              <p className="text-[11px] text-slate-500">
-                Kontrol limit maksimal penugasan Work Order per hari untuk teknisi di bawah {leaderContractor}
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1">
-                Batas Default Maksimal WO per Hari:
-              </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="number"
-                  min={1}
-                  max={12}
-                  value={quotaSettings.defaultMaxDailyQuota}
-                  onChange={e => saveQuotaSettings({ defaultMaxDailyQuota: Number(e.target.value) })}
-                  className="w-24 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border rounded-lg font-mono font-bold text-sm"
-                />
-                <span className="text-slate-500">WO per hari per teknisi</span>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t">
-              <label className="flex items-center justify-between cursor-pointer">
-                <div>
-                  <span className="font-bold text-slate-800 dark:text-slate-200 block">
-                    Mode Pembatasan Ketat (Strict Limit Enforcement)
-                  </span>
-                  <span className="text-[11px] text-slate-500 block">
-                    Jika aktif: sistem akan menolak penugasan jika kuota teknisi telah penuh. Jika mati: sistem memberikan pop-up peringatan konfirmasi.
-                  </span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={quotaSettings.enforceStrictLimit}
-                  onChange={e => saveQuotaSettings({ enforceStrictLimit: e.target.checked })}
-                  className="w-4 h-4 text-indigo-600 rounded"
-                />
-              </label>
             </div>
           </div>
         </div>

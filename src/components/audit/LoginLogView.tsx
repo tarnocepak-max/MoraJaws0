@@ -12,11 +12,21 @@ import {
   Download,
   Filter
 } from 'lucide-react';
+import { SortableColumnHeader } from '../common/SortableColumnHeader';
+import { SortState, getNextSortDirection, sortDataArray } from '../../utils/tableSorting';
 
 export const LoginLogView: React.FC = () => {
   const { auditLogs } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'success' | 'failed'>('ALL');
+  const [sortState, setSortState] = useState<SortState>({ column: 'timestamp', direction: 'desc' });
+
+  const handleSort = (colKey: string) => {
+    setSortState(prev => {
+      const nextDir = getNextSortDirection(prev.column, prev.direction, colKey);
+      return { column: nextDir ? colKey : null, direction: nextDir };
+    });
+  };
 
   const loginLogs = useMemo(() => {
     return auditLogs.filter(l => l.entity === 'auth' || l.action.toLowerCase().includes('login'));
@@ -38,6 +48,12 @@ export const LoginLogView: React.FC = () => {
       return true;
     });
   }, [loginLogs, statusFilter, searchTerm]);
+
+  const sortedLogs = useMemo(() => {
+    return sortDataArray(filteredLogs, sortState, (log, col) => {
+      return (log as any)[col];
+    });
+  }, [filteredLogs, sortState]);
 
   return (
     <div className="space-y-5">
@@ -100,15 +116,60 @@ export const LoginLogView: React.FC = () => {
             <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-[#F5F1FF] dark:bg-[#251545] text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase">
                 <tr>
-                  <th className="py-2.5 px-3">Waktu (WIB)</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3">Pengguna</th>
-                  <th className="py-2.5 px-3">Peran / Role</th>
-                  <th className="py-2.5 px-3">Detail & Aktivitas</th>
+                  <th className="py-2.5 px-3">
+                    <SortableColumnHeader
+                      label="Waktu (WIB)"
+                      columnKey="timestamp"
+                      currentSortColumn={sortState.column}
+                      currentDirection={sortState.direction}
+                      dataType="date"
+                      onSort={handleSort}
+                    />
+                  </th>
+                  <th className="py-2.5 px-3">
+                    <SortableColumnHeader
+                      label="Status"
+                      columnKey="action"
+                      currentSortColumn={sortState.column}
+                      currentDirection={sortState.direction}
+                      dataType="text"
+                      onSort={handleSort}
+                    />
+                  </th>
+                  <th className="py-2.5 px-3">
+                    <SortableColumnHeader
+                      label="Pengguna"
+                      columnKey="performedBy"
+                      currentSortColumn={sortState.column}
+                      currentDirection={sortState.direction}
+                      dataType="text"
+                      onSort={handleSort}
+                    />
+                  </th>
+                  <th className="py-2.5 px-3">
+                    <SortableColumnHeader
+                      label="Peran / Role"
+                      columnKey="userRole"
+                      currentSortColumn={sortState.column}
+                      currentDirection={sortState.direction}
+                      dataType="text"
+                      onSort={handleSort}
+                    />
+                  </th>
+                  <th className="py-2.5 px-3">
+                    <SortableColumnHeader
+                      label="Detail & Aktivitas"
+                      columnKey="details"
+                      currentSortColumn={sortState.column}
+                      currentDirection={sortState.direction}
+                      dataType="text"
+                      onSort={handleSort}
+                    />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredLogs.map(log => {
+                {sortedLogs.map(log => {
                   const isSuccess = log.action.toLowerCase().includes('success');
                   return (
                     <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">

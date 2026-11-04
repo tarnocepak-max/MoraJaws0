@@ -1,0 +1,5 @@
+{
+  "summary": "File Backup Produksi Firestore MoraJaws (Phase 9L-4). Berisi 931 dokumen lengkap dari 10 koleksi: tickets (165 dokumen termasuk 140 soft-deleted), users (7), audit_logs (660), contractors (25), coverage_areas (6), ticket_messages (11), wa_templates (5), appSettings (7), system_health (2), system_error_logs (43). Ukuran: 1,055,520 bytes. SHA-256: c4b0b42c78f634735f1eb361947e641d096e13b9d071d8654fa13bfb5b1ab876.",
+  "updatedAt": "2026-11-03T20:47:09.655248128Z",
+  "userFacing": true
+}

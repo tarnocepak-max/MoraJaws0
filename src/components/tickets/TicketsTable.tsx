@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Ticket, ColumnConfig } from '../../types/index.ts';
 import { useApp } from '../../context/AppContext';
 import { useUIConfig } from '../../context/UIConfigContext';
-import { StatusAgentBadge, StatusInstallerBadge, StatusWhatsAppBadge } from '../common/Badge';
+import { StatusAgentBadge, StatusInstallerBadge, StatusWhatsAppBadge, StatusApprovalBadge } from '../common/Badge';
 import { TicketMobileCard } from './TicketMobileCard';
 import {
   Search,
@@ -18,6 +18,8 @@ import {
   Square,
   ChevronDown,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   MoreVertical,
   UserCheck,
   Smartphone,
@@ -33,12 +35,15 @@ import {
   MessageCircle,
   MapPin,
   RefreshCw,
-  Ticket as TicketIcon
+  Ticket as TicketIcon,
+  Sparkles,
+  CalendarCheck,
+  ClockAlert
 } from 'lucide-react';
 import { useAnimation } from '../../context/AnimationContext';
 import { useToast } from '../../context/ToastContext';
 import { openCustomerAddressInGoogleMaps } from '../../services/mapsService';
-import { SuperAdminDeleteModal } from '../common/SuperAdminDeleteModal';
+import { ManagementDataDeleteModal } from '../portals/ManagementDataDeleteModal';
 import {
   parseAppointmentDate,
   getJakartaDateString,
@@ -46,6 +51,18 @@ import {
   getTicketAppointmentDate,
   formatAppointmentDateDisplay
 } from '../../services/appointmentDateParser';
+import {
+  getTicketWODate,
+  getJakartaDateRange,
+  getTodayWORange,
+  getLeaderWORange,
+  classifyTicketWODateTag,
+  getWODateTagLabel,
+  formatIndonesianWODate,
+  executeSuperadminDispatchSearch,
+  CrossDateSearchResult
+} from '../../services/woDateFilterEngine';
+import { getNextSortDirection, sortDataArray, SortDirection } from '../../utils/tableSorting';
 
 interface TicketsTableProps {
   onSelectTicket: (ticket: Ticket, defaultTab?: 'overview' | 'report' | 'chat' | 'history') => void;
@@ -73,18 +90,79 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
   const [selectedInstallerStatus, setSelectedInstallerStatus] = useState('ALL');
   const [selectedWhatsAppStatus, setSelectedWhatsAppStatus] = useState('ALL');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [selectedApprovalStatus, setSelectedApprovalStatus] = useState('ALL');
   const [showArchived, setShowArchived] = useState(false);
 
-  // Appointment Date Filter (Default to All so all imported Work Orders are visible)
-  const [selectedAppointmentDate, setSelectedAppointmentDate] = useState<string>('');
-  const [quickDatePreset, setQuickDatePreset] = useState<'all' | 'today' | 'tomorrow' | 'upcoming' | 'past' | 'invalid' | 'custom'>('all');
+  // Requirement 1: Ticket indicators strictly calculate WO with Appointment Date = Today (Asia/Jakarta)
+  const todayWIB = useMemo(() => getJakartaDateString(0), []);
+
+  // Approval status counts across today's tickets
+  const approvalCounts = useMemo(() => {
+    let butuhApproval = 0;
+    let approved = 0;
+    let rejected = 0;
+    let closed = 0;
+    let totalToday = 0;
+    tickets.forEach(t => {
+      if (t.isArchived || t.isDeleted) return;
+      const appDate = getTicketAppointmentDate(t);
+      if (appDate !== todayWIB) return;
+      totalToday++;
+      if (t.approvalStatus === 'BUTUH APPROVAL') butuhApproval++;
+      if (t.approvalStatus === 'APPROVED') approved++;
+      if (t.approvalStatus === 'REJECTED') rejected++;
+      if (t.statusWOAgent === 'Closed') closed++;
+    });
+    return { butuhApproval, approved, rejected, closed, totalToday };
+  }, [tickets, todayWIB]);
+
+  // Dynamic Ticket Categories from database
+  const availableCategories = useMemo(() => {
+    const cats = new Set<string>();
+    tickets.forEach(t => {
+      if (t.ticketCategory && typeof t.ticketCategory === 'string' && t.ticketCategory.trim()) {
+        cats.add(t.ticketCategory.trim());
+      }
+    });
+    return Array.from(cats).sort();
+  }, [tickets]);
+
+  // Today's Date in Asia/Jakarta (WIB) with automatic midnight 00:00 rollover
+  const [currentDateKey, setCurrentDateKey] = useState<string>(() => getTodayWORange());
+
+  // Automatic midnight rollover listener (checks every 15 seconds)
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      const liveToday = getTodayWORange();
+      if (liveToday !== currentDateKey) {
+        setCurrentDateKey(liveToday);
+        triggerRefresh(undefined, 'PERGANTIAN HARI (00:00 WIB)', 'Memperbarui otomatis daftar Work Order hari ini');
+      }
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [currentDateKey, triggerRefresh]);
+
+  // Leader tab: 'today' (Hari Ini) or 'tomorrow' (Besok)
+  const [leaderDateTab, setLeaderDateTab] = useState<'today' | 'tomorrow'>('today');
+
+  // Cross-date search for Superadmin and Dispatch (strictly by woNumber or idCustomer)
+  const isCrossDateSearchEligible = currentUser.role === 'super_admin' || currentUser.role === 'dispatch';
+
+  const crossDateSearchResults = useMemo(() => {
+    if (isCrossDateSearchEligible && searchTerm.trim()) {
+      return executeSuperadminDispatchSearch(searchTerm, tickets);
+    }
+    return { isSearchActive: false, results: [], resultTickets: [], crossDateCount: 0 };
+  }, [isCrossDateSearchEligible, searchTerm, tickets]);
+
+  const isCrossDateActive = crossDateSearchResults.isSearchActive;
 
   // Chat Unread Filter (Super Admin, Dispatch, Installer)
   const [filterUnreadChatOnly, setFilterUnreadChatOnly] = useState(false);
 
-  // Sorting state
+  // 3-State Sorting state (Requirement 3: asc -> desc -> null)
   const [sortField, setSortField] = useState<string>('updatedAt');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   // Multi-selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -145,71 +223,122 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
     return Array.from(set).sort();
   }, [tickets]);
 
-  // Filtering
-  const filteredTickets = useMemo(() => {
-    return (tickets || []).filter(t => {
-      if (!t) return false;
+  // Leader counts for today and tomorrow WOs
+  const { todayLeaderCount, tomorrowLeaderCount } = useMemo(() => {
+    if (currentUser?.role !== 'leader') return { todayLeaderCount: 0, tomorrowLeaderCount: 0 };
+    const todayStr = currentDateKey || getTodayWORange();
+    const leaderDates = getLeaderWORange();
 
-      // Archive filter
+    const currentLeaderName = (currentUser.name || '').trim().toLowerCase();
+    const currentLeaderArea = (currentUser.area || '').trim().toLowerCase();
+    const currentLeaderContractor = (currentUser.contractor || '').trim().toLowerCase();
+
+    let tCount = 0;
+    let tmrCount = 0;
+
+    (tickets || []).forEach(t => {
+      if (!t || t.isArchived || t.isDeleted) return;
+      const tLeader = (t.leaderName || '').trim().toLowerCase();
+      if (tLeader && currentLeaderName && tLeader !== currentLeaderName) return;
+      if (currentLeaderArea && t.area && t.area.trim().toLowerCase() !== currentLeaderArea) return;
+      const tCont = (t.contactorName || t.contractorName || '').trim().toLowerCase();
+      if (currentLeaderContractor && tCont && tCont !== currentLeaderContractor) return;
+
+      const wDate = getTicketWODate(t);
+      if (wDate === todayStr) tCount++;
+      else if (wDate === leaderDates.tomorrow) tmrCount++;
+    });
+
+    return { todayLeaderCount: tCount, tomorrowLeaderCount: tmrCount };
+  }, [tickets, currentUser, currentDateKey]);
+
+  // Filtering based on strict WO Date rules per role
+  const filteredTickets = useMemo(() => {
+    const todayStr = currentDateKey || getTodayWORange();
+    const leaderDates = getLeaderWORange();
+
+    // 1. Cross-Date Search Active for Superadmin or Dispatch
+    // Allows searching past, today, and future dates ONLY by woNumber or idCustomer
+    if (isCrossDateActive) {
+      return crossDateSearchResults.resultTickets.filter(t => {
+        if (!t || t.isDeleted) return false;
+        if (showArchived ? !t.isArchived : t.isArchived) return false;
+        if (filterUnreadChatOnly && getTicketUnreadCount(t.id) === 0) return false;
+        if (selectedArea !== 'ALL' && t.area !== selectedArea) return false;
+        if (selectedAgentStatus !== 'ALL' && t.statusWOAgent !== selectedAgentStatus) return false;
+        if (selectedInstallerStatus !== 'ALL' && t.statusWOInstaller !== selectedInstallerStatus) return false;
+        if (selectedWhatsAppStatus !== 'ALL' && t.statusWhatsApp !== selectedWhatsAppStatus) return false;
+        if (selectedCategory !== 'ALL' && t.ticketCategory !== selectedCategory) return false;
+        return true;
+      });
+    }
+
+    // 2. Default View: STRICT WO DATE per role (NOT Appointment Date)
+    return (tickets || []).filter(t => {
+      if (!t || t.isDeleted) return false;
       if (showArchived ? !t.isArchived : t.isArchived) return false;
 
-      // Role-based scoping: Leader
-      // Leader tidak dapat melihat keseluruhan WO leader lain dan area yang berbeda
-      if (currentUser?.role === 'leader') {
+      // Primary criteria: authentic Work Order Date
+      const woDate = getTicketWODate(t);
+
+      // A. Staff (management_data / general staff): ONLY today's WO
+      if (currentUser?.role === 'management_data') {
+        if (!woDate || woDate !== todayStr) return false;
+      }
+      // B. Super Admin & Dispatch: Default ONLY today's WO
+      else if (currentUser?.role === 'super_admin' || currentUser?.role === 'dispatch') {
+        if (!woDate || woDate !== todayStr) return false;
+      }
+      // C. Leader: Today's WO (main view) and Tomorrow's WO (via tab), NEVER yesterday
+      else if (currentUser?.role === 'leader') {
+        if (!woDate) return false;
+        if (leaderDateTab === 'today' && woDate !== todayStr) return false;
+        if (leaderDateTab === 'tomorrow' && woDate !== leaderDates.tomorrow) return false;
+
+        // Leader contractor/area scoping
         const currentLeaderName = (currentUser.name || '').trim().toLowerCase();
         const currentLeaderArea = (currentUser.area || '').trim().toLowerCase();
         const currentLeaderContractor = (currentUser.contractor || '').trim().toLowerCase();
 
-        // Blokir jika WO sudah ditugaskan ke leader lain
         const tLeader = (t.leaderName || '').trim().toLowerCase();
-        if (tLeader && currentLeaderName && tLeader !== currentLeaderName) {
-          return false;
-        }
-        // Blokir jika area tiket berbeda dengan area Leader
+        if (tLeader && currentLeaderName && tLeader !== currentLeaderName) return false;
+
         if (currentLeaderArea) {
           const tArea = (t.area || '').trim().toLowerCase();
-          if (tArea && tArea !== currentLeaderArea) {
-            return false;
-          }
+          if (tArea && tArea !== currentLeaderArea) return false;
         }
-        // Blokir jika kontraktor tiket berbeda dengan kontraktor Leader
+
         if (currentLeaderContractor) {
           const tCont = (t.contactorName || t.contractorName || '').trim().toLowerCase();
-          if (tCont && tCont !== currentLeaderContractor) {
-            return false;
-          }
+          if (tCont && tCont !== currentLeaderContractor) return false;
         }
       }
+      // D. Installer: ONLY today's WO assigned to this technician
+      else if (currentUser?.role === 'installer') {
+        if (!woDate || woDate !== todayStr) return false;
 
-      // Role-based scoping: Teknisi (Installer)
-      // Teknisi tidak dapat melihat keseluruhan WO leader/teknisi lain dan area yang berbeda
-      if (currentUser?.role === 'installer') {
         const currentInstallerName = (currentUser.name || '').trim().toLowerCase();
         const currentInstallerPhone = (currentUser.phone || '').trim();
         const currentInstallerArea = (currentUser.area || '').trim().toLowerCase();
 
         const tInstaller = (t.installerName || '').trim().toLowerCase();
         const tContact = (t.installerContact || '').trim();
+        const cleanMyName = currentInstallerName.replace(/\(.*?\)/g, '').trim();
 
         const isAssignedToMe =
-          (tInstaller && currentInstallerName && tInstaller === currentInstallerName) ||
-          (tContact && currentInstallerPhone && tContact === currentInstallerPhone);
-        if (!isAssignedToMe) {
-          return false;
-        }
-        // Blokir jika area tiket berbeda dengan area Teknisi
+          Boolean(tInstaller && (tInstaller === currentInstallerName || tInstaller === cleanMyName || tInstaller.includes(cleanMyName) || cleanMyName.includes(tInstaller))) ||
+          Boolean(tContact && currentInstallerPhone && tContact.replace(/\D/g, '') === currentInstallerPhone.replace(/\D/g, ''));
+        
+        if (!isAssignedToMe) return false;
+
         if (currentInstallerArea) {
           const tArea = (t.area || '').trim().toLowerCase();
-          if (tArea && tArea !== currentInstallerArea) {
-            return false;
-          }
+          if (tArea && tArea !== currentInstallerArea) return false;
         }
       }
 
-      // Unread Chat Filter (jika tombol aktif)
-      if (filterUnreadChatOnly) {
-        if (getTicketUnreadCount(t.id) === 0) return false;
-      }
+      // Unread Chat Filter
+      if (filterUnreadChatOnly && getTicketUnreadCount(t.id) === 0) return false;
 
       // Status filters
       if (selectedArea !== 'ALL' && t.area !== selectedArea) return false;
@@ -218,29 +347,17 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
       if (selectedWhatsAppStatus !== 'ALL' && t.statusWhatsApp !== selectedWhatsAppStatus) return false;
       if (selectedCategory !== 'ALL' && t.ticketCategory !== selectedCategory) return false;
 
-      // Appointment Date filter (Strict Asia/Jakarta WIB calendar date comparison)
-      if (quickDatePreset !== 'all' || selectedAppointmentDate) {
-        const todayStr = getJakartaDateString(0);
-        const tomorrowStr = getJakartaDateString(1);
-        const ticketDate = getTicketAppointmentDate(t);
-
-        if (quickDatePreset === 'today') {
-          if (!ticketDate || ticketDate !== todayStr) return false;
-        } else if (quickDatePreset === 'tomorrow') {
-          if (!ticketDate || ticketDate !== tomorrowStr) return false;
-        } else if (quickDatePreset === 'upcoming') {
-          if (!ticketDate || ticketDate <= tomorrowStr) return false;
-        } else if (quickDatePreset === 'past') {
-          if (!ticketDate || ticketDate >= todayStr) return false;
-        } else if (quickDatePreset === 'invalid') {
-          // Empty or unparseable date
-          if (ticketDate) return false;
-        } else if (selectedAppointmentDate) {
-          if (!ticketDate || (ticketDate !== selectedAppointmentDate && !ticketDate.startsWith(selectedAppointmentDate))) return false;
+      // Approval Status filter (Dispatch & Super Admin workflow)
+      if (selectedApprovalStatus !== 'ALL') {
+        if (selectedApprovalStatus === 'CLOSED') {
+          if (t.statusWOAgent !== 'Closed') return false;
+        } else if (t.approvalStatus !== selectedApprovalStatus) {
+          return false;
         }
       }
 
-      // Search term match across key identifiers including ticketCategory
+      // Search term for non-cross-date searches (e.g. Staff, Leader, Installer)
+      // Strictly scoped within their allowed date view
       if (searchTerm && typeof searchTerm === 'string' && searchTerm.trim()) {
         const q = searchTerm.trim().toLowerCase();
         const matchWo = (t.woNumber ? String(t.woNumber).toLowerCase() : '').includes(q);
@@ -260,35 +377,32 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
   }, [
     tickets,
     showArchived,
+    isCrossDateActive,
+    crossDateSearchResults,
+    currentDateKey,
+    leaderDateTab,
+    currentUser,
+    filterUnreadChatOnly,
+    getTicketUnreadCount,
     selectedArea,
     selectedAgentStatus,
     selectedInstallerStatus,
     selectedWhatsAppStatus,
     selectedCategory,
-    searchTerm,
-    quickDatePreset,
-    selectedAppointmentDate,
-    currentUser.role,
-    currentUser.name,
-    currentUser.area,
-    currentUser.contractor,
-    currentUser.phone,
-    filterUnreadChatOnly,
-    getTicketUnreadCount
+    selectedApprovalStatus,
+    searchTerm
   ]);
 
-  // Sorting
+  // Sorting with Natural Collation & 3-state support (Ascending -> Descending -> Unsorted)
   const sortedTickets = useMemo(() => {
-    return [...filteredTickets].sort((a, b) => {
-      let aVal = (a as any)[sortField] || '';
-      let bVal = (b as any)[sortField] || '';
-
-      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
-      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
-
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
+    if (!sortDirection) return filteredTickets;
+    return sortDataArray(filteredTickets, { column: sortField, direction: sortDirection }, (item, col) => {
+      if (col === 'woNumber') return item.woNumber;
+      if (col === 'date' || col === 'appointmentDate') return item.appointmentDate || item.date || '';
+      if (col === 'statusWOInstaller') return item.statusWOInstaller;
+      if (col === 'statusWOAgent') return item.statusWOAgent;
+      if (col === 'slotTime') return item.slotTime;
+      return (item as any)[col];
     });
   }, [filteredTickets, sortField, sortDirection]);
 
@@ -304,12 +418,9 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
   const totalPages = pageSize === 'ALL' ? 1 : (Math.ceil(sortedTickets.length / effectiveRowsPerPage) || 1);
 
   const handleSort = (fieldKey: string) => {
-    if (sortField === fieldKey) {
-      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortField(fieldKey);
-      setSortDirection('asc');
-    }
+    const nextDir = getNextSortDirection(sortField, sortDirection, fieldKey);
+    setSortField(nextDir ? fieldKey : 'updatedAt');
+    setSortDirection(nextDir);
   };
 
   const handleSelectAll = () => {
@@ -410,13 +521,17 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Cari WO, ID, Nama, Kategori Tiket, Kontak, Teknisi..."
+              placeholder={
+                isCrossDateSearchEligible
+                  ? "Cari Nomor WO atau ID Pelanggan (Pencarian Lintas Tanggal)..."
+                  : "Cari WO Hari Ini (Nomor WO atau ID Pelanggan)..."
+              }
               value={searchTerm}
               onChange={e => {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 font-medium"
             />
           </div>
 
@@ -580,89 +695,155 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
           </div>
         </div>
 
+        {/* Cross-Date Search Banner (Super Admin & Dispatch) */}
+        {isCrossDateActive && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-purple-50 dark:bg-[#2A174E] border border-purple-200 dark:border-purple-800 text-purple-900 dark:text-purple-200 text-xs shadow-2xs">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+              <span>
+                <strong>Mode Pencarian Lintas Tanggal Aktif:</strong> Ditemukan <strong>{filteredTickets.length}</strong> WO untuk kueri "{searchTerm}" (Hanya Nomor WO & ID Pelanggan).
+                {crossDateSearchResults.crossDateCount > 0 && (
+                  <span className="ml-1 text-purple-700 dark:text-purple-300">
+                    ({crossDateSearchResults.crossDateCount} WO di luar tanggal hari ini)
+                  </span>
+                )}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('');
+                setCurrentPage(1);
+              }}
+              className="px-2.5 py-1 bg-purple-200 dark:bg-purple-900/60 hover:bg-purple-300 dark:hover:bg-purple-800 text-purple-900 dark:text-purple-100 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors self-start sm:self-auto cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Reset (Kembali ke Hari Ini)</span>
+            </button>
+          </div>
+        )}
+
+        {/* Leader Tab Switcher */}
+        {currentUser.role === 'leader' && (
+          <div className="flex items-center gap-2 p-2 bg-[#F2EBFE] dark:bg-[#251545] rounded-xl border border-[#D8CCF3] dark:border-[#4B238E] text-xs">
+            <span className="text-[#5B35B1] dark:text-[#D8CCF3] px-2 text-[11px] font-bold">Periode WO Leader:</span>
+            <button
+              type="button"
+              onClick={() => { setLeaderDateTab('today'); setCurrentPage(1); }}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer font-bold ${
+                leaderDateTab === 'today'
+                  ? 'bg-[#5B35B1] text-white shadow-xs'
+                  : 'text-[#5B35B1] dark:text-[#D8CCF3] hover:bg-[#E0D1FC] dark:hover:bg-[#3B1D78]'
+              }`}
+            >
+              <CalendarCheck className="w-3.5 h-3.5" />
+              <span>WO Hari Ini ({todayLeaderCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLeaderDateTab('tomorrow'); setCurrentPage(1); }}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer font-bold ${
+                leaderDateTab === 'tomorrow'
+                  ? 'bg-[#5B35B1] text-white shadow-xs'
+                  : 'text-[#5B35B1] dark:text-[#D8CCF3] hover:bg-[#E0D1FC] dark:hover:bg-[#3B1D78]'
+              }`}
+            >
+              <ClockAlert className="w-3.5 h-3.5" />
+              <span>WO Besok ({tomorrowLeaderCount})</span>
+            </button>
+          </div>
+        )}
+
+        {/* Quick Workflow & Approval Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider shrink-0 mr-1">
+            Filter Alur:
+          </span>
+          <button
+            type="button"
+            onClick={() => { setSelectedApprovalStatus('ALL'); setCurrentPage(1); }}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-all cursor-pointer ${
+              selectedApprovalStatus === 'ALL'
+                ? 'bg-slate-800 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+            }`}
+          >
+            Semua ({approvalCounts.totalToday})
+          </button>
+          <button
+            type="button"
+            onClick={() => { setSelectedApprovalStatus('BUTUH APPROVAL'); setCurrentPage(1); }}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedApprovalStatus === 'BUTUH APPROVAL'
+                ? 'bg-amber-500 text-white shadow-xs'
+                : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 hover:bg-amber-100'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block" />
+            <span>Butuh Approval ({approvalCounts.butuhApproval})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setSelectedApprovalStatus('APPROVED'); setCurrentPage(1); }}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedApprovalStatus === 'APPROVED'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100'
+            }`}
+          >
+            <span>✓ Approved ({approvalCounts.approved})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setSelectedApprovalStatus('REJECTED'); setCurrentPage(1); }}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedApprovalStatus === 'REJECTED'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-900 hover:bg-rose-100'
+            }`}
+          >
+            <span>✕ Perlu Revisi ({approvalCounts.rejected})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setSelectedApprovalStatus('CLOSED'); setCurrentPage(1); }}
+            className={`px-3 py-1 rounded-lg font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedApprovalStatus === 'CLOSED'
+                ? 'bg-slate-700 text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <span>🔒 Closed ({approvalCounts.closed})</span>
+          </button>
+        </div>
+
         {/* Filters Row */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-          {/* Universal Appointment Date Filter for All Roles */}
-          <div className="col-span-2 sm:col-span-1 lg:col-span-2 bg-indigo-50/70 dark:bg-indigo-950/40 p-1.5 rounded-md border border-indigo-200 dark:border-indigo-800/80">
-            <div className="flex items-center justify-between mb-0.5">
-              <label className="text-[11px] font-semibold text-indigo-900 dark:text-indigo-200 flex items-center gap-1">
-                <Calendar className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
-                <span>Appointment Date</span>
+          {/* Central Work Order Date Indicator */}
+          <div className="col-span-2 sm:col-span-1 lg:col-span-2 bg-[#E9E1FF]/60 dark:bg-[#3B1D78]/30 p-2 rounded-md border border-[#D8CCF3] dark:border-[#5B35B1]/50">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] font-bold text-[#3B1D78] dark:text-[#E9E1FF] flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-[#5B35B1]" />
+                <span>Tanggal WO Aktif:</span>
               </label>
-              {(selectedAppointmentDate || quickDatePreset !== 'all') && (
-                <button
-                  onClick={() => {
-                    setSelectedAppointmentDate('');
-                    setQuickDatePreset('all');
-                    setCurrentPage(1);
-                  }}
-                  className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                >
-                  Reset
-                </button>
-              )}
+              <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-[#5B35B1] text-white">
+                {isCrossDateActive
+                  ? 'Lintas Tanggal'
+                  : currentUser.role === 'leader'
+                  ? (leaderDateTab === 'today' ? 'Hari Ini' : 'Besok')
+                  : 'Hari Ini'}
+              </span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-              <select
-                value={quickDatePreset}
-                onChange={e => {
-                  const val = e.target.value as any;
-                  setQuickDatePreset(val);
-                  if (val === 'today') {
-                    setSelectedAppointmentDate(getJakartaDateString(0));
-                  } else if (val === 'tomorrow') {
-                    setSelectedAppointmentDate(getJakartaDateString(1));
-                  } else if (val === 'all') {
-                    setSelectedAppointmentDate('');
-                  }
-                  setCurrentPage(1);
-                }}
-                className="w-full px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-700 rounded text-slate-800 dark:text-slate-200 font-semibold cursor-pointer"
-              >
-                <option value="all">Semua Jadwal</option>
-                <option value="today">Hari Ini ({getJakartaDateParts(0).labelShort})</option>
-                <option value="tomorrow">Besok ({getJakartaDateParts(1).labelShort})</option>
-                <option value="upcoming">Jadwal Mendatang</option>
-                <option value="past">Jadwal Sebelumnya</option>
-                <option value="invalid">Jadwal Belum Valid</option>
-                <option value="custom">Pilih Tanggal...</option>
-              </select>
-              <input
-                type="date"
-                value={selectedAppointmentDate}
-                onChange={e => {
-                  setSelectedAppointmentDate(e.target.value);
-                  setQuickDatePreset(e.target.value ? 'custom' : 'all');
-                  setCurrentPage(1);
-                }}
-                className="w-full px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-700 rounded text-slate-800 dark:text-slate-200 font-medium"
-                title="Pilih tanggal appointment tertentu"
-              />
+            <div className="flex items-center justify-between gap-1 text-xs">
+              <span className="font-semibold text-slate-800 dark:text-white">
+                {isCrossDateActive
+                  ? `Hasil Pencarian (${filteredTickets.length} WO)`
+                  : formatIndonesianWODate(currentUser.role === 'leader' && leaderDateTab === 'tomorrow' ? getLeaderWORange().tomorrow : currentDateKey)}
+              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                WIB (Asia/Jakarta)
+              </span>
             </div>
-            {/* Quick date chips if available */}
-            {availableAppointmentDates.length > 0 && (
-              <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                <span className="text-[10px] text-slate-500 font-medium">Jadwal:</span>
-                {availableAppointmentDates.slice(0, 4).map(d => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => {
-                      setSelectedAppointmentDate(d);
-                      setQuickDatePreset('custom');
-                      setCurrentPage(1);
-                    }}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
-                      selectedAppointmentDate === d
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                        : 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100'
-                    }`}
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
           <div>
@@ -722,22 +903,22 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
           </div>
 
           <div>
-            <label className="block text-[11px] text-slate-500 mb-0.5">WhatsApp Confirmation</label>
+            <label className="block text-[11px] text-amber-600 dark:text-amber-400 mb-0.5 font-bold">
+              Status Approval
+            </label>
             <select
-              value={selectedWhatsAppStatus}
+              value={selectedApprovalStatus}
               onChange={e => {
-                setSelectedWhatsAppStatus(e.target.value);
+                setSelectedApprovalStatus(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-700 dark:text-slate-300"
+              className="w-full px-2 py-1 text-xs bg-amber-50/60 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/60 rounded text-slate-800 dark:text-slate-200 font-semibold"
             >
-              <option value="ALL">All WA Status</option>
-              <option value="not_prepared">Not Prepared</option>
-              <option value="ready">Ready</option>
-              <option value="opened_in_whatsapp">Opened in WA</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="reschedule_requested">Reschedule Needed</option>
-              <option value="unreachable">Unreachable</option>
+              <option value="ALL">Semua Approval</option>
+              <option value="BUTUH APPROVAL">⚠️ Butuh Approval ({approvalCounts.butuhApproval})</option>
+              <option value="APPROVED">✓ Approved ({approvalCounts.approved})</option>
+              <option value="REJECTED">✕ Perlu Revisi ({approvalCounts.rejected})</option>
+              <option value="CLOSED">🔒 Closed ({approvalCounts.closed})</option>
             </select>
           </div>
 
@@ -793,8 +974,8 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
                 </div>
               ) : null}
 
-              {/* Super Admin Bulk Delete Button */}
-              {currentUser.role === 'super_admin' && (
+              {/* Management Data Bulk Delete Button */}
+              {currentUser.role === 'management_data' && (
                 <button
                   onClick={() => {
                     setBulkDeleteReason('');
@@ -803,7 +984,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
                     setShowBulkDeleteModal(true);
                   }}
                   className="px-3 py-1 font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded cursor-pointer flex items-center gap-1.5 transition-colors shadow-2xs"
-                  title="Hapus Semua WO Terpilih (Khusus Super Admin)"
+                  title="Hapus Semua WO Terpilih (Khusus Management Data)"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Hapus ({selectedIds.size}) WO</span>
@@ -963,10 +1144,19 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
                       }`}
                       onClick={() => col.sortable && handleSort(col.key)}
                     >
-                      <div className="flex items-center gap-1.5">
+                      <div
+                        className="flex items-center gap-1.5"
+                        title={col.sortable ? (isSorted && sortDirection ? `Urutan: ${sortDirection.toUpperCase()} (Klik untuk ubah)` : 'Klik untuk mengurutkan') : undefined}
+                      >
                         <span>{col.label}</span>
                         {col.sortable && (
-                          <ArrowUpDown className={`w-3 h-3 ${isSorted ? 'text-indigo-600' : 'text-slate-400'}`} />
+                          isSorted && sortDirection === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-indigo-600 font-bold shrink-0" />
+                          ) : isSorted && sortDirection === 'desc' ? (
+                            <ArrowDown className="w-3.5 h-3.5 text-indigo-600 font-bold shrink-0" />
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 shrink-0" />
+                          )
                         )}
                       </div>
                     </th>
@@ -1080,14 +1270,14 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
                                 >
                                   {ticket.isArchived ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
                                 </button>
-                                {currentUser.role === 'super_admin' && (
+                                {currentUser.role === 'management_data' && (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setTicketToDelete(ticket);
                                     }}
                                     className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors"
-                                    title="Hapus Work Order (Super Admin Only)"
+                                    title="Hapus Work Order (Management Data Only)"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -1123,7 +1313,20 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
                         if (col.key === 'statusWOInstaller') {
                           return (
                             <td key={col.key} className={densityClass}>
-                              <StatusInstallerBadge status={ticket.statusWOInstaller} />
+                              <div className="flex flex-col gap-1 items-start">
+                                <StatusInstallerBadge status={ticket.statusWOInstaller} />
+                                {ticket.approvalStatus && (
+                                  <StatusApprovalBadge status={ticket.approvalStatus} />
+                                )}
+                              </div>
+                            </td>
+                          );
+                        }
+
+                        if (col.key === 'approvalStatus') {
+                          return (
+                            <td key={col.key} className={densityClass}>
+                              <StatusApprovalBadge status={ticket.approvalStatus} />
                             </td>
                           );
                         }
@@ -1288,121 +1491,26 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
       </div>
       )}
 
-      {/* Super Admin Bulk Delete Confirmation Modal */}
-      {showBulkDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-rose-200 dark:border-rose-900/60 overflow-hidden">
-            {/* Header */}
-            <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border-b border-rose-200 dark:border-rose-900 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400 font-bold text-sm">
-                <Trash2 className="w-5 h-5 text-rose-600" />
-                <span>Konfirmasi Hapus Massal Work Order ({selectedIds.size} Tiket)</span>
-              </div>
-              <button
-                onClick={() => setShowBulkDeleteModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-5 space-y-4 text-xs">
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-2 text-amber-800 dark:text-amber-200">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold">Tindakan Khusus Super Admin:</p>
-                  <p className="text-[11px] mt-0.5">
-                    Anda akan menghapus sebanyak <span className="font-bold underline">{selectedIds.size} tiket Work Order</span> yang telah dipilih. Tindakan ini dicatat dalam log audit resmi dan tidak dapat diurungkan.
-                  </p>
-                </div>
-              </div>
-
-              {bulkDeleteError && (
-                <div className="p-2.5 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded text-rose-700 dark:text-rose-300 font-medium">
-                  {bulkDeleteError}
-                </div>
-              )}
-
-              <div>
-                <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1">
-                  Alasan Penghapusan Massal <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  value={bulkDeleteReason}
-                  onChange={e => setBulkDeleteReason(e.target.value)}
-                  placeholder="Contoh: Pembersihan data WO duplikat uji coba lapangan..."
-                  rows={2}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-rose-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1">
-                  Ketik <span className="font-mono text-rose-600 dark:text-rose-400 font-bold">HAPUS WO</span> untuk konfirmasi:
-                </label>
-                <input
-                  type="text"
-                  value={bulkDeleteConfirmText}
-                  onChange={e => setBulkDeleteConfirmText(e.target.value)}
-                  placeholder="HAPUS WO"
-                  className="w-full px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-rose-500 uppercase"
-                />
-              </div>
-            </div>
-
-            {/* Footer Buttons */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowBulkDeleteModal(false)}
-                className="px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!bulkDeleteReason.trim() || bulkDeleteReason.trim().length < 5) {
-                    setBulkDeleteError('Alasan penghapusan minimal 5 karakter.');
-                    return;
-                  }
-                  if (bulkDeleteConfirmText.trim().toUpperCase() !== 'HAPUS WO') {
-                    setBulkDeleteError('Ketik "HAPUS WO" untuk melanjutkan.');
-                    return;
-                  }
-                  const res = bulkDeleteTickets(Array.from(selectedIds), bulkDeleteReason.trim());
-                  if (res.success) {
-                    setSelectedIds(new Set());
-                    setShowBulkDeleteModal(false);
-                  } else {
-                    setBulkDeleteError(res.error || 'Gagal menghapus tiket.');
-                  }
-                }}
-                disabled={bulkDeleteConfirmText.trim().toUpperCase() !== 'HAPUS WO' || bulkDeleteReason.trim().length < 5}
-                className="px-4 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40 rounded-lg cursor-pointer flex items-center gap-1.5 shadow-sm"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Hapus {selectedIds.size} Work Order</span>
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Management Data Bulk Delete Confirmation Modal */}
+      {showBulkDeleteModal && currentUser.role === 'management_data' && (
+        <ManagementDataDeleteModal
+          isOpen={showBulkDeleteModal}
+          onClose={() => setShowBulkDeleteModal(false)}
+          ticket={null}
+          selectedTickets={paginatedTickets.filter(t => selectedIds.has(t.id))}
+          onSuccess={() => {
+            setSelectedIds(new Set());
+            setShowBulkDeleteModal(false);
+          }}
+        />
       )}
 
-      {ticketToDelete && (
-        <SuperAdminDeleteModal
+      {/* Management Data Single Ticket Delete Confirmation Modal */}
+      {ticketToDelete && currentUser.role === 'management_data' && (
+        <ManagementDataDeleteModal
           isOpen={Boolean(ticketToDelete)}
           onClose={() => setTicketToDelete(null)}
-          targetType="ticket"
-          targetId={ticketToDelete.id}
-          targetLabel={`WO: ${ticketToDelete.woNumber} (ID Pelanggan: ${ticketToDelete.idCustomer})`}
-          targetDetails={[
-            { label: 'Pelanggan', value: ticketToDelete.customerName },
-            { label: 'Area / Cluster', value: `${ticketToDelete.area || '-'} / ${ticketToDelete.clusterName || '-'}` },
-            { label: 'Mitra Kontraktor', value: ticketToDelete.contactorName || '-' },
-            { label: 'Status WO', value: `${ticketToDelete.statusWOAgent} / ${ticketToDelete.statusWOInstaller}` }
-          ]}
+          ticket={ticketToDelete}
           onSuccess={() => {
             setTicketToDelete(null);
           }}

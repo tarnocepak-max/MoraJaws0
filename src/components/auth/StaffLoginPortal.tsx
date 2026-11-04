@@ -63,22 +63,81 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
       } else {
         const errorMsg = res.error || 'Kredensial login tidak valid. Pastikan nama pengguna dan kata sandi benar.';
         setError(errorMsg);
-        showGlobalError({
-          errorCode: 'MJ-AUTH-001',
-          module: 'Authentication',
-          operation: 'Staff Credential Login',
-          description: 'Autentikasi gagal. Kredensial tidak cocok.',
-          message: 'Autentikasi gagal. Kredensial tidak cocok.',
-          technicalDetails: errorMsg,
-          severity: 'MEDIUM',
-          status: 'OPEN'
-        });
+
+        // Precise error categorization: Do not show MJ-AUTH-001 wrong credential error for connection, inactive, or not-found errors
+        if (res.errorCode === 'MJ-AUTH-001' || errorMsg.includes('tidak cocok') || errorMsg.includes('salah')) {
+          showGlobalError({
+            errorCode: 'MJ-AUTH-001',
+            module: 'Authentication',
+            operation: 'Staff Credential Login',
+            description: 'Autentikasi gagal. Kredensial tidak cocok.',
+            message: 'Autentikasi gagal. Kredensial tidak cocok.',
+            technicalDetails: errorMsg,
+            severity: 'MEDIUM',
+            status: 'OPEN'
+          });
+        } else if (res.errorCode === 'auth/network-request-failed' || res.errorCode === 'NETWORK_OFFLINE') {
+          showGlobalError({
+            errorCode: 'MJ-NET-001',
+            module: 'Authentication',
+            operation: 'Staff Network Connection',
+            description: 'Koneksi jaringan terputus.',
+            message: 'Gagal terhubung ke layanan autentikasi.',
+            technicalDetails: errorMsg,
+            severity: 'HIGH',
+            status: 'OPEN'
+          });
+        } else if (res.errorCode === 'auth/user-disabled' || errorMsg.includes('dinonaktifkan')) {
+          showGlobalError({
+            errorCode: 'MJ-AUTH-003',
+            module: 'Authentication',
+            operation: 'Staff Account Status',
+            description: 'Akun staf dinonaktifkan.',
+            message: 'Akun telah dinonaktifkan oleh Administrator.',
+            technicalDetails: errorMsg,
+            severity: 'HIGH',
+            status: 'OPEN'
+          });
+        } else if (res.errorCode === 'auth/user-not-found' || errorMsg.includes('tidak ditemukan') || errorMsg.includes('tidak terdaftar')) {
+          showGlobalError({
+            errorCode: 'MJ-AUTH-002',
+            module: 'Authentication',
+            operation: 'Staff Identity Lookup',
+            description: 'Identitas staf tidak terdaftar.',
+            message: 'Akun staf tidak ditemukan dalam direktori MoraJaws.',
+            technicalDetails: errorMsg,
+            severity: 'MEDIUM',
+            status: 'OPEN'
+          });
+        } else if (res.errorCode === 'auth/too-many-requests') {
+          showGlobalError({
+            errorCode: 'MJ-AUTH-005',
+            module: 'Authentication',
+            operation: 'Staff Rate Limiting',
+            description: 'Terlalu banyak percobaan login yang gagal.',
+            message: 'Akses akun ditangguhkan sementara demi keamanan.',
+            technicalDetails: errorMsg,
+            severity: 'MEDIUM',
+            status: 'OPEN'
+          });
+        } else {
+          showGlobalError({
+            errorCode: 'MJ-AUTH-004',
+            module: 'Authentication',
+            operation: 'Staff Authentication',
+            description: 'Kendala autentikasi akun staf.',
+            message: errorMsg,
+            technicalDetails: errorMsg,
+            severity: 'MEDIUM',
+            status: 'OPEN'
+          });
+        }
       }
     } catch (err: any) {
       const errTxt = err?.message || 'Terjadi gangguan saat menghubungkan ke server autentikasi.';
       setError(errTxt);
       showGlobalError({
-        errorCode: 'MJ-AUTH-001',
+        errorCode: 'MJ-SYS-001',
         module: 'Authentication',
         operation: 'Staff Login Exception',
         description: 'Gagal menghubungi sistem autentikasi.',

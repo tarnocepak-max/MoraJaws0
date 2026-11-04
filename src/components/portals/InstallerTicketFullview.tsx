@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Ticket, TicketStatusWOInstaller, ProgressReportEntry, ChatAttachment } from '../../types/index.ts';
 import { useApp } from '../../context/AppContext';
-import { StatusInstallerBadge, StatusWhatsAppBadge, StatusAgentBadge } from '../common/Badge';
+import { StatusInstallerBadge, StatusWhatsAppBadge, StatusAgentBadge, StatusApprovalBadge } from '../common/Badge';
 import { buildWhatsAppClickToChatUrl } from '../../services/whatsappService';
 import { openCustomerAddressInGoogleMaps } from '../../services/mapsService';
+import { getSafePreviewUrl } from '../../services/storageCompatibility';
 import {
   ArrowLeft,
   Phone,
@@ -34,10 +35,13 @@ import {
   ExternalLink,
   ChevronRight,
   Sparkles,
-  Info
+  Info,
+  Tag,
+  Play
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { useAnimation } from '../../context/AnimationContext';
+import { useMoraJawsSound } from '../../context/SoundContext';
 
 interface InstallerTicketFullviewProps {
   ticket: Ticket;
@@ -53,15 +57,24 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
   const {
     tickets,
     updateTicketStatus,
+    startWorkOnTicket,
     saveProgressReport,
     rootCauseCategories,
     currentUser,
     getMessagesForTicket,
     sendTicketMessage,
-    markTicketMessagesAsRead
+    markTicketMessagesAsRead,
+    reportDropdownCategories,
+    isDropdownCategoriesLoading,
+    hierarchicalStatuses,
+    getReasonsForStatus,
+    getRemarksForReason,
+    chatCategories,
+    setTicketChatCategory
   } = useApp();
   const { toast } = useToast();
   const { showGlobalError, startLoading, stopLoading } = useAnimation();
+  const { playReportSavedSound, playErrorSound } = useMoraJawsSound();
 
   // Keep ticket state fresh from context whenever tickets update
   const activeTicket = useMemo(() => {
@@ -83,55 +96,150 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
 
   // -------------------------------------------------------------
   // FORM REPORT STATE (Report Status Pembaruan)
+  // Mapping 3 Tingkat:
+  // Level 1: Report Status (Status WO)
+  // Level 2: Reason Report (Reason WO)
+  // Level 3: Rootcause (Remarks)
   // -------------------------------------------------------------
+  const latestReport = activeTicket.progressReports?.[0];
+
   const [reportStatus, setReportStatus] = useState<string>(() => {
-    return activeTicket.statusWOInstaller || 'En Route';
+    return latestReport?.reportStatus || activeTicket.statusWOInstaller || '';
+  });
+  const [reportStatusId, setReportStatusId] = useState<string>(() => {
+    return latestReport?.reportStatusId || activeTicket.reportStatusId || '';
   });
 
   const [reasonReport, setReasonReport] = useState<string>(() => {
-    if (activeTicket.statusWOInstaller === 'Completed') return 'Instalasi Selesai Sesuai Standar';
-    if (activeTicket.statusWOInstaller === 'Pending Technical') return 'Kendala Redaman Tinggi / LOS';
-    if (activeTicket.statusWOInstaller === 'Failed / Cancelled') return 'Pelanggan Meminta Reschedule';
-    return 'Pengerjaan Lapangan Sedang Berlangsung';
+    return latestReport?.reasonReport || '';
+  });
+  const [reasonReportId, setReasonReportId] = useState<string>(() => {
+    return latestReport?.reasonReportId || activeTicket.reasonReportId || '';
   });
 
   const [rootCause, setRootCause] = useState<string>(() => {
-    return (
-      activeTicket.technicalReport?.rootCause ||
-      rootCauseCategories[0]?.items[0] ||
-      'Fiber Optic Putus'
-    );
+    return latestReport?.rootCause || activeTicket.technicalReport?.rootCause || '';
+  });
+  const [rootcauseId, setRootcauseId] = useState<string>(() => {
+    return latestReport?.rootcauseId || activeTicket.rootcauseId || '';
   });
 
   const [remarksReport, setRemarksReport] = useState<string>(() => {
-    return activeTicket.remarksWOInstaller || activeTicket.technicalReport?.technicalDescription || '';
+    return latestReport?.remarksReport || activeTicket.remarksWOInstaller || activeTicket.technicalReport?.technicalDescription || '';
   });
 
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
 
-  // Synchronize reason choices when report status changes
-  const handleReportStatusChange = (newStatus: string) => {
-    setReportStatus(newStatus);
-    if (newStatus === 'Completed' || newStatus === 'Installed') {
-      setReasonReport('Instalasi Selesai Sesuai Standar');
-    } else if (newStatus === 'En Route') {
-      setReasonReport('Teknisi Meluncur Menuju Lokasi');
-    } else if (newStatus === 'On Site') {
-      setReasonReport('Tiba di Lokasi dan Pengecekan Fisik');
-    } else if (newStatus === 'Pending Technical') {
-      setReasonReport('Kendala Redaman Tinggi / LOS');
-    } else if (newStatus === 'Failed / Cancelled') {
-      setReasonReport('Pelanggan Tidak di Tempat / Lokasi');
+  // 1. Level 1: Status WO options (Active only)
+  const availableStatusOptions = useMemo(() => {
+    if (hierarchicalStatuses && hierarchicalStatuses.length > 0) {
+      return hierarchicalStatuses
+        .filter(s => s.active !== false && (s as any).isActive !== false)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+    }
+    return [];
+  }, [hierarchicalStatuses]);
+
+  // Selected Status Object
+  const selectedStatusObj = useMemo(() => {
+    if (!reportStatus) return null;
+    const norm = reportStatus.trim().toLowerCase();
+    return (
+      availableStatusOptions.find(
+        s => s.id === reportStatusId || s.name.trim().toLowerCase() === norm || (s.code && s.code.trim().toLowerCase() === norm)
+      ) || null
+    );
+  }, [availableStatusOptions, reportStatus, reportStatusId]);
+
+  // 2. Level 2: Reason WO options (strictly child of chosen Report Status)
+  const availableReasonOptions = useMemo(() => {
+    if (!selectedStatusObj) return [];
+    return (selectedStatusObj.reasons || [])
+      .filter(r => r.active !== false && (r as any).isActive !== false)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+  }, [selectedStatusObj]);
+
+  // Selected Reason Object
+  const selectedReasonObj = useMemo(() => {
+    if (!reasonReport || !selectedStatusObj) return null;
+    const norm = reasonReport.trim().toLowerCase();
+    return (
+      availableReasonOptions.find(
+        r => r.id === reasonReportId || r.name.trim().toLowerCase() === norm
+      ) || null
+    );
+  }, [availableReasonOptions, reasonReport, reasonReportId, selectedStatusObj]);
+
+  // 3. Level 3: Rootcause / Remarks options (strictly sub-child of chosen Reason Report)
+  const availableRootcauseOptions = useMemo(() => {
+    if (!selectedReasonObj) return [];
+    return (selectedReasonObj.remarks || [])
+      .filter(rm => rm.active !== false && (rm as any).isActive !== false)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+  }, [selectedReasonObj]);
+
+  // Level 3 Remarks Templates for quick buttons
+  const availableRemarksTemplates = useMemo(() => {
+    return availableRootcauseOptions.map(rm => rm.text || rm.name);
+  }, [availableRootcauseOptions]);
+
+  // Cascading Change Handlers (Dependent 3-Tier Interaction Rules)
+  // When Status changes -> Reason & Rootcause are automatically RESET
+  const handleReportStatusChange = (newStatusName: string) => {
+    setReportStatus(newStatusName);
+    const matched = availableStatusOptions.find(
+      s => s.name === newStatusName || s.id === newStatusName || (s.code && s.code === newStatusName)
+    );
+    setReportStatusId(matched?.id || '');
+
+    // Reset Level 2 & Level 3
+    setReasonReport('');
+    setReasonReportId('');
+    setRootCause('');
+    setRootcauseId('');
+    setReportError(null);
+  };
+
+  // When Reason changes -> Rootcause is automatically RESET
+  const handleReasonReportChange = (newReasonName: string) => {
+    setReasonReport(newReasonName);
+    const matched = availableReasonOptions.find(
+      r => r.name === newReasonName || r.id === newReasonName
+    );
+    setReasonReportId(matched?.id || '');
+
+    // Reset Level 3
+    setRootCause('');
+    setRootcauseId('');
+    setReportError(null);
+  };
+
+  // When Rootcause changes
+  const handleRootcauseChange = (newRootcauseText: string) => {
+    setRootCause(newRootcauseText);
+    const matched = availableRootcauseOptions.find(
+      rm => (rm.text || rm.name) === newRootcauseText || rm.name === newRootcauseText || rm.id === newRootcauseText
+    );
+    setRootcauseId(matched?.id || '');
+    setReportError(null);
+
+    // If remarksReport is empty, autofill with selected rootcause
+    if (!remarksReport.trim()) {
+      setRemarksReport(matched?.text || matched?.name || newRootcauseText);
     }
   };
 
   // Cancel report form edits
   const handleCancelReport = () => {
-    setReportStatus(activeTicket.statusWOInstaller || 'En Route');
-    setReasonReport('Pengerjaan Lapangan Sedang Berlangsung');
-    setRootCause(activeTicket.technicalReport?.rootCause || rootCauseCategories[0]?.items[0] || 'Fiber Optic Putus');
-    setRemarksReport(activeTicket.remarksWOInstaller || '');
+    const prevReport = activeTicket.progressReports?.[0];
+    setReportStatus(prevReport?.reportStatus || activeTicket.statusWOInstaller || '');
+    setReportStatusId(prevReport?.reportStatusId || activeTicket.reportStatusId || '');
+    setReasonReport(prevReport?.reasonReport || '');
+    setReasonReportId(prevReport?.reasonReportId || activeTicket.reasonReportId || '');
+    setRootCause(prevReport?.rootCause || activeTicket.technicalReport?.rootCause || '');
+    setRootcauseId(prevReport?.rootcauseId || activeTicket.rootcauseId || '');
+    setRemarksReport(prevReport?.remarksReport || activeTicket.remarksWOInstaller || '');
     setReportError(null);
     toast.info('Perubahan formulir laporan dibatalkan.', 'Dibatalkan');
   };
@@ -141,21 +249,21 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
     if (e) e.preventDefault();
     if (isSubmittingReport) return;
 
-    // 1. Validasi formulir
+    // 1. Validasi formulir 3 tingkat
     if (!reportStatus) {
-      setReportError('Silakan pilih Report Status.');
+      setReportError('Silakan pilih Report Status (Level 1).');
       return;
     }
     if (!reasonReport) {
-      setReportError('Silakan pilih Reason Report.');
+      setReportError('Silakan pilih Reason Report (Level 2).');
       return;
     }
     if (!rootCause) {
-      setReportError('Silakan pilih Rootcause.');
+      setReportError('Silakan pilih Rootcause (Level 3 - Remarks).');
       return;
     }
     if (!remarksReport.trim()) {
-      setReportError('Remarks Report (catatan hasil penanganan) wajib diisi.');
+      setReportError('Remarks Report (catatan hasil penanganan teknisi) wajib diisi.');
       return;
     }
 
@@ -163,37 +271,35 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
     setIsSubmittingReport(true);
     startLoading({
       title: 'MENYIMPAN REPORT KE FIRESTORE...',
-      subtitle: 'Memverifikasi dan menulis progress report ke database Cloud Firestore'
+      subtitle: 'Memverifikasi relasi hierarki 3-tingkat dan menyimpan laporan ke database Cloud Firestore'
     });
 
     try {
-      // 2. Simpan laporan ke Firebase Cloud Firestore
-      // 3. Tunggu sampai penyimpanan benar-benar berhasil
       const res = await saveProgressReport(activeTicket.id, {
         reportStatus,
+        reportStatusId,
         reasonReport,
+        reasonReportId,
         rootCause,
+        rootcauseId,
         remarksReport: remarksReport.trim()
       });
 
       if (res.success) {
-        // Snapshot detail laporan yang berhasil disimpan
+        playReportSavedSound();
         setSavedReportSnapshot({
           status: reportStatus,
           reason: reasonReport,
           rootCause,
           remarks: remarksReport.trim()
         });
-
-        // 4 & 5. Tampilkan animasi SUCCESS ALERT dan tombol KONFIRMASI
-        // 6. Menunggu tindakan pengguna (TIDAK melakukan redirect otomatis)
         setShowSuccessAlert(true);
         toast.success(
-          `Laporan status "${reportStatus}" berhasil disimpan ke Cloud Firestore.`,
+          `Laporan status "${reportStatus}" (Reason: ${reasonReport}) berhasil disimpan ke Cloud Firestore.`,
           'REPORT TERSIMPAN'
         );
       } else {
-        // 5. JIKA SAVE REPORT GAGAL
+        playErrorSound();
         const errMsg = res.error || 'Gagal menyimpan laporan ke Cloud Firestore.';
         setReportError(errMsg);
         showGlobalError({
@@ -208,6 +314,7 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
         });
       }
     } catch (err: any) {
+      playErrorSound();
       const errMsg = err?.message || 'Terjadi kesalahan sistem saat menyimpan laporan.';
       setReportError(errMsg);
       showGlobalError({
@@ -268,9 +375,22 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
   }, [activeTicket]);
 
   // -------------------------------------------------------------
-  // LIVE CHAT ROOM STATE & HANDLERS
+  // LIVE CHAT ROOM STATE & HANDLERS (Synchronized with Contact Center)
   // -------------------------------------------------------------
-  const [chatCategory, setChatCategory] = useState<string>('Umum / Koordinasi');
+  const [chatCategory, setChatCategory] = useState<string>(() => {
+    return activeTicket.chatCategory || (chatCategories[0]?.name || 'UNCLASSIFIED');
+  });
+
+  // Active chat categories from shared Firestore appSettings/chat_categories
+  const activeChatCategories = useMemo(() => {
+    return chatCategories.filter(c => c.active !== false && (c as any).isActive !== false);
+  }, [chatCategories]);
+
+  // Current category object to retrieve theme color
+  const currentChatCategoryObj = useMemo(() => {
+    return chatCategories.find(c => c.name === chatCategory || c.id === chatCategory) || null;
+  }, [chatCategories, chatCategory]);
+
   const [chatInputText, setChatInputText] = useState('');
   const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([]);
   const [isSendingChat, setIsSendingChat] = useState(false);
@@ -281,6 +401,20 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
   const chatMessagesEndRef = useRef<HTMLDivElement>(null);
 
   const messages = getMessagesForTicket(activeTicket.id);
+
+  // Sync category when activeTicket.chatCategory changes from Firestore
+  useEffect(() => {
+    if (activeTicket.chatCategory) {
+      setChatCategory(activeTicket.chatCategory);
+    }
+  }, [activeTicket.chatCategory]);
+
+  // Handle changing chat category synchronized to Firestore appSettings & ticket
+  const handleChatCategorySelect = async (newCat: string) => {
+    setChatCategory(newCat);
+    await setTicketChatCategory(activeTicket.id, newCat);
+    toast.success(`Kategori chat disinkronkan ke "${newCat}".`);
+  };
 
   // Auto mark messages as read
   useEffect(() => {
@@ -341,23 +475,19 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
   };
 
   // Handle sending chat message
-  const handleSendChatMessage = (e?: React.FormEvent) => {
+  const handleSendChatMessage = (e?: React.FormEvent, directText?: string) => {
     if (e) e.preventDefault();
     if (isSendingChat) return;
 
-    if (!chatInputText.trim() && chatAttachments.length === 0) {
+    const text = directText !== undefined ? directText : chatInputText;
+    if (!text.trim() && chatAttachments.length === 0) {
       return;
     }
 
     setIsSendingChat(true);
     setChatError(null);
 
-    // Prefix category if selected and not default "Umum"
-    const textToSend = chatCategory && chatCategory !== 'Umum / Koordinasi'
-      ? `[${chatCategory}] ${chatInputText.trim()}`
-      : chatInputText.trim();
-
-    const res = sendTicketMessage(activeTicket.id, textToSend, chatAttachments, chatCategory);
+    const res = sendTicketMessage(activeTicket.id, text.trim(), chatAttachments, chatCategory);
     setIsSendingChat(false);
 
     if (res.success) {
@@ -422,6 +552,7 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
                 {activeTicket.woNumber}
               </span>
               <StatusInstallerBadge status={activeTicket.statusWOInstaller} />
+              <StatusApprovalBadge status={activeTicket.approvalStatus} />
               <StatusAgentBadge status={activeTicket.statusWOAgent} />
               <StatusWhatsAppBadge status={activeTicket.statusWhatsApp} />
             </div>
@@ -431,8 +562,27 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
           </div>
         </div>
 
-        {/* Quick Header Action */}
+        {/* Quick Header Actions */}
         <div className="flex items-center gap-2 shrink-0">
+          {!activeTicket.workStartedAt ? (
+            <button
+              type="button"
+              onClick={async () => {
+                await startWorkOnTicket(activeTicket.id);
+              }}
+              className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer animate-pulse"
+              title="Mulai pengerjaan tiket WO ini sekarang"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>MULAI KERJAKAN</span>
+            </button>
+          ) : (
+            <div className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-xl text-[11px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+              <Clock className="w-3 h-3 text-emerald-500" />
+              <span>Dikerjakan: {activeTicket.workStartedAt ? new Date(activeTicket.workStartedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleOtwLokasi}
@@ -707,82 +857,122 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
 
               {/* Form Fields */}
               <form onSubmit={handleSaveReport} className="space-y-4 text-xs sm:text-sm">
-                {/* 1. Report Status */}
+                {/* 1. Report Status (Level 1 - Status WO) */}
                 <div>
-                  <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
-                    Report Status <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block font-semibold text-slate-800 dark:text-slate-200">
+                      Report Status <span className="text-rose-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono font-medium">
+                      Level 1 – Status WO
+                    </span>
+                  </div>
                   <select
                     value={reportStatus}
                     onChange={e => handleReportStatusChange(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all text-xs sm:text-sm"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all text-xs sm:text-sm cursor-pointer"
                   >
-                    <option value="En Route">En Route (Otw Lokasi)</option>
-                    <option value="On Site">On Site (Tiba di Lokasi)</option>
-                    <option value="Completed">Completed (Selesai Pengerjaan)</option>
-                    <option value="Installed">Installed (Perangkat Terpasang)</option>
-                    <option value="Pending Technical">Pending Technical (Tertunda Kendala Teknis)</option>
-                    <option value="Failed / Cancelled">Failed / Cancelled (Gagal / Batal)</option>
-                    <option value="Assigned">Assigned (Ditugaskan)</option>
+                    <option value="">-- Pilih Report Status (Level 1) --</option>
+                    {availableStatusOptions.map(st => (
+                      <option key={st.id} value={st.name}>
+                        {st.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
-                {/* 2. Reason Report */}
+                {/* 2. Reason Report (Level 2 - Reason WO, dependent on Level 1) */}
                 <div>
-                  <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
-                    Reason Report <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block font-semibold text-slate-800 dark:text-slate-200">
+                      Reason Report <span className="text-rose-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono font-medium">
+                      Level 2 – Reason WO
+                    </span>
+                  </div>
                   <select
                     value={reasonReport}
-                    onChange={e => setReasonReport(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all text-xs sm:text-sm"
+                    disabled={!reportStatus || availableReasonOptions.length === 0}
+                    onChange={e => handleReasonReportChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
-                    <option value="Instalasi Selesai Sesuai Standar">Instalasi Selesai Sesuai Standar</option>
-                    <option value="Redaman Optik Baik (-16 s/d -24 dBm)">Redaman Optik Baik (-16 s/d -24 dBm)</option>
-                    <option value="Perangkat ONT / Router Aktif Normal">Perangkat ONT / Router Aktif Normal</option>
-                    <option value="Selesai Berhasil Diperbaiki">Selesai Berhasil Diperbaiki</option>
-                    <option value="Kendala Redaman Tinggi / LOS">Kendala Redaman Tinggi / LOS</option>
-                    <option value="Kabel Dropcore Putus / Terjepit">Kabel Dropcore Putus / Terjepit</option>
-                    <option value="FAT / ODP Penuh atau Rusak">FAT / ODP Penuh atau Rusak</option>
-                    <option value="Pelanggan Meminta Reschedule">Pelanggan Meminta Reschedule</option>
-                    <option value="Pelanggan Tidak di Tempat">Pelanggan Tidak di Tempat</option>
-                    <option value="Akses Rumah / Lokasi Terkendala">Akses Rumah / Lokasi Terkendala</option>
-                    <option value="Menunggu Material / Tim Tambahan">Menunggu Material / Tim Tambahan</option>
-                    <option value="Pengerjaan Lapangan Sedang Berlangsung">Pengerjaan Lapangan Sedang Berlangsung</option>
-                    <option value="Lainnya (Lihat Catatan Remarks)">Lainnya (Lihat Catatan Remarks)</option>
+                    {!reportStatus ? (
+                      <option value="">-- Pilih Report Status Terlebih Dahulu --</option>
+                    ) : availableReasonOptions.length === 0 ? (
+                      <option value="">-- Tidak ada pilihan tersedia --</option>
+                    ) : (
+                      <>
+                        <option value="">-- Pilih Reason Report (Level 2) --</option>
+                        {availableReasonOptions.map(rs => (
+                          <option key={rs.id} value={rs.name}>
+                            {rs.name}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
 
-                {/* 3. Rootcause */}
+                {/* 3. Rootcause (Level 3 - Remarks, dependent on Level 2) */}
                 <div>
-                  <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
-                    Rootcause <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block font-semibold text-slate-800 dark:text-slate-200">
+                      Rootcause <span className="text-rose-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono font-medium">
+                      Level 3 – Remarks
+                    </span>
+                  </div>
                   <select
                     value={rootCause}
-                    onChange={e => setRootCause(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all text-xs sm:text-sm"
+                    disabled={!reasonReport || availableRootcauseOptions.length === 0}
+                    onChange={e => handleRootcauseChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
-                    {rootCauseCategories.map(cat => (
-                      <optgroup key={cat.id} label={cat.name}>
-                        {cat.items.map(item => (
-                          <option key={item} value={item}>
-                            {item}
+                    {!reasonReport ? (
+                      <option value="">-- Pilih Reason Report Terlebih Dahulu --</option>
+                    ) : availableRootcauseOptions.length === 0 ? (
+                      <option value="">-- Tidak ada pilihan tersedia --</option>
+                    ) : (
+                      <>
+                        <option value="">-- Pilih Rootcause (Level 3 - Remarks) --</option>
+                        {availableRootcauseOptions.map(rm => (
+                          <option key={rm.id} value={rm.text || rm.name}>
+                            {rm.text || rm.name}
                           </option>
                         ))}
-                      </optgroup>
-                    ))}
-                    <optgroup label="Penyebab Lainnya">
-                      <option value="Kendala Teknis Lapangan Lainnya">Kendala Teknis Lapangan Lainnya</option>
-                    </optgroup>
+                      </>
+                    )}
                   </select>
                 </div>
 
                 {/* 4. Remarks Report */}
                 <div>
-                  <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
-                    Remarks Report <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block font-semibold text-slate-800 dark:text-slate-200">
+                      Remarks Report <span className="text-rose-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono font-normal">Level 3 (Template / Manual)</span>
+                  </div>
+
+                  {availableRemarksTemplates.length > 0 && (
+                    <div className="mb-2 flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] no-scrollbar">
+                      <span className="text-slate-400 text-[10px] font-semibold shrink-0">Template:</span>
+                      {availableRemarksTemplates.map((tpl, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setRemarksReport(tpl)}
+                          className="px-2 py-0.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/80 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 whitespace-nowrap text-[10px] font-medium transition-colors cursor-pointer"
+                          title="Klik untuk memilih template ini"
+                        >
+                          {tpl.length > 32 ? tpl.slice(0, 32) + '...' : tpl}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   <textarea
                     rows={3}
                     value={remarksReport}
@@ -841,9 +1031,21 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-full">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Real-Time Online</span>
+                <div className="flex items-center gap-2">
+                  {chatCategory && (
+                    <span
+                      className="px-2.5 py-1 rounded-full text-[11px] font-bold text-white shadow-2xs flex items-center gap-1.5"
+                      style={{ backgroundColor: currentChatCategoryObj?.color || '#3B82F6' }}
+                      title={`Kategori Chat: ${chatCategory}`}
+                    >
+                      <Tag className="w-3 h-3" />
+                      <span>{chatCategory}</span>
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-full">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Real-Time Online</span>
+                  </div>
                 </div>
               </div>
 
@@ -908,7 +1110,7 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
                                   className="group relative rounded-xl overflow-hidden border border-black/10 dark:border-white/10 bg-black/5"
                                 >
                                   <img
-                                    src={att.url}
+                                    src={getSafePreviewUrl(att.url)}
                                     alt={att.fileName}
                                     className="w-full h-32 object-cover transition-transform group-hover:scale-105"
                                   />
@@ -978,22 +1180,37 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
               ) : (
                 /* Chat Input Controls: Category Dropdown + Message Input + Attach + Send (Blue) */
                 <form onSubmit={handleSendChatMessage} className="space-y-2 shrink-0">
-                  {/* Dropdown "Select Category Chat" */}
+                  {/* Dropdown "Select Category Chat" - Synchronized with Contact Center */}
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                      Select Category Chat
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                        Category Chat (Sinkron Contact Center)
+                      </label>
+                      {currentChatCategoryObj && (
+                        <span
+                          className="text-[10px] px-2 py-0.5 rounded font-bold text-white shadow-2xs"
+                          style={{ backgroundColor: currentChatCategoryObj.color || '#3B82F6' }}
+                        >
+                          {currentChatCategoryObj.name}
+                        </span>
+                      )}
+                    </div>
                     <select
                       value={chatCategory}
-                      onChange={e => setChatCategory(e.target.value)}
+                      onChange={e => handleChatCategorySelect(e.target.value)}
                       className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     >
-                      <option value="Umum / Koordinasi">Umum / Koordinasi</option>
-                      <option value="Update Kendala Lapangan">Update Kendala Lapangan</option>
-                      <option value="Konfirmasi Redaman OPM & FAT">Konfirmasi Redaman OPM & FAT</option>
-                      <option value="Konfirmasi Kedatangan / Pelanggan">Konfirmasi Kedatangan / Pelanggan</option>
-                      <option value="Permohonan Approval Dispatch">Permohonan Approval Dispatch</option>
-                      <option value="Laporan Pekerjaan Selesai">Laporan Pekerjaan Selesai</option>
+                      {activeChatCategories.length > 0 ? (
+                        activeChatCategories.map(cat => (
+                          <option key={cat.id} value={cat.name}>
+                            {cat.name}
+                          </option>
+                        ))
+                      ) : (
+                        <option value={chatCategory || 'UNCLASSIFIED'}>
+                          {chatCategory || 'UNCLASSIFIED'}
+                        </option>
+                      )}
                     </select>
                   </div>
 
@@ -1190,29 +1407,49 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
             </div>
 
             {/* Badge Status */}
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-[#35105E] text-[#D8B4FE] border border-[#D8B4FE]/40 mb-3 shadow-[0_0_12px_rgba(168,85,247,0.3)]">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-[#35105E] text-[#D8B4FE] border border-[#D8B4FE]/40 mb-2 shadow-[0_0_12px_rgba(168,85,247,0.3)]">
               <Sparkles className="w-3.5 h-3.5 text-[#D8B4FE]" />
-              <span>REPORT TERSIMPAN</span>
+              <span>MORAJAWS SYSTEM</span>
             </div>
 
             {/* Title */}
-            <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-              Laporan Berhasil Disimpan!
+            <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight uppercase">
+              REPORT TERSIMPAN!
             </h3>
 
-            <p className="text-xs sm:text-sm text-[#E9D5FF]/90 mt-2 leading-relaxed">
-              Pembaruan status pengerjaan untuk WO{' '}
-              <span className="font-mono font-bold text-white bg-[#35105E]/80 px-2 py-0.5 rounded-md border border-[#D8B4FE]/30">
-                {activeTicket.woNumber}
-              </span>{' '}
-              telah diverifikasi dan tersimpan secara permanen di database Cloud Firestore.
+            <p className="text-xs sm:text-sm text-[#E9D5FF] mt-1.5 font-medium leading-relaxed">
+              Laporan berhasil disimpan dan tiket WO kini berstatus <strong className="text-amber-300 font-bold">BUTUH APPROVAL</strong> (Menunggu pemeriksaan & persetujuan Dispatch).
             </p>
 
+            {/* System Status Indicators */}
+            <div className="grid grid-cols-2 gap-2 mt-3.5 mb-2">
+              <div className="py-1.5 px-3 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 shadow-[0_0_12px_rgba(245,158,11,0.2)]">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Status: BUTUH APPROVAL</span>
+              </div>
+              <div className="py-1.5 px-3 rounded-xl bg-[#7135B5]/25 border border-[#D8B4FE]/30 text-[#E9D5FF] font-bold text-xs flex items-center justify-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-[#D8B4FE]" />
+                <span>Firestore Synced</span>
+              </div>
+            </div>
+
             {/* Snapshot Summary Box */}
-            <div className="my-5 p-3.5 rounded-2xl bg-[#35105E]/40 border border-[#D8B4FE]/25 text-left text-xs space-y-2">
+            <div className="my-4 p-3.5 rounded-2xl bg-[#35105E]/40 border border-[#D8B4FE]/25 text-left text-xs space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[#D8B4FE]/70">Status WO Baru:</span>
-                <span className="font-bold text-white bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-md border border-emerald-400/30">
+                <span className="text-[#D8B4FE]/70">No. Work Order:</span>
+                <span className="font-mono font-bold text-white bg-[#35105E] px-2 py-0.5 rounded border border-[#D8B4FE]/30">
+                  {activeTicket.woNumber}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#D8B4FE]/70">Approval Dispatch:</span>
+                <span className="font-bold text-amber-300 bg-amber-500/20 px-2.5 py-0.5 rounded-md border border-amber-400/40 animate-pulse">
+                  BUTUH APPROVAL
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#D8B4FE]/70">Report Status:</span>
+                <span className="font-bold text-white bg-purple-500/25 text-[#E9D5FF] px-2.5 py-0.5 rounded-md border border-[#D8B4FE]/30">
                   {savedReportSnapshot?.status || reportStatus}
                 </span>
               </div>
@@ -1271,7 +1508,7 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
               <X className="w-5 h-5" />
             </button>
             <img
-              src={zoomImage}
+              src={getSafePreviewUrl(zoomImage)}
               alt="Lampiran Bukti Lapangan"
               className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl"
             />

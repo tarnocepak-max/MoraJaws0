@@ -674,6 +674,68 @@ export const MASTER_CANONICAL_FIELDS: CanonicalFieldConfig[] = [
 ];
 
 // -------------------------------------------------------------
+// Mandatory Import Columns Specification (BAGIAN 1)
+// -------------------------------------------------------------
+export interface MandatoryImportColumnDef {
+  key: string;
+  label: string;
+  aliases: string[];
+}
+
+export const MANDATORY_IMPORT_COLUMNS: MandatoryImportColumnDef[] = [
+  {
+    key: 'customerId',
+    label: 'Customer ID',
+    aliases: ['customer id', 'id customer', 'customerid', 'id_customer', 'cust id', 'no pelanggan', 'id pelanggan']
+  },
+  {
+    key: 'workOrderNumber',
+    label: 'WO Number',
+    aliases: ['wo number', 'no wo', 'nomor wo', 'work order number', 'wonumber', 'no. wo', 'wo_number', 'wo id']
+  },
+  {
+    key: 'streetName',
+    label: 'Street Name',
+    aliases: ['street name', 'streetname', 'street_name', 'alamat', 'jalan', 'nama jalan', 'street']
+  },
+  {
+    key: 'clusterName',
+    label: 'Cluster Name',
+    aliases: ['cluster name', 'clustername', 'cluster_name', 'cluster', 'nama cluster']
+  },
+  {
+    key: 'fatCode',
+    label: 'FAT',
+    aliases: ['fat', 'fat code', 'fat_code', 'kode fat', 'id fat']
+  },
+  {
+    key: 'fdtCode',
+    label: 'FDT',
+    aliases: ['fdt', 'fdt code', 'fdt_code', 'kode fdt', 'id fdt']
+  },
+  {
+    key: 'customerContact1',
+    label: 'Customer Phone',
+    aliases: ['customer phone', 'customer phone 1', 'customer phone1', 'customer_phone', 'customerphone', 'no telp', 'no hp', 'phone', 'telepon', 'no handphone']
+  },
+  {
+    key: 'contractorName',
+    label: 'Contractor Name',
+    aliases: ['contractor name', 'contactor name', 'contractor_name', 'contactor_name', 'nama kontraktor', 'kategori kontraktor', 'kategori vendor', 'kategori mitra', 'vendor', 'mitra', 'kontraktor', 'contractor', 'contactor']
+  },
+  {
+    key: 'area',
+    label: 'Area',
+    aliases: ['area', 'wilayah', 'region']
+  },
+  {
+    key: 'appointmentDate',
+    label: 'Appointment Date',
+    aliases: ['appointment date', 'date', 'appointment_date', 'tanggal janji', 'tgl appointment', 'visit date', 'schedule date', 'tanggal']
+  }
+];
+
+// -------------------------------------------------------------
 // Validation Helpers (Strict Rules from Master Prompt)
 // -------------------------------------------------------------
 
@@ -1244,8 +1306,11 @@ export function processRawImportWithEngine(
   validCount: number;
   problematicCount: number;
   duplicateCount: number;
+  readyToImportCount: number;
   unrecognizedHeaders: string[];
   detectedHeaders: string[];
+  missingMandatoryHeaders: string[];
+  headerCheckPassed: boolean;
   detectedContractors: DetectedImportContractor[];
   newCoverageAreas: string[];
 } {
@@ -1255,14 +1320,17 @@ export function processRawImportWithEngine(
       validCount: 0,
       problematicCount: 0,
       duplicateCount: 0,
+      readyToImportCount: 0,
       unrecognizedHeaders: [],
       detectedHeaders: [],
+      missingMandatoryHeaders: [],
+      headerCheckPassed: true,
       detectedContractors: [],
       newCoverageAreas: []
     };
   }
 
-  // Detect headers
+  // 1. Detect headers and check against canonical definitions
   const detectedHeaders = Object.keys(rawRows[0]);
   const headerToCanonicalMap: Record<string, CanonicalFieldConfig | null> = {};
   const unrecognizedHeaders: string[] = [];
@@ -1276,6 +1344,32 @@ export function processRawImportWithEngine(
       unrecognizedHeaders.push(rawH);
     }
   });
+
+  // 2. Strict Check for Mandatory Headers (BAGIAN 1 - A & B)
+  const matchedCanonicalKeys = new Set(
+    Object.values(headerToCanonicalMap)
+      .filter((cfg): cfg is CanonicalFieldConfig => Boolean(cfg))
+      .map(cfg => cfg.canonicalField)
+  );
+
+  const missingMandatoryHeaders: string[] = [];
+  MANDATORY_IMPORT_COLUMNS.forEach(col => {
+    const directMatch = matchedCanonicalKeys.has(col.key);
+    if (!directMatch) {
+      const aliasMatch = detectedHeaders.some(rawH => {
+        const cleanHeader = rawH.toLowerCase().trim().replace(/[\s\-_]+/g, '');
+        return col.aliases.some(a => {
+          const cleanAlias = a.toLowerCase().trim().replace(/[\s\-_]+/g, '');
+          return cleanHeader === cleanAlias || cleanHeader.includes(cleanAlias) || cleanAlias.includes(cleanHeader);
+        });
+      });
+      if (!aliasMatch) {
+        missingMandatoryHeaders.push(col.label);
+      }
+    }
+  });
+
+  const headerCheckPassed = missingMandatoryHeaders.length === 0;
 
   // Automatically extract & reconcile Contractor Categories from imported rows
   const {
@@ -1299,6 +1393,7 @@ export function processRawImportWithEngine(
     const unrecognizedColumns: string[] = [];
     const validationErrors: string[] = [];
     let rowAppointmentDateMeta: DateParseResult | undefined = undefined;
+    let rawAppointmentDateValue = '';
 
     // Map each cell
     Object.entries(row).forEach(([rawHeader, val], colIdx) => {
@@ -1333,14 +1428,15 @@ export function processRawImportWithEngine(
           mapped.initialTicketCategory = rawVal;
           break;
         case 'date':
-          mapped.date = normalizeDate(rawVal);
-          break;
         case 'appointmentDate': {
-          // Strictly parse from source WO Appointment Date without timezone shifts
+          rawAppointmentDateValue = rawVal;
           rowAppointmentDateMeta = parseAppointmentDate(rawVal);
-          mapped.appointmentDate = rowAppointmentDateMeta.date || undefined;
-          if (!rowAppointmentDateMeta.isValid && rowAppointmentDateMeta.error) {
-            validationErrors.push(rowAppointmentDateMeta.error);
+          if (rowAppointmentDateMeta.isValid && rowAppointmentDateMeta.date) {
+            mapped.appointmentDate = rowAppointmentDateMeta.date;
+            mapped.date = rowAppointmentDateMeta.date;
+          } else {
+            mapped.appointmentDate = undefined;
+            mapped.date = undefined;
           }
           break;
         }
@@ -1482,42 +1578,147 @@ export function processRawImportWithEngine(
     const distResult = runWODistributionEngine(mapped, mergedContractors, mergedCoverageAreas, operatorRole);
     Object.assign(mapped, distResult.ticket);
 
-    // Validation 1: WO Number
-    const woNum = (mapped.woNumber || '').trim().toUpperCase();
+    // -------------------------------------------------------------
+    // STRICT ROW VALIDATION (BAGIAN 1 - C & E)
+    // 9 Mandatory Columns:
+    // 1. Customer ID
+    // 2. WO Number
+    // 3. Street Name
+    // 4. Cluster Name
+    // 5. FAT
+    // 6. FDT
+    // 7. Customer Phone
+    // 8. Contractor Name
+    // 9. Area
+    // PLUS Appointment Date (Valid date format)
+    // -------------------------------------------------------------
+    const emptyFields: string[] = [];
+    const formatErrors: string[] = [];
+    const problematicColumns: string[] = [];
+
+    // 1. Customer ID
+    const custIdVal = (mapped.idCustomer || mapped.customerId || '').trim();
+    if (!custIdVal) {
+      emptyFields.push('Customer ID');
+      problematicColumns.push('Customer ID');
+    } else if (!isValidCustomerId(custIdVal)) {
+      formatErrors.push(`Customer ID '${custIdVal}' tidak valid (harus 7 digit angka)`);
+      problematicColumns.push('Customer ID');
+    }
+
+    // 2. WO Number
+    const woNumVal = (mapped.woNumber || mapped.workOrderNumber || '').trim().toUpperCase();
     let isDuplicate = false;
+    let dupReason = '';
 
-    if (!woNum) {
-      validationErrors.push('Nomor Work Order (WO Number) wajib diisi.');
-    } else if (!isValidWoNumber(woNum)) {
-      validationErrors.push(`Format nomor WO '${woNum}' tidak valid (contoh resmi: WO20267399330).`);
-    } else if (existingWoNumbers.has(woNum)) {
+    if (!woNumVal) {
+      emptyFields.push('WO Number');
+      problematicColumns.push('WO Number');
+    } else if (!isValidWoNumber(woNumVal)) {
+      formatErrors.push(`Format nomor WO '${woNumVal}' tidak valid (contoh: WO20267399330)`);
+      problematicColumns.push('WO Number');
+    } else if (seenWosInBatch.has(woNumVal)) {
       isDuplicate = true;
-      validationErrors.push(`Nomor WO ${woNum} sudah ada di database (duplikat).`);
-    } else if (seenWosInBatch.has(woNum)) {
+      dupReason = `Nomor WO ${woNumVal} duplikat dalam file impor`;
+      problematicColumns.push('WO Number');
+    } else if (existingWoNumbers.has(woNumVal)) {
       isDuplicate = true;
-      validationErrors.push(`Nomor WO ${woNum} duplikat dalam file impor.`);
+      dupReason = `Nomor WO ${woNumVal} sudah ada di database Firestore (duplikat dicegah)`;
+      problematicColumns.push('WO Number');
     } else {
-      seenWosInBatch.add(woNum);
+      seenWosInBatch.add(woNumVal);
     }
 
-    // Validation 2: Customer ID (Strictly 7 Digits ^[0-9]{7}$)
-    const custId = (mapped.idCustomer || mapped.customerId || '').trim();
-    if (!custId) {
-      validationErrors.push('Customer ID wajib diisi.');
-    } else if (!/^[0-9]{7}$/.test(custId)) {
-      validationErrors.push(`Customer ID '${custId}' harus tepat 7 digit angka (^[0-9]{7}$).`);
+    // 3. Street Name
+    const streetVal = (mapped.streetName || '').trim();
+    if (!streetVal) {
+      emptyFields.push('Street Name');
+      problematicColumns.push('Street Name');
     }
 
-    // Validation 3: Customer Name & Phone
-    if (!mapped.customerName?.trim()) {
-      validationErrors.push('Nama pelanggan (Customer Name) wajib diisi.');
+    // 4. Cluster Name
+    const clusterVal = (mapped.clusterName || '').trim();
+    if (!clusterVal) {
+      emptyFields.push('Cluster Name');
+      problematicColumns.push('Cluster Name');
     }
 
-    if (!mapped.customerPhone?.trim()) {
-      validationErrors.push('Nomor telepon pelanggan (Customer Phone) wajib diisi.');
+    // 5. FAT
+    const fatVal = (mapped.fatCode || '').trim();
+    if (!fatVal) {
+      emptyFields.push('FAT');
+      problematicColumns.push('FAT');
     }
 
-    const isValid = validationErrors.length === 0;
+    // 6. FDT
+    const fdtVal = (mapped.fdtCode || '').trim();
+    if (!fdtVal) {
+      emptyFields.push('FDT');
+      problematicColumns.push('FDT');
+    }
+
+    // 7. Customer Phone
+    const phoneVal = (mapped.customerPhone || mapped.customerContact1 || '').trim();
+    if (!phoneVal) {
+      emptyFields.push('Customer Phone');
+      problematicColumns.push('Customer Phone');
+    } else {
+      const { valid: phoneValid } = normalizePhone(phoneVal);
+      if (!phoneValid && phoneVal.replace(/\D/g, '').length < 8) {
+        formatErrors.push(`Nomor telepon pelanggan '${phoneVal}' tidak valid`);
+        problematicColumns.push('Customer Phone');
+      }
+    }
+
+    // 8. Contractor Name
+    const contractorVal = (mapped.contractorName || mapped.contactorName || '').trim();
+    if (!contractorVal) {
+      emptyFields.push('Contractor Name');
+      problematicColumns.push('Contractor Name');
+    }
+
+    // 9. Area
+    const areaVal = (mapped.area || '').trim();
+    if (!areaVal) {
+      emptyFields.push('Area');
+      problematicColumns.push('Area');
+    }
+
+    // 10. Appointment Date
+    if (!rawAppointmentDateValue && !mapped.appointmentDate && !mapped.date) {
+      emptyFields.push('Appointment Date');
+      problematicColumns.push('Appointment Date');
+    } else {
+      const parsedCheck: DateParseResult = rowAppointmentDateMeta || parseAppointmentDate(mapped.appointmentDate || mapped.date || rawAppointmentDateValue);
+      if (!parsedCheck.isValid || !parsedCheck.date) {
+        formatErrors.push(parsedCheck.error || `Format tanggal Appointment Date '${rawAppointmentDateValue || mapped.appointmentDate || mapped.date}' tidak valid`);
+        problematicColumns.push('Appointment Date');
+      } else {
+        mapped.appointmentDate = parsedCheck.date;
+        mapped.date = parsedCheck.date;
+      }
+    }
+
+    // Determine Status Type
+    let statusType: 'VALID' | 'DATA KOSONG' | 'HEADER TIDAK DITEMUKAN' | 'FORMAT TIDAK VALID' | 'WO DUPLIKAT';
+
+    if (isDuplicate) {
+      statusType = 'WO DUPLIKAT';
+      validationErrors.push(dupReason);
+    } else if (!headerCheckPassed) {
+      statusType = 'HEADER TIDAK DITEMUKAN';
+      validationErrors.push(`Header wajib tidak ditemukan pada file: ${missingMandatoryHeaders.join(', ')}`);
+    } else if (emptyFields.length > 0) {
+      statusType = 'DATA KOSONG';
+      validationErrors.push(`Kolom wajib kosong: ${emptyFields.join(', ')}`);
+    } else if (formatErrors.length > 0) {
+      statusType = 'FORMAT TIDAK VALID';
+      validationErrors.push(...formatErrors);
+    } else {
+      statusType = 'VALID';
+    }
+
+    const isValid = statusType === 'VALID' && !isDuplicate;
 
     if (isDuplicate) duplicateCount++;
     if (isValid) validCount++; else problematicCount++;
@@ -1527,6 +1728,8 @@ export function processRawImportWithEngine(
       raw: row,
       mapped,
       isValid,
+      statusType,
+      problematicColumns: Array.from(new Set(problematicColumns)),
       validationErrors,
       isDuplicate,
       unrecognizedColumns,
@@ -1534,13 +1737,18 @@ export function processRawImportWithEngine(
     });
   });
 
+  const readyToImportCount = parsedRows.filter(r => r.isValid && !r.isDuplicate).length;
+
   return {
     parsedRows,
     validCount,
     problematicCount,
     duplicateCount,
+    readyToImportCount,
     unrecognizedHeaders: Array.from(new Set(unrecognizedHeaders)),
     detectedHeaders,
+    missingMandatoryHeaders,
+    headerCheckPassed,
     detectedContractors,
     newCoverageAreas: newCoverageAreaNames
   };

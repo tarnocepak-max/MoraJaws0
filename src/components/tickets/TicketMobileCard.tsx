@@ -2,7 +2,7 @@ import React from 'react';
 import { Ticket } from '../../types/index.ts';
 import { useUIConfig } from '../../context/UIConfigContext';
 import { useApp } from '../../context/AppContext';
-import { StatusAgentBadge, StatusInstallerBadge, StatusWhatsAppBadge } from '../common/Badge';
+import { StatusAgentBadge, StatusInstallerBadge, StatusWhatsAppBadge, StatusApprovalBadge } from '../common/Badge';
 import {
   MessageSquare,
   MessageCircle,
@@ -223,6 +223,7 @@ export const TicketMobileCard: React.FC<TicketMobileCardProps> = ({
 
         {/* Status Badges Group */}
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          <StatusApprovalBadge status={ticket.approvalStatus} />
           <StatusWhatsAppBadge status={ticket.statusWhatsApp} />
           <StatusInstallerBadge status={ticket.statusWOInstaller} />
           <StatusAgentBadge status={ticket.statusWOAgent} />

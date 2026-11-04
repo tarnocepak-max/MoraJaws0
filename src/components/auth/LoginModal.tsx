@@ -53,8 +53,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       const email = authResult.user.email || '';
       const uid = authResult.user.uid || '';
       const displayName = authResult.user.displayName || '';
+      const idToken = await authResult.user.getIdToken().catch(() => undefined);
 
-      const res = await loginWithFirebase({ email, uid, displayName });
+      const res = await loginWithFirebase({ email, uid, displayName, idToken });
       if (res.success && res.user) {
         onLoginSuccess?.(res.user.role);
         onClose?.();

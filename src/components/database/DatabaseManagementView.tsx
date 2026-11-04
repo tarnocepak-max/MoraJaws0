@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Ticket, User, Contractor, CoverageArea } from '../../types/index.ts';
 import { parseAppointmentDate } from '../../services/appointmentDateParser';
+import { DuplicateAuditReport } from '../../services/woDeduplicationService';
 import {
   Database,
   Server,
@@ -29,10 +30,12 @@ import {
   Wrench,
   Sparkles,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Download
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { StatusAgentBadge, StatusInstallerBadge } from '../common/Badge';
+import { downloadProductionBackup } from '../../services/backupDownloadService';
 
 export type DatabaseSubmenu =
   | 'overview'
@@ -54,7 +57,8 @@ export const DatabaseManagementView: React.FC = () => {
     archiveTicket,
     restoreTicket,
     deleteTicket,
-    updateTicket
+    updateTicket,
+    executeComprehensiveDeduplication
   } = useApp();
   const { toast } = useToast();
 
@@ -65,6 +69,25 @@ export const DatabaseManagementView: React.FC = () => {
   const [selectedAppointmentDate, setSelectedAppointmentDate] = useState('');
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
   const [editForm, setEditForm] = useState<Partial<Ticket>>({});
+  const [auditReport, setAuditReport] = useState<DuplicateAuditReport | null>(null);
+  const [isDeduplicating, setIsDeduplicating] = useState(false);
+  const [isDownloadingBackup, setIsDownloadingBackup] = useState(false);
+
+  const handleDownloadBackup = async () => {
+    setIsDownloadingBackup(true);
+    try {
+      const res = await downloadProductionBackup();
+      if (res.success) {
+        toast.success(`Backup database (${res.size?.toLocaleString()} bytes) berhasil diverifikasi dan diunduh.`);
+      } else {
+        toast.error(res.error || 'Gagal mengunduh file backup database');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Terjadi kesalahan saat mengunduh backup');
+    } finally {
+      setIsDownloadingBackup(false);
+    }
+  };
 
   // 1. Overview Calculations
   const totalWOs = tickets.length;
@@ -230,6 +253,30 @@ export const DatabaseManagementView: React.FC = () => {
     toast.success(`Berhasil merekonsiliasi WO ${woKey}. 1 record utama dipertahankan.`, 'Rekonsiliasi Sukses');
   };
 
+  // Comprehensive automated deduplication across Firestore
+  const handleRunComprehensiveDeduplication = async () => {
+    setIsDeduplicating(true);
+    try {
+      const report = await executeComprehensiveDeduplication();
+      setAuditReport(report);
+      if (report.totalDuplicatesCleaned > 0) {
+        toast.success(
+          `BERHASIL: Pembersihan otomatis selesai. ${report.totalDuplicatesCleaned} dokumen duplikat berhasil direkonsiliasi dan dibersihkan dari Firestore.`,
+          'Pembersihan Selesai'
+        );
+      } else {
+        toast.info(
+          `Audit selesai: Seluruh ${report.totalValid} dokumen WO valid dan tidak ditemukan duplikasi data.`,
+          'Database Bersih'
+        );
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Gagal menjalankan pembersihan otomatis.', 'Gagal Proses');
+    } finally {
+      setIsDeduplicating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner Header */}
@@ -245,10 +292,32 @@ export const DatabaseManagementView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+          {(currentUser.role === 'super_admin' || currentUser.role === 'management_data') && (
+            <button
+              type="button"
+              onClick={handleDownloadBackup}
+              disabled={isDownloadingBackup}
+              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-md border border-emerald-400/50 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 hover:scale-[1.02] active:scale-95"
+              title="Unduh berkas morajaws_production_firestore_backup.json"
+            >
+              {isDownloadingBackup ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Mengunduh Backup...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 text-white" />
+                  <span>Download Backup Database</span>
+                </>
+              )}
+            </button>
+          )}
+
           <span className="px-3 py-1.5 rounded-xl bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-bold flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-purple-400" />
-            <span>Hak Akses: Super Agent</span>
+            <span className="capitalize">Role: {currentUser.role.replace('_', ' ')}</span>
           </span>
         </div>
       </div>
@@ -597,18 +666,145 @@ export const DatabaseManagementView: React.FC = () => {
         </div>
       )}
 
-      {/* SUBMENU 4: DUPLICATE CHECKER */}
+      {/* SUBMENU 4: DUPLICATE CHECKER & AUTOMATED CLEANUP */}
       {activeSubmenu === 'duplicate_checker' && (
-        <div className="space-y-4">
+        <div className="space-y-5">
+          {/* Action Banner: Automated Initialization & Deduplication */}
+          <div className="p-5 sm:p-6 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/50 dark:from-indigo-950/40 dark:via-slate-900 dark:to-purple-950/30 shadow-sm space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-md shrink-0">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm sm:text-base text-slate-900 dark:text-white">
+                    Initialisasi & Pembersihan Otomatis Data Ganda (Duplicate Cleanup)
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                    Sistem otomatis mengaudit seluruh dokumen WO di Firestore, mendeteksi duplikasi berdasarkan nomor WO dan kombinasi pelanggan, lalu memilih <strong>1 Master Record</strong> terbaik (status paling maju, teknisi terisi, laporan terisi, pembaruan terbaru), menggabungkan data pelengkap, dan menghapus dokumen ganda yang berlebih.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleRunComprehensiveDeduplication}
+                disabled={isDeduplicating}
+                className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 shrink-0"
+              >
+                {isDeduplicating ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Mengaudit & Membersihkan...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Jalankan Pembersihan Otomatis</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Audit & Cleanup Report Summary (7 Metrics) */}
+            {auditReport && (
+              <div className="pt-4 border-t border-indigo-100 dark:border-indigo-900/40 space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-indigo-950 dark:text-indigo-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                    <span>Ringkasan Hasil Audit & Pembersihan Database</span>
+                  </h4>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Audit terakhir: baru saja
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 text-xs">
+                  {/* 1. Total Dokumen Diperiksa */}
+                  <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+                    <span className="text-[10.5px] text-slate-500 block truncate">1. Dokumen Diperiksa</span>
+                    <span className="text-lg font-black font-mono text-slate-900 dark:text-white mt-1 block">
+                      {auditReport.totalInspected}
+                    </span>
+                  </div>
+
+                  {/* 2. Total Data Valid */}
+                  <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-emerald-200 dark:border-emerald-800 shadow-2xs">
+                    <span className="text-[10.5px] text-emerald-600 dark:text-emerald-400 font-medium block truncate">2. Data Valid</span>
+                    <span className="text-lg font-black font-mono text-emerald-700 dark:text-emerald-300 mt-1 block">
+                      {auditReport.totalValid}
+                    </span>
+                  </div>
+
+                  {/* 3. Total Duplikasi Ditemukan */}
+                  <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-amber-200 dark:border-amber-800 shadow-2xs">
+                    <span className="text-[10.5px] text-amber-600 dark:text-amber-400 font-medium block truncate">3. Duplikasi Ditemukan</span>
+                    <span className="text-lg font-black font-mono text-amber-700 dark:text-amber-300 mt-1 block">
+                      {auditReport.totalDuplicatesDetected}
+                    </span>
+                  </div>
+
+                  {/* 4. Total Duplikasi Berhasil Dibersihkan */}
+                  <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-indigo-200 dark:border-indigo-800 shadow-2xs">
+                    <span className="text-[10.5px] text-indigo-600 dark:text-indigo-400 font-medium block truncate">4. Berhasil Dibersihkan</span>
+                    <span className="text-lg font-black font-mono text-indigo-700 dark:text-indigo-300 mt-1 block">
+                      {auditReport.totalDuplicatesCleaned}
+                    </span>
+                  </div>
+
+                  {/* 5. Total Data Konflik */}
+                  <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-rose-200 dark:border-rose-800 shadow-2xs">
+                    <span className="text-[10.5px] text-rose-600 dark:text-rose-400 font-medium block truncate">5. Data Konflik</span>
+                    <span className="text-lg font-black font-mono text-rose-700 dark:text-rose-300 mt-1 block">
+                      {auditReport.totalConflicts}
+                    </span>
+                  </div>
+
+                  {/* 6. Total Perlu Pemeriksaan Manual */}
+                  <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-amber-200 dark:border-amber-800 shadow-2xs">
+                    <span className="text-[10.5px] text-amber-700 dark:text-amber-300 font-medium block truncate">6. Perlu Cek Manual</span>
+                    <span className="text-lg font-black font-mono text-amber-800 dark:text-amber-200 mt-1 block">
+                      {auditReport.totalManualReviewNeeded}
+                    </span>
+                  </div>
+
+                  {/* 7. Total Proses Gagal */}
+                  <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+                    <span className="text-[10.5px] text-slate-500 block truncate">7. Proses Gagal</span>
+                    <span className="text-lg font-black font-mono text-slate-600 dark:text-slate-400 mt-1 block">
+                      {auditReport.totalFailed}
+                    </span>
+                  </div>
+                </div>
+
+                {auditReport.conflictItems.length > 0 && (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 rounded-xl border border-rose-200 dark:border-rose-900 text-xs space-y-1.5">
+                    <span className="font-bold text-rose-800 dark:text-rose-200">
+                      Perhatian: Ditemukan {auditReport.conflictItems.length} record yang memerlukan tinjauan manual:
+                    </span>
+                    <ul className="list-disc list-inside space-y-0.5 text-rose-700 dark:text-rose-300">
+                      {auditReport.conflictItems.map((c, i) => (
+                        <li key={i}>
+                          <span className="font-mono font-bold">{c.woNumber}</span>: {c.reasons.join(', ')}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* List of Detected Duplicate Groups in Active View */}
           <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
                   <Copy className="w-4 h-4 text-rose-600" />
-                  <span>Pemeriksa Duplikasi WO Number (Duplicate Checker)</span>
+                  <span>Daftar Duplikasi WO Aktif ({duplicateGroups.length} grup)</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Memastikan aturan 1 WO Number = 1 Master Record aktif di database. Rekonsiliasi aman tanpa menghapus riwayat laporan teknisi.
+                  Menampilkan grup record Work Order dengan nomor WO yang sama.
                 </p>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold ${
@@ -625,7 +821,7 @@ export const DatabaseManagementView: React.FC = () => {
                 <CheckCircle2 className="w-10 h-10 text-emerald-600 dark:text-emerald-400 mx-auto mb-2" />
                 <h4 className="font-bold text-sm text-emerald-900 dark:text-emerald-200">Database Bersih dari Duplikasi</h4>
                 <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
-                  Setiap nomor Work Order dalam database aktif adalah unik. Tidak ditemukan record ganda.
+                  Seluruh record Work Order dalam database aktif adalah unik dan memenuhi aturan integritas data.
                 </p>
               </div>
             ) : (
@@ -644,7 +840,7 @@ export const DatabaseManagementView: React.FC = () => {
                       </div>
                       <button
                         onClick={() => handleReconcileKeepFirst(woKey)}
-                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
                       >
                         <Check className="w-3.5 h-3.5" />
                         <span>Rekonsiliasi (Pertahankan 1 Utama)</span>
@@ -659,7 +855,7 @@ export const DatabaseManagementView: React.FC = () => {
                             <span className="font-semibold text-slate-600 dark:text-slate-300">{t.dateUpload || t.date}</span>
                           </div>
                           <div className="font-bold text-slate-900 dark:text-white">{t.customerName}</div>
-                          <div className="text-[11px] text-slate-500">Teknisi: {t.installerName || 'Unassigned'} · Vendor: {t.contactorName}</div>
+                          <div className="text-[11px] text-slate-500">Teknisi: {t.installerName || 'Unassigned'} · Vendor: {t.contactorName} · Status: {t.statusWOInstaller}</div>
                         </div>
                       ))}
                     </div>
