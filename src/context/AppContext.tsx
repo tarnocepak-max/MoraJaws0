@@ -1348,30 +1348,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       const data = await serverRes.json();
       if (!data.success) {
-        const cleanEmail = String(firebaseData.email || '').trim().toLowerCase();
-        if (cleanEmail === 'tarnocepak@gmail.com') {
-          const superAdmin = users.find(u => u.role === 'super_admin') || DEFAULT_USERS[0];
-          const authedUser: User = {
-            ...superAdmin,
-            email: cleanEmail,
-            lastLoginAt: new Date().toISOString()
-          };
-          setCurrentUser(authedUser);
-          setIsLoggedIn(true);
-          try {
-            localStorage.setItem('morajaws_logged_in', 'true');
-            localStorage.setItem('morajaws_auth_session', JSON.stringify({
-              userId: authedUser.id,
-              username: authedUser.username,
-              role: authedUser.role,
-              name: authedUser.name,
-              loginAt: authedUser.lastLoginAt,
-              token: `mora_fb_${authedUser.id}_${Date.now()}`
-            }));
-          } catch (e) {}
-          addAuditLog('Login Success (Firebase Super Admin)', 'auth', authedUser.id, `Pengguna ${authedUser.name} (${authedUser.role}) berhasil login via Firebase Auth`);
-          return { success: true, user: authedUser };
-        }
         addAuditLog('Firebase Login Failed', 'auth', firebaseData.email, data.error || 'Login Firebase gagal');
         return { success: false, error: data.error || 'Akun Google Anda belum terdaftar di MoraJaws.' };
       }

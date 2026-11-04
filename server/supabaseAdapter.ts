@@ -2811,3 +2811,112 @@ export async function deleteSystemErrorLogFromSupabase(id: string): Promise<bool
   }
 }
 
+/**
+ * Inserts user session metadata into public.user_sessions in Supabase.
+ * Strictly persists token_fingerprint (SHA-256 hash), never the raw plaintext bearer token.
+ */
+export async function insertUserSessionToSupabase(session: {
+  sessionId: string;
+  userId: string;
+  username: string;
+  name: string;
+  role: string;
+  contractor?: string;
+  loginAt: string;
+  lastActivityAt: string;
+  expiresAt: string;
+  status: 'active' | 'expired' | 'revoked';
+  ipAddress?: string;
+  userAgent?: string;
+  deviceType?: string;
+  tokenFingerprint?: string;
+}): Promise<boolean> {
+  const client = getSupabaseBackendClient();
+  if (!client) return false;
+
+  try {
+    const row = {
+      id: `us_${session.sessionId}`,
+      session_id: session.sessionId,
+      user_id: session.userId,
+      username: session.username,
+      name: session.name,
+      role: session.role,
+      contractor: session.contractor || null,
+      login_at: session.loginAt,
+      last_activity_at: session.lastActivityAt,
+      expires_at: session.expiresAt,
+      status: session.status || 'active',
+      ip_address: session.ipAddress && session.ipAddress !== '127.0.0.1' && !session.ipAddress.includes(':') ? session.ipAddress : null,
+      user_agent: session.userAgent || null,
+      device_type: session.deviceType || 'unknown',
+      token_fingerprint: session.tokenFingerprint || null,
+      payload: {
+        raw_ip: session.ipAddress || null,
+        created_via: 'express_backend_session_dual_standby'
+      }
+    };
+
+    const { error } = await client.from('user_sessions').upsert([row], { onConflict: 'session_id' });
+    if (error) {
+      // Foreign key or table warning logged without breaking session creation
+      console.warn('[Supabase DAL] insertUserSession warning:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('[Supabase DAL] insertUserSession exception:', err?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Revokes a user session in public.user_sessions table.
+ */
+export async function revokeUserSessionInSupabase(sessionId: string): Promise<boolean> {
+  const client = getSupabaseBackendClient();
+  if (!client) return false;
+
+  try {
+    const { error } = await client
+      .from('user_sessions')
+      .update({ status: 'revoked', last_activity_at: new Date().toISOString() })
+      .eq('session_id', sessionId);
+
+    if (error) {
+      console.warn('[Supabase DAL] revokeUserSession warning:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('[Supabase DAL] revokeUserSession exception:', err?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Retrieves user sessions from public.user_sessions table.
+ */
+export async function getUserSessionsFromSupabase(userId?: string): Promise<SupabaseOpResult<any[]>> {
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
+  }
+
+  try {
+    let query = client.from('user_sessions').select('*').order('login_at', { ascending: false }).limit(50);
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      return { success: false, error: classifySupabaseError(error) };
+    }
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, error: classifySupabaseError(err) };
+  }
+}
+
+

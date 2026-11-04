@@ -24,7 +24,9 @@ import {
   bulkImportWorkOrdersToSupabase,
   getAppSettingFromSupabase,
   saveAppSettingToSupabase,
-  insertAuditLogToSupabase
+  insertAuditLogToSupabase,
+  insertUserSessionToSupabase,
+  revokeUserSessionInSupabase
 } from './server/supabaseAdapter.ts';
 import { runPhase8ShadowDryRunSuite } from './server/supabaseShadowService.ts';
 import { realtimeSandboxHub, requireSandboxSuperAdmin, getSandboxSuperAdminAllowlist } from './server/realtimeHub.ts';
@@ -1406,19 +1408,14 @@ async function startServer() {
       return false;
     });
 
-    // Auto-link runtime app owner / administrator email (e.g. rayjs666@gmail.com, udiene666@gmail.com, tarnocepak@gmail.com, rayhanafirzanx@gmail.com)
-    const isAdminEmail = cleanEmail === 'rayjs666@gmail.com' || cleanEmail === 'udiene666@gmail.com' || cleanEmail === 'tarnocepak@gmail.com' || cleanEmail === 'rayhanafirzanx@gmail.com' || cleanEmail.includes('rayjs666') || cleanEmail.includes('udiene666') || cleanEmail.includes('tarnocepak') || cleanEmail.includes('rayhanafirzanx');
-    if (!user && (isAdminEmail || db.users.length > 0)) {
-      if (isAdminEmail) {
-        const superAdmin = db.users.find(u => u.role === 'super_admin');
-        if (superAdmin) {
-          if (!superAdmin.altEmail) superAdmin.altEmail = superAdmin.email;
-          superAdmin.email = cleanEmail;
-          if (cleanUid) superAdmin.firebaseUid = cleanUid;
-          if (displayName) superAdmin.name = `${displayName} (Super Admin)`;
-          user = superAdmin;
+    // Check Supabase if user is not found in local persistent store
+    if (!user) {
+      try {
+        const sbUser = (await findUserInSupabase(cleanUid)) || (await findUserInSupabase(cleanEmail));
+        if (sbUser && !sbUser.isDeleted) {
+          user = sbUser;
         }
-      }
+      } catch {}
     }
 
     if (!user) {
@@ -1448,6 +1445,7 @@ async function startServer() {
 
     const sessionId = 'sess_' + Date.now() + '_' + crypto.randomBytes(6).toString('hex');
     const token = crypto.randomBytes(32).toString('hex');
+    const tokenFingerprint = crypto.createHash('sha256').update(token).digest('hex');
     const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
     const userAgent = req.headers['user-agent'] || 'Firebase Web Client';
     const deviceType = userAgent.toLowerCase().includes('mobi') ? 'mobile' : 'desktop';
@@ -1473,6 +1471,24 @@ async function startServer() {
     user.lastLoginAt = nowIso;
     user.loginCount = (user.loginCount || 0) + 1;
     saveDatabaseToDisk();
+
+    // Asynchronously dual-write session metadata to Supabase user_sessions
+    insertUserSessionToSupabase({
+      sessionId,
+      userId: user.id,
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      contractor: user.contractor,
+      loginAt: nowIso,
+      lastActivityAt: nowIso,
+      expiresAt: expiresIso,
+      status: 'active',
+      ipAddress: clientIp,
+      userAgent,
+      deviceType,
+      tokenFingerprint
+    }).catch(() => {});
 
     logServerAudit('Firebase Login Success', 'auth', user.id, `User ${user.name} (${user.role}) berhasil masuk via Firebase Auth [${cleanEmail}]`, user);
 
@@ -1543,27 +1559,7 @@ async function startServer() {
       return false;
     });
 
-    // 2. Fallback check for developer / super admin alias ("ray", "rayjs666", etc.)
-    if (!user && (clean === 'ray' || clean === 'rayjs666' || clean.includes('rayjs666') || clean.includes('rayhanafirzanx'))) {
-      user = db.users.find(u => u.username.toLowerCase() === 'ray' || u.email.toLowerCase() === 'rayjs666@gmail.com');
-      if (!user) {
-        user = {
-          id: 'u-ray',
-          name: 'Ray (Super Admin)',
-          username: 'ray',
-          email: 'rayjs666@gmail.com',
-          altEmail: 'rayhanafirzanx@gmail.com, superadmin@morajaws.net, tarnocepak@gmail.com',
-          role: 'super_admin',
-          active: true,
-          passwordHash: DEFAULT_HASH,
-          createdAt: new Date().toISOString()
-        };
-        db.users.unshift(user);
-        saveDatabaseToDisk();
-      }
-    }
-
-    // 3. Fallback: Check Supabase database if connected
+    // 2. Fallback: Check Supabase database if connected
     if (!user) {
       try {
         const sbUser = await findUserInSupabase(clean);
@@ -1666,7 +1662,7 @@ async function startServer() {
   });
 
   // --- Auth Endpoints with Brute-Force Rate Limiting & Session Lifecycle ---
-  app.post('/api/auth/login', (req: AuthenticatedRequest, res) => {
+  app.post('/api/auth/login', async (req: AuthenticatedRequest, res) => {
     const { username, password, firebaseUid } = req.body;
     if (!username || !password) {
       return res.status(400).json({
@@ -1695,13 +1691,33 @@ async function startServer() {
       u => (
         u.username.toLowerCase() === cleanUser ||
         u.email.toLowerCase() === cleanUser ||
-        (u.altEmail && u.altEmail.toLowerCase().includes(cleanUser)) ||
-        (cleanUser === 'ray' && (u.username.toLowerCase() === 'ray' || u.email.toLowerCase().includes('rayjs666')))
+        (u.altEmail && u.altEmail.toLowerCase().includes(cleanUser))
       ) && !u.isDeleted
     );
 
-    if (!user && (cleanUser === 'ray' || cleanUser === 'rayjs666')) {
-      user = db.users.find(u => u.role === 'super_admin');
+    // If not found in local persistent store, probe Supabase database
+    if (!user) {
+      try {
+        const sbUser = await findUserInSupabase(cleanUser);
+        if (sbUser && !sbUser.isDeleted) {
+          user = {
+            id: sbUser.id,
+            name: sbUser.name,
+            username: sbUser.username || cleanUser,
+            email: sbUser.email || `${cleanUser}@morajaws.net`,
+            role: sbUser.role || 'installer',
+            contractor: sbUser.contractor,
+            contractorId: sbUser.contractorId,
+            area: sbUser.area,
+            phone: sbUser.phone,
+            active: sbUser.active !== false,
+            passwordHash: DEFAULT_HASH,
+            createdAt: sbUser.createdAt || new Date().toISOString()
+          };
+          db.users.push(user);
+          saveDatabaseToDisk();
+        }
+      } catch {}
     }
 
     if (!user) {
@@ -1723,11 +1739,10 @@ async function startServer() {
     }
 
     const attemptedHash = hashPassword(password);
-    const isDefaultPassword = password === '12345678' || attemptedHash === DEFAULT_HASH;
-    const isFirebaseAuthed = Boolean(firebaseUid);
-    const isHashMatched = user.passwordHash === attemptedHash;
+    const isDefaultAllowed = (password === '12345678' || attemptedHash === DEFAULT_HASH) && user.mustChangePassword;
+    const isHashMatched = user.passwordHash === attemptedHash || isDefaultAllowed;
 
-    if (!isHashMatched && !isFirebaseAuthed && !isDefaultPassword) {
+    if (!isHashMatched) {
       const currentAttempts = (attemptInfo?.count || 0) + 1;
       let lockedUntil: number | undefined;
       if (currentAttempts >= 5) {
@@ -1747,12 +1762,7 @@ async function startServer() {
       });
     }
 
-    // Auto-update password hash if authenticated via Firebase Auth or default password
-    if (isFirebaseAuthed || isDefaultPassword) {
-      user.passwordHash = attemptedHash;
-    }
-
-    if (isDefaultPassword) {
+    if (isDefaultAllowed) {
       user.mustChangePassword = true;
     }
 
@@ -1770,18 +1780,23 @@ async function startServer() {
       SERVER_SESSIONS.forEach(s => {
         if (s.userId === user.id && s.status === 'active') {
           s.status = 'revoked';
+          revokeUserSessionInSupabase(s.sessionId).catch(() => {});
         }
       });
     } else {
       const activeUserSessions = SERVER_SESSIONS.filter(s => s.userId === user.id && s.status === 'active');
       if (activeUserSessions.length >= (db.sessionConfig.maxActiveSessionsPerUser || 3)) {
         const oldest = activeUserSessions.sort((a, b) => new Date(a.loginAt).getTime() - new Date(b.loginAt).getTime())[0];
-        if (oldest) oldest.status = 'revoked';
+        if (oldest) {
+          oldest.status = 'revoked';
+          revokeUserSessionInSupabase(oldest.sessionId).catch(() => {});
+        }
       }
     }
 
     const sessionId = 'sess_' + Date.now() + '_' + crypto.randomBytes(6).toString('hex');
     const token = crypto.randomBytes(32).toString('hex');
+    const tokenFingerprint = crypto.createHash('sha256').update(token).digest('hex');
     const userAgent = req.headers['user-agent'] || 'Web Browser';
     const deviceType = userAgent.toLowerCase().includes('mobi') ? 'mobile' : 'desktop';
 
@@ -1808,6 +1823,24 @@ async function startServer() {
     user.loginCount = (user.loginCount || 0) + 1;
     saveDatabaseToDisk();
 
+    // Asynchronously dual-write session metadata to Supabase user_sessions
+    insertUserSessionToSupabase({
+      sessionId,
+      userId: user.id,
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      contractor: user.contractor,
+      loginAt: nowIso,
+      lastActivityAt: nowIso,
+      expiresAt: expiresIso,
+      status: 'active',
+      ipAddress: clientIp,
+      userAgent,
+      deviceType,
+      tokenFingerprint
+    }).catch(() => {});
+
     logServerAudit('Login Success', 'auth', user.id, `User ${user.name} (${user.role}) berhasil masuk ke sistem`, user);
 
     const { passwordHash: _, ...safeUser } = user;
@@ -1824,6 +1857,7 @@ async function startServer() {
   app.post('/api/auth/logout', requireAuth, (req: AuthenticatedRequest, res) => {
     if (req.session) {
       req.session.status = 'revoked';
+      revokeUserSessionInSupabase(req.session.sessionId).catch(() => {});
     }
     if (req.user) {
       logServerAudit('Logout Success', 'auth', req.user.id, `User ${req.user.name} (${req.user.role}) logout dari sistem`, req.user);

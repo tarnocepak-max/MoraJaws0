@@ -112,17 +112,19 @@ export function getFirebaseAdminApp(): App | null {
   const clientEmailConfigured = Boolean(clientEmail && clientEmail.includes('@'));
   const privateKeyConfigured = validatePrivateKey(privateKey);
 
-  // When required credentials are missing, remain gracefully in 'not_configured' status
-  if (!targetProjectId || !clientEmailConfigured || !privateKeyConfigured) {
+  // If targetProjectId is missing, we cannot initialize Firebase Admin
+  if (!targetProjectId) {
     lastFirebaseAdminHealth = {
       status: 'not_configured',
-      projectId: targetProjectId,
-      clientEmailConfigured,
-      privateKeyConfigured,
-      message: 'Kredensial FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, atau FIREBASE_PRIVATE_KEY belum lengkap pada environment variables.'
+      projectId: undefined,
+      clientEmailConfigured: false,
+      privateKeyConfigured: false,
+      message: 'FIREBASE_PROJECT_ID belum dikonfigurasi pada environment variables atau firebase-applet-config.json.'
     };
     return null;
   }
+
+  const hasServiceAccount = clientEmailConfigured && privateKeyConfigured;
 
   try {
     const existingApps = getApps();
@@ -149,8 +151,8 @@ export function getFirebaseAdminApp(): App | null {
         lastFirebaseAdminHealth = {
           status: 'error',
           projectId: targetProjectId,
-          clientEmailConfigured: true,
-          privateKeyConfigured: true,
+          clientEmailConfigured,
+          privateKeyConfigured,
           message: 'Konfigurasi error: Instance Firebase Admin yang ditemukan memiliki Project ID tidak cocok.'
         };
         return null;
@@ -163,57 +165,55 @@ export function getFirebaseAdminApp(): App | null {
         lastFirebaseAdminHealth = {
           status: 'error',
           projectId: targetProjectId,
-          clientEmailConfigured: true,
-          privateKeyConfigured: true,
+          clientEmailConfigured,
+          privateKeyConfigured,
           message: 'Konfigurasi error: Terdeteksi instance Firebase Admin dengan Project ID berbeda.'
         };
         return null;
       }
 
-      // Check if default app name is available; otherwise use dedicated app name
-      const hasDefault = existingApps.some(app => app.name === '[DEFAULT]');
-      if (!hasDefault) {
-        firebaseAdminApp = initializeApp({
-          credential: cert({
-            projectId: targetProjectId,
-            clientEmail: clientEmail!,
-            privateKey: privateKey!
-          }),
-          projectId: targetProjectId
-        });
-      } else {
-        firebaseAdminApp = initializeApp(
-          {
+      // Initialize with full service account if available, or with projectId for public key verification
+      const appOptions = hasServiceAccount
+        ? {
             credential: cert({
               projectId: targetProjectId,
               clientEmail: clientEmail!,
               privateKey: privateKey!
             }),
             projectId: targetProjectId
-          },
-          MORAJAWS_ADMIN_APP_NAME
-        );
+          }
+        : {
+            projectId: targetProjectId
+          };
+
+      const hasDefault = existingApps.some(app => app.name === '[DEFAULT]');
+      if (!hasDefault) {
+        firebaseAdminApp = initializeApp(appOptions);
+      } else {
+        firebaseAdminApp = initializeApp(appOptions, MORAJAWS_ADMIN_APP_NAME);
       }
     }
 
-    // Set status to 'initialized' (not 'connected' until cryptographic token verification succeeds)
+    // Set status to 'initialized' (transitions to 'connected' once token verification succeeds)
     lastFirebaseAdminHealth = {
       status: 'initialized',
       projectId: targetProjectId,
-      clientEmailConfigured: true,
-      privateKeyConfigured: true,
-      message: `Firebase Admin SDK terinisialisasi untuk project: ${targetProjectId}. Siap memverifikasi token.`
+      clientEmailConfigured,
+      privateKeyConfigured,
+      message: hasServiceAccount
+        ? `Firebase Admin SDK terinisialisasi dengan Service Account untuk project: ${targetProjectId}. Siap memverifikasi token.`
+        : `Firebase Admin SDK terinisialisasi dalam mode Public Key Verification untuk project: ${targetProjectId}. Service account belum dikonfigurasi (BLOCKED).`
     };
 
     return firebaseAdminApp;
   } catch (err: any) {
-    console.error('[Firebase Admin] Inisialisasi Firebase Admin gagal.');
+    console.error('[Firebase Admin] Inisialisasi Firebase Admin gagal:', err?.message || err);
     lastFirebaseAdminHealth = {
       status: 'error',
       projectId: targetProjectId,
       clientEmailConfigured,
       privateKeyConfigured,
-      message: 'Inisialisasi Firebase Admin gagal. Periksa format konfigurasi kredensial.'
+      message: 'Inisialisasi Firebase Admin gagal: ' + (err?.message || 'Periksa konfigurasi.')
     };
     return null;
   }
@@ -259,7 +259,8 @@ export async function verifyFirebaseIdToken(
 
   try {
     const auth = getAuth(app);
-    const decodedToken = await auth.verifyIdToken(token, checkRevoked);
+    const hasServiceAccount = Boolean(lastFirebaseAdminHealth.clientEmailConfigured && lastFirebaseAdminHealth.privateKeyConfigured);
+    const decodedToken = await auth.verifyIdToken(token, hasServiceAccount && checkRevoked);
 
     // Verify audience matches expected project ID
     if (targetProjectId && decodedToken.aud !== targetProjectId) {
