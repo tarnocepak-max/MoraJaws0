@@ -1007,6 +1007,34 @@ function requireSuperAdmin(req: AuthenticatedRequest, res: Response, next: NextF
   next();
 }
 
+function requireAuditLogViewer(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Tidak terautentikasi: Sesi login tidak ditemukan.', code: 'UNAUTHENTICATED' });
+  }
+  if (req.user.role !== 'super_admin' && req.user.role !== 'it_support') {
+    logServerAudit('Access Denied (Audit Log Viewer Required)', 'rbac', req.originalUrl, `User ${req.user.name} (${req.user.role}) ditolak membaca Audit Logs`, req.user);
+    return res.status(403).json({
+      error: 'Akses Ditolak: Otoritas membaca Audit Logs dibatasi untuk Super Admin dan IT Support (Read-Only).',
+      code: 'REQUIRE_AUDIT_LOG_VIEWER'
+    });
+  }
+  next();
+}
+
+function requireTemplateManager(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Tidak terautentikasi: Sesi login tidak ditemukan.', code: 'UNAUTHENTICATED' });
+  }
+  if (req.user.role !== 'super_admin' && req.user.role !== 'dispatch') {
+    logServerAudit('Access Denied (Template Manager Required)', 'rbac', req.originalUrl, `User ${req.user.name} (${req.user.role}) ditolak mengelola WhatsApp Templates`, req.user);
+    return res.status(403).json({
+      error: 'Akses Ditolak: Pengelolaan WhatsApp Templates dibatasi untuk Super Admin dan Dispatch.',
+      code: 'REQUIRE_TEMPLATE_MANAGER'
+    });
+  }
+  next();
+}
+
 function requireBackupDownloadPermission(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   // 1. Dilarang menggunakan parameter ?token= untuk otentikasi
   if (req.query && (req.query.token !== undefined || typeof req.query.token === 'string')) {
@@ -2140,6 +2168,22 @@ async function startServer() {
       if (!isAssigned) {
         return res.status(403).json({ error: 'Akses Ditolak: Anda hanya dapat memperbarui WO yang ditugaskan kepada Anda.' });
       }
+    }
+
+    // Strict RBAC: WO deletion fields cannot be modified via update endpoint
+    if (updates.isDeleted !== undefined || updates.deletedAt !== undefined || updates.deletedBy !== undefined || updates.deletionReason !== undefined) {
+      if (req.user!.role !== 'management_data') {
+        logServerAudit('Bypass Attempt: WO Delete via Update Endpoint', 'ticket', currentTicket.woNumber, `User ${req.user!.name} (${req.user!.role}) mencoba memanipulasi status isDeleted tiket via PUT/PATCH endpoint`, req.user);
+        return res.status(403).json({
+          error: 'Akses Ditolak: Perubahan status penghapusan WO hanya diizinkan untuk role Management Data melalui endpoint resmi.',
+          code: 'REQUIRE_MANAGEMENT_DATA'
+        });
+      }
+      // Even for management_data, deletion must follow dedicated delete endpoint with reason validation >= 5 chars
+      delete updates.isDeleted;
+      delete updates.deletedAt;
+      delete updates.deletedBy;
+      delete updates.deletionReason;
     }
 
     if (updates.appointmentDate) {
@@ -5058,8 +5102,8 @@ async function startServer() {
     res.json({ success: true, message: newMsg, ticket });
   });
 
-  // --- WhatsApp Preview ---
-  app.post('/api/whatsapp/preview', (req, res) => {
+  // --- WhatsApp Preview (Super Admin & Dispatch Exclusive) ---
+  app.post('/api/whatsapp/preview', requireTemplateManager, (req: AuthenticatedRequest, res) => {
     try {
       const { templateBody, ticket } = req.body;
       const result = renderWhatsAppMessage(templateBody, ticket);
@@ -5075,8 +5119,8 @@ async function startServer() {
     }
   });
 
-  // --- Audit Logs ---
-  app.get('/api/audit-logs', requireSuperAdmin, (_req, res) => {
+  // --- Audit Logs (Super Admin & IT Support Read-Only) ---
+  app.get('/api/audit-logs', requireAuditLogViewer, (_req, res) => {
     res.json({ logs: db.auditLogs });
   });
 

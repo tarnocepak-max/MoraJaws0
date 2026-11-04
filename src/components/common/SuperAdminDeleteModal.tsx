@@ -10,7 +10,7 @@ import {
   Lock
 } from 'lucide-react';
 
-export type DeleteTargetType = 'ticket' | 'customer' | 'user';
+export type DeleteTargetType = 'customer' | 'user';
 
 interface SuperAdminDeleteModalProps {
   isOpen: boolean;
@@ -31,7 +31,7 @@ export const SuperAdminDeleteModal: React.FC<SuperAdminDeleteModalProps> = ({
   targetDetails = [],
   onSuccess
 }) => {
-  const { currentUser, deleteTicket, deleteCustomerData, deleteUser } = useApp();
+  const { currentUser, deleteCustomerData, deleteUser } = useApp();
 
   const [deleteMode, setDeleteMode] = useState<'soft' | 'permanent'>('soft');
   const [reason, setReason] = useState('');
@@ -48,12 +48,12 @@ export const SuperAdminDeleteModal: React.FC<SuperAdminDeleteModalProps> = ({
     setError(null);
 
     if (!isSuperAdmin) {
-      setError('Akses ditolak: Hanya peran Super Admin yang memiliki wewenang menghapus data atau akun.');
+      setError('Akses ditolak: Hanya peran Super Admin yang memiliki wewenang mengelola data akun.');
       return;
     }
 
     if (!reason.trim() || reason.trim().length < 5) {
-      setError('Alasan penghapusan wajib diisi minimal 5 karakter (contoh: Duplikasi data terkonfirmasi).');
+      setError('Alasan penghapusan wajib diisi minimal 5 karakter.');
       return;
     }
 
@@ -67,9 +67,7 @@ export const SuperAdminDeleteModal: React.FC<SuperAdminDeleteModalProps> = ({
 
     let res: { success: boolean; error?: string } = { success: false };
 
-    if (targetType === 'ticket') {
-      res = deleteTicket(targetId, reason.trim(), permanent);
-    } else if (targetType === 'customer') {
+    if (targetType === 'customer') {
       res = deleteCustomerData(targetId, reason.trim());
     } else if (targetType === 'user') {
       res = deleteUser(targetId, reason.trim(), permanent);
@@ -87,8 +85,6 @@ export const SuperAdminDeleteModal: React.FC<SuperAdminDeleteModalProps> = ({
 
   const getTargetTitle = () => {
     switch (targetType) {
-      case 'ticket':
-        return 'Work Order';
       case 'customer':
         return 'Data Pelanggan';
       case 'user':

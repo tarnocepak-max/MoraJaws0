@@ -22,7 +22,7 @@ export const ManagementRoleView: React.FC = () => {
     {
       role: 'super_admin',
       label: 'Super Admin (Super Agent)',
-      desc: 'Akses administratif mutlak, konfigurasi global, manajemen akun, Google Sheets, dan penghapusan data.',
+      desc: 'Akses administratif sentral, konfigurasi global, manajemen akun, Google Sheets, dan supervisi operasional (Penghapusan WO dikhususkan untuk Management Data).',
       icon: ShieldCheck,
       color: 'text-purple-600 bg-purple-100 dark:bg-purple-950/60'
     },
@@ -78,8 +78,9 @@ export const ManagementRoleView: React.FC = () => {
     { key: 'manage_users', label: 'Kelola Pengguna Umum & Staff', category: 'Administrasi Akun' },
     { key: 'create_installer', label: 'Mendaftarkan Akun Teknisi (Installer)', category: 'Administrasi Akun' },
     { key: 'delete_user', label: 'Menghapus Akun Pengguna', category: 'Administrasi Akun' },
-    { key: 'delete_wo_data', label: 'Menghapus Data Work Order (Strict)', category: 'Keamanan' },
-    { key: 'delete_customer_data', label: 'Menghapus Data Pelanggan', category: 'Keamanan' },
+    { key: 'view_audit_logs', label: 'Melihat Audit Log & History (Read-Only IT Support)', category: 'Keamanan' },
+    { key: 'delete_wo_data', label: 'Menghapus Data Work Order (Eksklusif Management Data)', category: 'Keamanan' },
+    { key: 'manage_whatsapp_templates', label: 'Kelola Template WhatsApp (Super Admin & Dispatch)', category: 'Komunikasi' },
     { key: 'ui_configuration', label: 'Konfigurasi Layout & UI Builder', category: 'Teknis & Sistem' },
     { key: 'system_health', label: 'Monitoring System Health & Diagnostik', category: 'Teknis & Sistem' },
     { key: 'setting_droplist', label: 'Mengatur Droplist Kamus Pilihan', category: 'Teknis & Sistem' }

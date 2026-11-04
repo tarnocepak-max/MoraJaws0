@@ -154,7 +154,7 @@ export const DEFAULT_NAVIGATION_CONFIG: NavigationConfig = {
       categoryId: 'cat_tambahan',
       order: 2,
       visible: true,
-      roles: ['super_admin', 'dispatch', 'it_support']
+      roles: ['super_admin', 'it_support']
     },
     {
       id: 'setting_droplist',
@@ -261,7 +261,7 @@ export const DEFAULT_NAVIGATION_CONFIG: NavigationConfig = {
       categoryId: 'cat_tambahan',
       order: 13,
       visible: true,
-      roles: ['super_admin', 'dispatch', 'leader']
+      roles: ['super_admin', 'dispatch']
     },
     {
       id: 'workflows',

@@ -389,8 +389,37 @@ const MainLayout: React.FC = () => {
             onOpenWhatsApp={handleOpenWhatsAppModal}
           />
         );
-      case 'login_logs':
+      case 'login_logs': {
+        const canAccessLoginLogs = currentUser.role === 'super_admin' || currentUser.role === 'it_support';
+        if (!canAccessLoginLogs) {
+          const redirectTarget = isInstaller
+            ? 'installer_dashboard'
+            : currentUser.role === 'leader'
+            ? 'leader_portal'
+            : currentUser.role === 'management_data'
+            ? 'management_data_portal'
+            : currentUser.role === 'dispatch'
+            ? 'tickets'
+            : 'dashboard';
+          setTimeout(() => {
+            setActiveTab(redirectTarget);
+          }, 1500);
+          return (
+            <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border-2 border-rose-300 dark:border-rose-900 shadow-md max-w-lg mx-auto my-12 space-y-3">
+              <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto font-bold text-lg">
+                ✕
+              </div>
+              <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                Akses Ditolak: Khusus Super Admin & IT Support
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Log aktivitas login dilindungi dan hanya dapat diakses oleh Super Admin dan IT Support. Role Anda ({currentUser.role}) tidak memiliki izin. Mengalihkan...
+              </p>
+            </div>
+          );
+        }
         return <LoginLogView />;
+      }
       case 'setting_droplist':
         return <SettingDroplistView />;
 
@@ -486,13 +515,40 @@ const MainLayout: React.FC = () => {
         return <ContactCentreView />;
 
       // Data Operations & Sync
-      case 'management_data_portal':
+      case 'management_data_portal': {
+        const canAccessManagementData = currentUser.role === 'super_admin' || currentUser.role === 'management_data';
+        if (!canAccessManagementData) {
+          const redirectTarget = isInstaller
+            ? 'installer_dashboard'
+            : currentUser.role === 'leader'
+            ? 'leader_portal'
+            : currentUser.role === 'dispatch'
+            ? 'tickets'
+            : 'dashboard';
+          setTimeout(() => {
+            setActiveTab(redirectTarget);
+          }, 1500);
+          return (
+            <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border-2 border-rose-300 dark:border-rose-900 shadow-md max-w-lg mx-auto my-12 space-y-3">
+              <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto font-bold text-lg">
+                ✕
+              </div>
+              <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                Akses Ditolak: Khusus Management Data & Super Admin
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Portal Management Data dilindungi dan hanya dapat diakses oleh Management Data dan Super Admin. Role Anda ({currentUser.role}) tidak memiliki izin. Mengalihkan...
+              </p>
+            </div>
+          );
+        }
         return (
           <ManagementDataPortal
             onSelectTicket={handleOpenTicketDetail}
             onOpenWhatsApp={handleOpenWhatsAppModal}
           />
         );
+      }
       case 'database_sync':
         return <DatabaseSyncMonitoringView />;
       case 'database_management':
@@ -516,8 +572,37 @@ const MainLayout: React.FC = () => {
         return <SystemSettings />;
       case 'ui_builder':
         return <UIConfigurationBuilder />;
-      case 'audit_logs':
+      case 'audit_logs': {
+        const canAccessAudit = currentUser.role === 'super_admin' || currentUser.role === 'it_support';
+        if (!canAccessAudit) {
+          const redirectTarget = isInstaller
+            ? 'installer_dashboard'
+            : currentUser.role === 'leader'
+            ? 'leader_portal'
+            : currentUser.role === 'management_data'
+            ? 'management_data_portal'
+            : currentUser.role === 'dispatch'
+            ? 'tickets'
+            : 'dashboard';
+          setTimeout(() => {
+            setActiveTab(redirectTarget);
+          }, 1500);
+          return (
+            <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border-2 border-rose-300 dark:border-rose-900 shadow-md max-w-lg mx-auto my-12 space-y-3">
+              <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto font-bold text-lg">
+                ✕
+              </div>
+              <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                Akses Ditolak: Otoritas Audit Log Dibatasi
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Audit Log dilindungi dan hanya dapat diakses oleh Super Admin dan IT Support (Read-Only). Role Anda ({currentUser.role}) tidak memiliki izin. Mengalihkan...
+              </p>
+            </div>
+          );
+        }
         return <AuditLogViewer />;
+      }
       case 'system_health':
         return <SystemHealthView />;
       case 'templates': {

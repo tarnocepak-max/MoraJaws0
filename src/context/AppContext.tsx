@@ -1617,15 +1617,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const now = new Date().toISOString();
     const affectedTickets: Ticket[] = [];
+    // Strict RBAC: deleteCustomerData MUST NOT delete or soft-delete Work Orders!
     setTickets(prev => prev.map(t => {
       const isTarget = t.idCustomer === customerId || t.customerId === customerId;
       if (!isTarget) return t;
       const updatedT: Ticket = {
         ...t,
-        isDeleted: true,
-        deletedAt: now,
-        deletedBy: currentUser.name,
-        deletionReason: `Penghapusan data pelanggan ID ${customerId}: ${reason}`
+        customerName: '[Data Pelanggan Dihapus]',
+        customerPhone: '',
+        updatedAt: now,
+        updatedBy: currentUser.name
       };
       affectedTickets.push(updatedT);
       return updatedT;
@@ -1640,12 +1641,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         })
         .catch(err => {
           setSyncStatus('ERROR');
-          console.warn('[Firestore] Error soft-deleting customer tickets:', err);
+          console.warn('[Firestore] Error anonymizing customer tickets:', err);
         });
     }
 
-    addAuditLog('Customer Data Deleted', 'ticket', customerId, `Super Admin ${currentUser.name} menghapus data pelanggan ID ${customerId}. Alasan: ${reason}`);
-    toast.warning(`Data pelanggan ID ${customerId} dan ${affectedTickets.length} tiket terkait berhasil dihapus dari Cloud Firestore.`, 'Data Pelanggan Dihapus');
+    addAuditLog('Customer Data Anonymized', 'ticket', customerId, `Super Admin ${currentUser.name} menganonimkan data pelanggan ID ${customerId}. Alasan: ${reason}. Work Order tetap aktif.`);
+    toast.info(`Data identitas pelanggan ID ${customerId} pada ${affectedTickets.length} tiket berhasil diproses tanpa menghapus Work Order.`, 'Data Pelanggan Diproses');
     return { success: true };
   };
 

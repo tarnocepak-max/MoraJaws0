@@ -39,6 +39,21 @@ service cloud.firestore {
       );
     }
 
+    function isSuperOrITSupport() {
+      return isAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'it_support']
+      );
+    }
+
+    function isManagementData() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'management_data'
+      );
+    }
+
     // System Health / Connection Ping
     match /system_health/{healthId} {
       allow get: if isValidId(healthId);
@@ -54,13 +69,13 @@ service cloud.firestore {
       allow delete: if isValidId(userId);
     }
 
-    // Work Orders / Tickets Collection
+    // Work Orders / Tickets Collection (Strict RBAC: Only Management Data can delete WO)
     match /tickets/{ticketId} {
       allow get: if isValidId(ticketId);
       allow list: if true;
       allow create: if isValidId(ticketId);
       allow update: if isValidId(ticketId);
-      allow delete: if isValidId(ticketId) && isAdmin();
+      allow delete: if isValidId(ticketId) && isManagementData();
     }
 
     // Contractors & Basecamps Collection
@@ -85,10 +100,9 @@ service cloud.firestore {
       allow delete: if isValidId(messageId);
     }
 
-    // Audit Logs Collection (Append-Only)
+    // Audit Logs Collection (Super Admin & IT Support Read-Only, Append-Only)
     match /audit_logs/{logId} {
-      allow get: if isValidId(logId);
-      allow list: if true;
+      allow get, list: if isSuperOrITSupport();
       allow create: if isValidId(logId);
       allow update, delete: if false;
     }

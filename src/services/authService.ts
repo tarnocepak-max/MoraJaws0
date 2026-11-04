@@ -28,34 +28,14 @@ export type Permission =
   | 'system_health'
   | 'application_configuration'
   | 'ui_configuration'
-  | 'setting_droplist';
+  | 'setting_droplist'
+  | 'manage_whatsapp_templates';
 
 /**
- * Central Permission Matrix strictly according to the MoraJaws specification:
- * Feature                             | Super Admin | Dispatch | Leader           | Installer
- * Login                               | Yes         | Yes      | Yes              | Yes
- * Kelola akun pengguna umum           | Yes         | No       | No               | No
- * Membuat akun staf (Dispatch/Leader) | Yes         | No       | No (Dilarang)    | No
- * Membuat akun Teknisi (Installer)    | Yes         | No       | Yes (Hanya Mitra)| No
- * Mengubah akun pengguna              | Yes         | No       | No               | No
- * Menonaktifkan akun                  | Yes         | No       | No               | No
- * Menghapus akun pengguna             | Yes (Strict)| No       | No               | No
- * Import data                         | Yes         | Yes      | No               | No
- * Kelola mapping field                | Yes         | No       | No               | No
- * Melihat seluruh WO                  | Yes         | Yes      | No               | No
- * Melihat WO kontraktor               | Yes         | Yes      | Yes              | Only assigned
- * Distribusi WO                       | Yes         | Yes      | No               | No
- * Assign WO ke Teknisi                | No          | No       | Yes (Only)       | No
- * Mengatur jadwal Leader              | Yes         | Yes      | No               | No
- * Mengubah laporan teknis             | Yes         | Yes      | No               | Only assigned
- * Mengakses live chat                 | Yes         | Yes      | Contractor WO    | Assigned WO
- * Mengelola kontraktor                | Yes         | No       | No               | No
- * Melihat audit log                   | Yes         | No       | No               | No
- * Database Management                 | Yes         | No       | No               | No
- * Mengubah data WO                    | Yes         | Yes      | No               | Only assigned rep
- * Menghapus data WO                   | Yes (Strict)| No       | No               | No
- * Menghapus data pelanggan            | Yes (Strict)| No       | No               | No
- * Menghapus histori/audit             | Super Admin | No       | No               | No
+ * Central Permission Matrix strictly aligned with MoraJaws Phase 9O RBAC decisions:
+ * - Audit Logs: super_admin (READ), it_support (READ-ONLY). All other roles DENY.
+ * - Penghapusan WO: management_data ONLY. super_admin and all other roles DENY.
+ * - WhatsApp Templates: super_admin & dispatch ALLOW. All other roles DENY.
  */
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   super_admin: [
@@ -79,13 +59,11 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'view_audit_logs',
     'database_management',
     'edit_wo_data',
-    'delete_wo_data',
-    'delete_customer_data',
-    'permanent_delete',
     'system_health',
     'application_configuration',
     'ui_configuration',
-    'setting_droplist'
+    'setting_droplist',
+    'manage_whatsapp_templates'
   ],
   dispatch: [
     'login',
@@ -96,7 +74,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'manage_leader_schedule',
     'edit_technical_report',
     'access_live_chat',
-    'edit_wo_data'
+    'edit_wo_data',
+    'manage_whatsapp_templates'
   ],
   leader: [
     'login',

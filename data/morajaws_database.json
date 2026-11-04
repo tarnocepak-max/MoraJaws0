@@ -24,8 +24,8 @@
       "active": true,
       "passwordHash": "28232849",
       "createdAt": "2026-01-01T00:00:00Z",
-      "lastLoginAt": "2026-11-04T13:23:37.147Z",
-      "loginCount": 5,
+      "lastLoginAt": "2026-11-04T14:56:58.512Z",
+      "loginCount": 6,
       "firebaseUid": "test-uid-123",
       "mustChangePassword": true
     },
@@ -486,6 +486,36 @@
   ],
   "assignmentHistory": [],
   "auditLogs": [
+    {
+      "id": "log_1793804218539_j4a4",
+      "action": "Logout Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) logout dari sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T14:56:58.539Z"
+    },
+    {
+      "id": "log_1793804218525_n6xh",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T14:56:58.525Z"
+    },
+    {
+      "id": "log_1793804218513_t2sx",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T14:56:58.513Z"
+    },
     {
       "id": "log_1793798617168_mr10",
       "action": "Logout Success",
@@ -2569,6 +2599,21 @@
   "operationalDateOverride": "2026-10-28",
   "attachments": [],
   "sessions": [
+    {
+      "sessionId": "sess_1793804218512_51e27b22fa40",
+      "token": "9a6b491d4909685e949f0c303337d9196cbe04c980d15e6da736d87784189586",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T14:56:58.512Z",
+      "lastActivityAt": "2026-11-04T14:56:58.538Z",
+      "expiresAt": "2026-11-04T22:56:58.512Z",
+      "status": "revoked",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
     {
       "sessionId": "sess_1793798617147_4fbc14b0e365",
       "token": "1762efd8d47ad29e33019a4b62095b47d8cc9ba1595c313b151d1574157ed872",

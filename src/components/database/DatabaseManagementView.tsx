@@ -242,8 +242,12 @@ export const DatabaseManagementView: React.FC = () => {
     }
   };
 
-  // Reconcile duplicate WOs
+  // Reconcile duplicate WOs (Management Data Exclusive - Strict RBAC)
   const handleReconcileKeepFirst = (woKey: string) => {
+    if (currentUser.role !== 'management_data') {
+      toast.error('Akses Ditolak: Hanya Management Data yang memiliki wewenang merekonsiliasi/menghapus duplikasi Work Order.', 'Akses Ditolak');
+      return;
+    }
     const list = duplicatesMap.get(woKey) || [];
     if (list.length <= 1) return;
     const [keep, ...removeList] = list;
@@ -838,13 +842,15 @@ export const DatabaseManagementView: React.FC = () => {
                           ({dupList.length} duplikasi ditemukan)
                         </span>
                       </div>
-                      <button
-                        onClick={() => handleReconcileKeepFirst(woKey)}
-                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Rekonsiliasi (Pertahankan 1 Utama)</span>
-                      </button>
+                      {currentUser.role === 'management_data' && (
+                        <button
+                          onClick={() => handleReconcileKeepFirst(woKey)}
+                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Rekonsiliasi (Pertahankan 1 Utama)</span>
+                        </button>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
