@@ -1061,6 +1061,8 @@ export interface GetWorkOrdersOptions {
   area?: string;
   contractorId?: string;
   installerName?: string;
+  statusWOAgent?: string;
+  statusWOInstaller?: string;
   appointmentDate?: string;
 }
 
@@ -1090,6 +1092,12 @@ export async function getWorkOrdersFromSupabase(options: GetWorkOrdersOptions = 
     }
     if (options.installerName) {
       query = query.eq('installer_name', options.installerName);
+    }
+    if (options.statusWOAgent) {
+      query = query.eq('status_wo_agent', options.statusWOAgent);
+    }
+    if (options.statusWOInstaller) {
+      query = query.eq('status_wo_installer', options.statusWOInstaller);
     }
     if (options.appointmentDate) {
       query = query.eq('appointment_date', options.appointmentDate);

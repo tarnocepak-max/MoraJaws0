@@ -6,7 +6,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
-import { checkSupabaseConnection, getLastSupabaseHealthStatus } from './server/supabaseClient.ts';
+import { getSupabaseBackendClient, checkSupabaseConnection, getLastSupabaseHealthStatus } from './server/supabaseClient.ts';
 import { checkFirebaseAdminHealth, verifyFirebaseIdToken } from './server/firebaseAdmin.ts';
 import {
   findUserInSupabase,
@@ -15,16 +15,30 @@ import {
   getUserByIdFromSupabase,
   insertUserToSupabase,
   updateUserInSupabase,
+  deleteUserInSupabase,
   getWorkOrdersFromSupabase,
   getWorkOrderByIdFromSupabase,
   getWorkOrderByWoNumberFromSupabase,
   insertWorkOrderToSupabase,
   updateWorkOrderInSupabase,
   deleteWorkOrderFromSupabase,
+  archiveWorkOrderInSupabase,
+  restoreWorkOrderInSupabase,
   bulkImportWorkOrdersToSupabase,
+  getContractorsFromSupabase,
+  insertContractorToSupabase,
+  updateContractorInSupabase,
+  getCoverageAreasFromSupabase,
+  insertCoverageAreaToSupabase,
+  getTicketMessagesFromSupabase,
+  insertTicketMessageToSupabase,
   getAppSettingFromSupabase,
   saveAppSettingToSupabase,
-  insertAuditLogToSupabase
+  getAuditLogsFromSupabase,
+  insertAuditLogToSupabase,
+  deleteSandboxWorkOrderHardFromSupabase,
+  toDateOnlyString,
+  canonicalWoKey
 } from './server/supabaseAdapter.ts';
 import { runPhase8ShadowDryRunSuite } from './server/supabaseShadowService.ts';
 import { realtimeSandboxHub, requireSandboxSuperAdmin, getSandboxSuperAdminAllowlist } from './server/realtimeHub.ts';
@@ -67,8 +81,8 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Standalone hashing function (matching client quickHash)
-function hashPassword(password: string, salt: string = 'morajaws_secure_salt_2026'): string {
+// Legacy FNV-1a hashing function retained ONLY for verifying legacy password hashes in transit
+function hashPasswordLegacy(password: string, salt: string = 'morajaws_secure_salt_2026'): string {
   let h = 0x811c9dc5;
   const str = `${salt}:${password}`;
   for (let i = 0; i < str.length; i++) {
@@ -78,7 +92,44 @@ function hashPassword(password: string, salt: string = 'morajaws_secure_salt_202
   return ('00000000' + (h >>> 0).toString(16)).slice(-8);
 }
 
-const DEFAULT_HASH = hashPassword('12345678');
+// Retained for backwards compatibility reference
+function hashPassword(password: string, salt: string = 'morajaws_secure_salt_2026'): string {
+  return hashPasswordLegacy(password, salt);
+}
+
+const DEFAULT_HASH = hashPasswordLegacy('12345678');
+
+/**
+ * Production-grade PBKDF2 password hashing with cryptographically secure random salt (Section G)
+ */
+export function hashPasswordSecure(password: string, customSalt?: string): string {
+  const salt = customSalt || crypto.randomBytes(16).toString('hex');
+  const derivedKey = crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256').toString('hex');
+  return `pbkdf2:sha256:100000:${salt}:${derivedKey}`;
+}
+
+/**
+ * Timing-safe password verification supporting modern PBKDF2 and legacy transit hashes
+ */
+export function verifyUserPassword(password: string, storedHash?: string): boolean {
+  if (!password || !storedHash) return false;
+  if (storedHash.startsWith('pbkdf2:')) {
+    const parts = storedHash.split(':');
+    if (parts.length === 5) {
+      const iterations = parseInt(parts[2], 10);
+      const salt = parts[3];
+      const expectedKey = parts[4];
+      const actualKey = crypto.pbkdf2Sync(password, salt, iterations, 32, 'sha256').toString('hex');
+      try {
+        return crypto.timingSafeEqual(Buffer.from(actualKey, 'hex'), Buffer.from(expectedKey, 'hex'));
+      } catch {
+        return false;
+      }
+    }
+  }
+  // Safe verification for legacy accounts in transit
+  return hashPasswordLegacy(password) === storedHash;
+}
 
 // Standalone appointment date parser for backend normalization
 function normalizeAppointmentDate(val: unknown): string {
@@ -779,7 +830,9 @@ function logServerAudit(action: string, entity: string, entityId: string, detail
     user_role: entry.userRole,
     performed_by_id: user?.id,
     metadata: { source: 'morajaws_server_dual_standby' }
-  }).catch(() => {});
+  }).catch(err => {
+    console.error('[Audit Log] Gagal sinkronisasi log audit ke Supabase:', err?.message || err);
+  });
 
   return entry;
 }
@@ -895,57 +948,143 @@ function buildWhatsAppClickToChatUrl(phone: string, messageText: string): { url:
 interface AuthenticatedRequest extends Request {
   user?: ServerUser;
   session?: ServerSession;
-  authSource?: 'firebase_token' | 'server_session';
+  authSource?: 'supabase_auth' | 'firebase_token' | 'server_session';
   decodedFirebaseToken?: any;
 }
+
+/**
+ * Endpoint Rate Limiter (Section F: Rate limiting for auth, reset, import, and sensitive operations)
+ */
+interface RateLimitRecord {
+  count: number;
+  resetAt: number;
+}
+
+function createEndpointRateLimiter(windowMs: number, maxRequests: number, endpointName = 'resource') {
+  const ipBuckets = new Map<string, RateLimitRecord>();
+
+  const timer = setInterval(() => {
+    const now = Date.now();
+    for (const [key, record] of ipBuckets.entries()) {
+      if (record.resetAt <= now) {
+        ipBuckets.delete(key);
+      }
+    }
+  }, Math.max(windowMs, 30000));
+  timer.unref();
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const clientIp = Array.isArray(rawIp) ? rawIp[0] : String(rawIp).split(',')[0].trim();
+    const key = `${endpointName}:${clientIp}`;
+    const now = Date.now();
+
+    let bucket = ipBuckets.get(key);
+    if (!bucket || bucket.resetAt <= now) {
+      bucket = { count: 1, resetAt: now + windowMs };
+      ipBuckets.set(key, bucket);
+      return next();
+    }
+
+    if (bucket.count >= maxRequests) {
+      const retryAfterSeconds = Math.ceil((bucket.resetAt - now) / 1000);
+      res.setHeader('Retry-After', retryAfterSeconds);
+      return res.status(429).json({
+        success: false,
+        error: `Terlalu banyak permintaan pada endpoint ${endpointName}. Silakan coba lagi dalam ${retryAfterSeconds} detik.`,
+        code: 'RATE_LIMIT_EXCEEDED',
+        retryAfter: retryAfterSeconds
+      });
+    }
+
+    bucket.count++;
+    next();
+  };
+}
+
+const loginRateLimiter = createEndpointRateLimiter(60000, 15, 'auth-login');
+const passwordResetRateLimiter = createEndpointRateLimiter(300000, 8, 'auth-password-reset');
+const bulkImportRateLimiter = createEndpointRateLimiter(60000, 25, 'work-order-import');
+const sensitiveOpRateLimiter = createEndpointRateLimiter(60000, 30, 'sensitive-operation');
 
 async function resolveUserFromHeader(req: AuthenticatedRequest, _res: Response, next: NextFunction) {
   let found: ServerUser | undefined;
   let activeSession: ServerSession | undefined;
-  let authSource: 'firebase_token' | 'server_session' | undefined;
+  let authSource: 'supabase_auth' | 'firebase_token' | 'server_session' | undefined;
   let verifiedDecodedFirebaseToken: any | undefined;
   const now = Date.now();
 
   const authHeader = req.headers['authorization'];
-  const queryToken = typeof req.query?.token === 'string' ? req.query.token.trim() : undefined;
-  const rawToken = (authHeader && authHeader.startsWith('Bearer ')) ? authHeader.substring(7).trim() : queryToken;
+  // STRICT: Authentication via ?token= query parameter is strictly forbidden per Section F.
+  // Bearer token via Authorization header is mandatory.
+  const rawToken = (authHeader && authHeader.startsWith('Bearer ')) ? authHeader.substring(7).trim() : undefined;
 
   if (rawToken) {
     const token = rawToken;
 
-    // 1. Firebase Admin ID Token Verification (Section F Workflow)
-    try {
-      const decodedFirebaseToken = await verifyFirebaseIdToken(token);
-      if (decodedFirebaseToken && decodedFirebaseToken.uid) {
-        authSource = 'firebase_token';
-        verifiedDecodedFirebaseToken = decodedFirebaseToken;
+    // 1. Official Supabase Auth Verification (Section E: Official Supabase Auth token check)
+    const sbClient = getSupabaseBackendClient();
+    if (sbClient) {
+      try {
+        const { data: sbAuthData, error: sbAuthErr } = await sbClient.auth.getUser(token);
+        if (sbAuthData?.user && !sbAuthErr) {
+          authSource = 'supabase_auth';
+          const sbUid = sbAuthData.user.id;
+          const sbEmail = (sbAuthData.user.email || '').toLowerCase().trim();
 
-        // 1.A. Match UID with user in Supabase
-        const supabaseUser = await findUserInSupabase(decodedFirebaseToken.uid);
-        if (supabaseUser && supabaseUser.active && !supabaseUser.isDeleted) {
-          found = supabaseUser;
-        } else {
-          // 1.B. Fallback match with local persistent storage
-          const cleanEmail = (decodedFirebaseToken.email || '').toLowerCase().trim();
-          found = db.users.find(u =>
-            !u.isDeleted && u.active && (
-              (u.firebaseUid && u.firebaseUid === decodedFirebaseToken.uid) ||
-              (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail) ||
-              (cleanEmail && u.altEmail && u.altEmail.toLowerCase().includes(cleanEmail))
-            )
-          );
-
-          if (found && !found.firebaseUid) {
-            found.firebaseUid = decodedFirebaseToken.uid;
-            saveDatabaseToDisk();
+          // Fetch verified identity and role from trusted database
+          const dbUser = await findUserInSupabase(sbUid);
+          if (dbUser && dbUser.active && !dbUser.isDeleted) {
+            found = dbUser;
+          } else {
+            // Fallback match with local persistent user directory
+            found = db.users.find(u =>
+              !u.isDeleted && u.active && (
+                u.id === sbUid ||
+                (sbEmail && u.email && u.email.toLowerCase() === sbEmail) ||
+                (sbEmail && u.altEmail && u.altEmail.toLowerCase().includes(sbEmail))
+              )
+            );
           }
         }
+      } catch {
+        // Non-fatal, fallback to transitional Firebase Admin or Server Session
       }
-    } catch (fbErr) {
-      console.warn('[Auth Middleware] Firebase token check warning:', fbErr);
     }
 
-    // 2. Server Session Verification (for staff login and active session tokens)
+    // 2. Firebase Admin ID Token Verification (Section E: Transitional verification until migration complete)
+    if (!found) {
+      try {
+        const decodedFirebaseToken = await verifyFirebaseIdToken(token);
+        if (decodedFirebaseToken && decodedFirebaseToken.uid) {
+          authSource = 'firebase_token';
+          verifiedDecodedFirebaseToken = decodedFirebaseToken;
+
+          const supabaseUser = await findUserInSupabase(decodedFirebaseToken.uid);
+          if (supabaseUser && supabaseUser.active && !supabaseUser.isDeleted) {
+            found = supabaseUser;
+          } else {
+            const cleanEmail = (decodedFirebaseToken.email || '').toLowerCase().trim();
+            found = db.users.find(u =>
+              !u.isDeleted && u.active && (
+                (u.firebaseUid && u.firebaseUid === decodedFirebaseToken.uid) ||
+                (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail) ||
+                (cleanEmail && u.altEmail && u.altEmail.toLowerCase().includes(cleanEmail))
+              )
+            );
+
+            if (found && !found.firebaseUid) {
+              found.firebaseUid = decodedFirebaseToken.uid;
+              saveDatabaseToDisk();
+            }
+          }
+        }
+      } catch (fbErr) {
+        // Not a valid Firebase token
+      }
+    }
+
+    // 3. Server Session Verification (Active issued session tokens)
     if (!found) {
       activeSession = SERVER_SESSIONS.find(s => s.token === token && s.status === 'active');
       if (activeSession) {
@@ -963,19 +1102,39 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, _res: Response, 
               activeSession.lastActivityAt = new Date().toISOString();
             }
             authSource = 'server_session';
-            found = db.users.find(u => u.id === activeSession!.userId && !u.isDeleted && u.active);
+            // Authoritative user validation: query Supabase if configured, fallback to db.users
+            let authoritativeUser: ServerUser | null = null;
+            if (sbClient) {
+              try {
+                const sbUserRes = await getUserByIdFromSupabase(activeSession!.userId);
+                if (sbUserRes.success && sbUserRes.data) {
+                  authoritativeUser = sbUserRes.data;
+                }
+              } catch {}
+            }
+            if (!authoritativeUser) {
+              authoritativeUser = db.users.find(u => u.id === activeSession!.userId) || null;
+            }
+
+            if (!authoritativeUser || authoritativeUser.isDeleted || !authoritativeUser.active) {
+              // Immediately revoke session if user does not exist, was soft-deleted, or deactivated
+              activeSession.status = 'revoked';
+              activeSession = undefined;
+              found = undefined;
+            } else {
+              // Strictly synchronize session role and contractor with authoritative database record
+              activeSession.role = authoritativeUser.role;
+              activeSession.contractor = authoritativeUser.contractor;
+              found = authoritativeUser;
+            }
           }
         }
       }
-      // Strict Security: Unregistered or forged tokens are never accepted.
-      // Legitimate sessions issued by /api/auth/login and /api/auth/firebase-login
-      // are persisted in SERVER_SESSIONS across restarts via morajaws_database.json.
     }
   }
 
-  // NOTE: Unverified header bypass (x-user-id / x-username) is removed per Security Constitution.
-  // All requests must be authenticated via valid Firebase token or verified session token.
-
+  // STRICT SECURITY: Spoofed client headers (x-user-id, x-username, x-user-role) are NEVER trusted.
+  // Identity and role are derived strictly from cryptographically verified tokens and trusted database records.
   req.user = found;
   req.session = activeSession;
   req.authSource = authSource;
@@ -1161,6 +1320,58 @@ function getJakartaTodayString(): string {
   }).format(new Date());
 }
 
+/**
+ * Resolves a contractor ID for a user.
+ * Prioritizes contractorId. If not available, resolves against db.contractors.
+ */
+export function resolveUserContractorId(u: { contractorId?: string; contractor?: string }): string | undefined {
+  if (u.contractorId && typeof u.contractorId === 'string' && u.contractorId.trim()) {
+    return u.contractorId.trim();
+  }
+  if (u.contractor && typeof u.contractor === 'string' && u.contractor.trim()) {
+    const clean = u.contractor.trim().toLowerCase();
+    const found = db.contractors.find(c =>
+      c.name.trim().toLowerCase() === clean ||
+      (c.code && c.code.trim().toLowerCase() === clean) ||
+      c.id === u.contractor
+    );
+    if (found?.id) return found.id;
+  }
+  return undefined;
+}
+
+/**
+ * Strict validator for Leader ownership over an Installer account.
+ * - Super Admin always authorized.
+ * - Leader can ONLY manage installers in their own contractor.
+ * - Checks contractor_id first.
+ * - Fallback to strict normalized contractor name only if contractor_id is missing on either.
+ * - Rejects if contractor cannot be ascertained with certainty.
+ */
+export function isLeaderAllowedToManageInstaller(leader: ServerUser, installer: ServerUser): boolean {
+  if (leader.role === 'super_admin') return true;
+  if (leader.role !== 'leader') return false;
+  if (installer.role !== 'installer') return false;
+
+  const leaderCid = resolveUserContractorId(leader);
+  const instCid = resolveUserContractorId(installer);
+
+  if (leaderCid && instCid) {
+    return leaderCid === instCid;
+  }
+
+  const leaderContr = (leader.contractor || '').trim().toLowerCase();
+  const instContr = (installer.contractor || '').trim().toLowerCase();
+
+  // If contractor name is blank on either, identity cannot be confirmed -> reject
+  if (!leaderContr || !instContr) {
+    return false;
+  }
+
+  // Strict exact match on normalized contractor name
+  return leaderContr === instContr;
+}
+
 function scopeTicketsForUser(tickets: any[], user: ServerUser): any[] {
   return tickets.filter(t => {
     if (t.isDeleted) return false;
@@ -1170,15 +1381,24 @@ function scopeTicketsForUser(tickets: any[], user: ServerUser): any[] {
     }
 
     const ticketContractor = (t.contactorName || t.contractorName || '').toLowerCase().trim();
+    const ticketContractorId = (t.contractorId || t.contractor_id || '').trim();
     const ticketArea = (t.area || '').toLowerCase().trim();
 
     if (user.role === 'leader') {
+      const leaderCid = resolveUserContractorId(user);
       const leaderContr = (user.contractor || '').toLowerCase().trim();
       const leaderArea = (user.area || '').toLowerCase().trim();
-      if (!leaderContr) return false;
-      const matchContr = ticketContractor === leaderContr || ticketContractor.includes(leaderContr) || leaderContr.includes(ticketContractor);
+
+      if (leaderCid && ticketContractorId) {
+        if (leaderCid !== ticketContractorId) return false;
+      } else {
+        if (!leaderContr) return false;
+        const matchContr = ticketContractor === leaderContr || ticketContractor.includes(leaderContr) || leaderContr.includes(ticketContractor);
+        if (!matchContr) return false;
+      }
+
       const matchArea = !leaderArea || ticketArea === leaderArea || ticketArea.includes(leaderArea) || leaderArea.includes(ticketArea);
-      return matchContr && matchArea;
+      return matchArea;
     }
 
     if (user.role === 'installer') {
@@ -1233,11 +1453,23 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
-  // Production CORS & Security Headers
-  const configuredCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+  // Production CORS & Security Headers (Section F: Explicit production allowlist, no wildcard regex)
+  const configuredCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS || process.env.ALLOWED_ORIGINS || '')
     .split(',')
     .map(o => o.trim())
     .filter(Boolean);
+
+  const explicitAllowedOrigins = new Set<string>([
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://ais-dev-fzygrkaljhs4fcbifx25nh-715667511143.asia-northeast1.run.app',
+    'https://ais-pre-fzygrkaljhs4fcbifx25nh-715667511143.asia-northeast1.run.app',
+    ...configuredCorsOrigins
+  ]);
+  if (process.env.APP_URL) explicitAllowedOrigins.add(process.env.APP_URL.trim());
+  if (process.env.VITE_APP_URL) explicitAllowedOrigins.add(process.env.VITE_APP_URL.trim());
 
   app.use((req, res, next) => {
     const origin = req.headers.origin;
@@ -1251,29 +1483,20 @@ async function startServer() {
       isAllowed = true;
     } else {
       const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-      const isAiStudioPreview = /(?:\.run\.app|\.aistudio-preview\.app|\.google\.com|\.googleusercontent\.com)(:\d+)?$/.test(origin);
-
-      if (isDev || isLocalhost || isAiStudioPreview) {
+      if (explicitAllowedOrigins.has(origin) || (isDev && isLocalhost)) {
         isAllowed = true;
         allowedOriginToSet = origin;
-      } else if (configuredCorsOrigins.length > 0) {
-        // Strict exact match only - NO wildcards permitted
-        if (configuredCorsOrigins.includes(origin)) {
-          isAllowed = true;
-          allowedOriginToSet = origin;
-        }
       } else {
-        // Strictly reject unknown external origins in production
+        // Strictly reject unlisted origins (No automatic wildcard permissions)
         isAllowed = false;
       }
     }
 
     if (origin && !isAllowed) {
-      res.status(403).json({
-        error: `Akses ditolak oleh kebijakan CORS: Origin "${origin}" tidak terdaftar dalam konfigurasi sistem.`,
+      return res.status(403).json({
+        error: `Akses ditolak oleh kebijakan CORS: Origin "${origin}" tidak terdaftar dalam allowlist eksplisit sistem.`,
         code: 'CORS_ORIGIN_DENIED'
       });
-      return;
     }
 
     if (allowedOriginToSet) {
@@ -1283,7 +1506,7 @@ async function startServer() {
     }
 
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-id, x-username, x-user-role, x-google-access-token, Accept, X-Requested-With, Cache-Control');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Cache-Control');
 
     if (req.method === 'OPTIONS') {
       return res.sendStatus(204);
@@ -1291,7 +1514,8 @@ async function startServer() {
     next();
   });
 
-  app.use(express.json({ limit: '50mb' }));
+  // Section F: Standard request size limit 2MB to protect against payload exhaustion
+  app.use(express.json({ limit: '2mb' }));
   app.use(resolveUserFromHeader);
 
   // Health check endpoint with infrastructure, Supabase connectivity, Firebase Admin, and active storage
@@ -1749,18 +1973,17 @@ async function startServer() {
       });
     }
 
-    if (!user.active) {
-      logServerAudit('Login Blocked Inactive', 'auth', user.id, `Akun nonaktif mencoba login: ${user.username}`, user);
+    if (!user.active || user.isDeleted) {
+      logServerAudit('Login Blocked Inactive', 'auth', user.id, `Akun nonaktif atau terhapus mencoba login: ${user.username}`, user);
       return res.status(403).json({
         success: false,
-        error: 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.',
+        error: 'Akun Anda telah dinonaktifkan atau dihapus oleh Administrator. Hubungi Super Admin.',
         code: 'auth/user-disabled'
       });
     }
 
-    const attemptedHash = hashPassword(password);
-    const isDefaultAllowed = (password === '12345678' || attemptedHash === DEFAULT_HASH) && user.mustChangePassword;
-    const isHashMatched = user.passwordHash === attemptedHash || isDefaultAllowed;
+    const isDefaultAllowed = (password === '12345678' || hashPasswordLegacy(password) === DEFAULT_HASH) && user.mustChangePassword;
+    const isHashMatched = verifyUserPassword(password, user.passwordHash) || isDefaultAllowed;
 
     if (!isHashMatched) {
       const currentAttempts = (attemptInfo?.count || 0) + 1;
@@ -1780,6 +2003,19 @@ async function startServer() {
         error: 'Autentikasi gagal. Kredensial tidak cocok. Pastikan kata sandi yang Anda masukkan benar.',
         code: 'MJ-AUTH-001'
       });
+    }
+
+    // Auto-migrate legacy password hash to modern PBKDF2 upon successful authentication
+    if (user.passwordHash && !user.passwordHash.startsWith('pbkdf2:')) {
+      user.passwordHash = hashPasswordSecure(password);
+      saveDatabaseToDisk();
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await updateUserInSupabase(user.id, { passwordHash: user.passwordHash });
+        if (!sbRes.success) {
+          console.error('[Supabase DAL] Auto-migrasi password hash ke PBKDF2 gagal:', sbRes.error?.message);
+        }
+      }
     }
 
     if (isDefaultAllowed) {
@@ -1886,8 +2122,7 @@ async function startServer() {
       });
     }
 
-    const currentHash = hashPassword(currentPassword);
-    const matchesCurrent = user.passwordHash === currentHash || (currentPassword === '12345678' && user.passwordHash === DEFAULT_HASH);
+    const matchesCurrent = verifyUserPassword(currentPassword, user.passwordHash) || (currentPassword === '12345678' && user.passwordHash === DEFAULT_HASH);
     if (!matchesCurrent) {
       return res.status(401).json({
         success: false,
@@ -1904,7 +2139,7 @@ async function startServer() {
       });
     }
 
-    user.passwordHash = hashPassword(newPassword);
+    user.passwordHash = hashPasswordSecure(newPassword);
     user.mustChangePassword = false;
     saveDatabaseToDisk();
 
@@ -2669,17 +2904,18 @@ async function startServer() {
     res.json({ contractors: db.contractors });
   });
 
-  app.post('/api/contractors', requireAuth, (req: AuthenticatedRequest, res) => {
+  app.post('/api/contractors', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
     const { contractor, contractors: batch } = req.body;
     const toAdd = batch || (contractor ? [contractor] : []);
     let added = 0;
+    const sbClient = getSupabaseBackendClient();
 
-    toAdd.forEach((c: any) => {
-      if (!c.name) return;
+    for (const c of toAdd) {
+      if (!c.name) continue;
       const cleanName = c.name.trim().toLowerCase();
       const existing = db.contractors.find(ex => ex.name.trim().toLowerCase() === cleanName);
       if (!existing) {
-        db.contractors.push({
+        const newContr = {
           id: c.id || ('c-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4)),
           name: c.name.trim(),
           code: c.code || c.name.substring(0, 3).toUpperCase(),
@@ -2689,7 +2925,19 @@ async function startServer() {
           email: c.email,
           active: true,
           createdAt: new Date().toISOString()
-        });
+        };
+
+        if (sbClient) {
+          const sbRes = await insertContractorToSupabase(newContr);
+          if (!sbRes.success) {
+            return res.status(500).json({
+              error: sbRes.error?.message || 'Gagal menyimpan data kontraktor ke Supabase.',
+              code: sbRes.error?.code || 'DATABASE_ERROR'
+            });
+          }
+        }
+
+        db.contractors.push(newContr);
         added++;
       } else {
         // Merge coverage areas
@@ -2697,15 +2945,18 @@ async function startServer() {
           c.coverageAreas.forEach((area: string) => {
             if (!existing.coverageAreas.includes(area)) existing.coverageAreas.push(area);
           });
+          if (sbClient) {
+            await updateContractorInSupabase(existing.id, { coverageAreas: existing.coverageAreas });
+          }
         }
       }
-    });
+    }
 
     saveDatabaseToDisk();
     res.json({ success: true, addedCount: added, contractors: db.contractors });
   });
 
-  const handleUpdateContractor = (req: AuthenticatedRequest, res: Response) => {
+  const handleUpdateContractor = async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
     const user = req.user!;
     if (user.role !== 'super_admin' && user.role !== 'dispatch') {
@@ -2718,15 +2969,28 @@ async function startServer() {
     }
 
     const { name, code, coverageAreas, leaderName, leaderId, phone, email, active } = req.body;
-    if (name) contractor.name = String(name).trim();
-    if (code) contractor.code = String(code).trim().toUpperCase();
-    if (coverageAreas && Array.isArray(coverageAreas)) contractor.coverageAreas = coverageAreas;
-    if (leaderName !== undefined) contractor.leaderName = leaderName;
-    if (leaderId !== undefined) (contractor as any).leaderId = leaderId;
-    if (phone !== undefined) contractor.phone = phone;
-    if (email !== undefined) contractor.email = email;
-    if (active !== undefined && typeof active === 'boolean') contractor.active = active;
+    const updates: any = {};
+    if (name) updates.name = String(name).trim();
+    if (code) updates.code = String(code).trim().toUpperCase();
+    if (coverageAreas && Array.isArray(coverageAreas)) updates.coverageAreas = coverageAreas;
+    if (leaderName !== undefined) updates.leaderName = leaderName;
+    if (leaderId !== undefined) updates.leaderId = leaderId;
+    if (phone !== undefined) updates.phone = phone;
+    if (email !== undefined) updates.email = email;
+    if (active !== undefined && typeof active === 'boolean') updates.active = active;
 
+    const sbClient = getSupabaseBackendClient();
+    if (sbClient) {
+      const sbRes = await updateContractorInSupabase(contractor.id, updates);
+      if (!sbRes.success) {
+        return res.status(500).json({
+          error: sbRes.error?.message || 'Gagal memperbarui data kontraktor di Supabase.',
+          code: sbRes.error?.code || 'DATABASE_ERROR'
+        });
+      }
+    }
+
+    Object.assign(contractor, updates);
     saveDatabaseToDisk();
     logServerAudit('Contractor Updated', 'master_data', contractor.id, `Kontraktor "${contractor.name}" diperbarui oleh ${user.name}`, user);
     res.json({ success: true, contractor, message: 'Data kontraktor berhasil diperbarui.' });
@@ -2739,35 +3003,58 @@ async function startServer() {
     res.json({ coverageAreas: db.coverageAreas });
   });
 
-  app.post('/api/coverage-areas', requireAuth, (req: AuthenticatedRequest, res) => {
+  app.post('/api/coverage-areas', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
     const { area, coverageAreas: batch } = req.body;
     const toAdd = batch || (area ? [area] : []);
-    toAdd.forEach((a: any) => {
-      if (!a.name) return;
+    const sbClient = getSupabaseBackendClient();
+
+    for (const a of toAdd) {
+      if (!a.name) continue;
       const cleanName = a.name.trim().toLowerCase();
       if (!db.coverageAreas.some(ex => ex.name.trim().toLowerCase() === cleanName)) {
-        db.coverageAreas.push({
+        const newArea = {
           id: a.id || ('area-' + Date.now()),
           name: a.name.trim(),
           clusters: a.clusters || [],
           active: true
-        });
+        };
+
+        if (sbClient) {
+          const sbRes = await insertCoverageAreaToSupabase(newArea);
+          if (!sbRes.success) {
+            return res.status(500).json({
+              error: sbRes.error?.message || 'Gagal menyimpan data coverage area ke Supabase.',
+              code: sbRes.error?.code || 'DATABASE_ERROR'
+            });
+          }
+        }
+
+        db.coverageAreas.push(newArea);
       }
-    });
+    }
     saveDatabaseToDisk();
     res.json({ success: true, coverageAreas: db.coverageAreas });
   });
 
   // --- User Management Endpoints (Super Admin / Leader creating Installer) ---
-  app.get('/api/users', requireAuth, (_req, res) => {
-    const activeUsers = db.users.filter(u => !u.isDeleted).map(u => {
+  app.get('/api/users', requireAuth, (req: AuthenticatedRequest, res) => {
+    const user = req.user!;
+    let scopedUsers: ServerUser[];
+    if (user.role === 'super_admin' || user.role === 'management_data' || user.role === 'it_support') {
+      scopedUsers = db.users.filter(u => !u.isDeleted);
+    } else if (user.role === 'leader') {
+      scopedUsers = db.users.filter(u => !u.isDeleted && isLeaderAllowedToManageInstaller(user, u));
+    } else {
+      scopedUsers = db.users.filter(u => !u.isDeleted && u.id === user.id);
+    }
+    const safeUsers = scopedUsers.map(u => {
       const { passwordHash: _, ...safe } = u;
       return safe;
     });
-    res.json({ users: activeUsers });
+    res.json({ users: safeUsers });
   });
 
-  app.post('/api/users', requireAuth, (req: AuthenticatedRequest, res) => {
+  app.post('/api/users', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
     const { name, username, email, phone, role, contractor, contractorId, area } = req.body;
     if (!name || !username || !role) {
       return res.status(400).json({ error: 'Nama, username, dan role akun wajib diisi.' });
@@ -2800,9 +3087,13 @@ async function startServer() {
       });
     }
 
-    const assignedContractor = req.user!.role === 'leader' ? (req.user!.contractor || contractor) : contractor;
-    const assignedArea = req.user!.role === 'leader' ? (req.user!.area || area) : area;
-    const assignedContractorId = req.user!.role === 'leader' ? (req.user!.contractorId || contractorId) : contractorId;
+    const assignedRole = req.user!.role === 'leader' ? 'installer' : role;
+    const assignedContractor = req.user!.role === 'leader' ? req.user!.contractor : contractor;
+    const assignedContractorId = req.user!.role === 'leader' ? resolveUserContractorId(req.user!) : contractorId;
+    const assignedArea = req.user!.role === 'leader' ? req.user!.area : area;
+
+    const initialPassword = 'password' in req.body ? req.body.password : '12345678';
+    const secureHash = hashPasswordSecure(initialPassword);
 
     const newUser: ServerUser = {
       id: 'u-' + Date.now(),
@@ -2810,14 +3101,27 @@ async function startServer() {
       username: cleanUsername,
       email: email?.trim() || `${cleanUsername}@morajaws.net`,
       phone: phone?.trim(),
-      role,
+      role: assignedRole,
       contractor: assignedContractor,
       contractorId: assignedContractorId,
       area: assignedArea,
       active: true,
-      passwordHash: DEFAULT_HASH,
+      passwordHash: secureHash,
+      mustChangePassword: true,
       createdAt: new Date().toISOString()
     };
+
+    const sbClient = getSupabaseBackendClient();
+    if (sbClient) {
+      const sbRes = await insertUserToSupabase(newUser);
+      if (!sbRes.success) {
+        const isDup = sbRes.error?.code === '23505' || sbRes.error?.isDuplicate;
+        return res.status(isDup ? 409 : 500).json({
+          error: sbRes.error?.message || 'Gagal menyimpan pengguna ke database Supabase.',
+          code: sbRes.error?.code || 'DATABASE_ERROR'
+        });
+      }
+    }
 
     db.users.push(newUser);
     saveDatabaseToDisk();
@@ -2829,11 +3133,19 @@ async function startServer() {
   });
 
   // Edit/Update User Profile (Super Admin or Leader updating own installer)
-  app.put('/api/users/:id', requireAuth, (req: AuthenticatedRequest, res) => {
+  app.put('/api/users/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
-    const { name, username, email, phone, role, contractor, area, active } = req.body;
+    const { name, username, email, phone, role, contractor, contractorId, area, active } = req.body;
 
-    const user = db.users.find(u => u.id === id);
+    let user = db.users.find(u => u.id === id);
+    const sbClient = getSupabaseBackendClient();
+    if (sbClient) {
+      const sbRes = await getUserByIdFromSupabase(id);
+      if (sbRes.success && sbRes.data) {
+        user = sbRes.data;
+      }
+    }
+
     if (!user || user.isDeleted) {
       return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
     }
@@ -2842,12 +3154,13 @@ async function startServer() {
     const isSuperAdmin = req.user!.role === 'super_admin';
     const isLeaderManagingOwnInstaller =
       req.user!.role === 'leader' &&
-      user.role === 'installer' &&
-      user.contractor === req.user!.contractor;
+      isLeaderAllowedToManageInstaller(req.user!, user);
 
     if (!isSuperAdmin && !isLeaderManagingOwnInstaller) {
       return res.status(403).json({ error: 'Akses Ditolak: Anda tidak memiliki izin untuk mengedit akun ini.' });
     }
+
+    const updates: Partial<ServerUser> = {};
 
     // Validate uniqueness of name and username against other users
     if (name) {
@@ -2861,10 +3174,10 @@ async function startServer() {
           code: 'ACCOUNT_ALREADY_EXISTS'
         });
       }
-      user.name = cleanName;
+      updates.name = cleanName;
     }
 
-    if (username) {
+    if (username && isSuperAdmin) {
       const cleanUsername = String(username).trim().toLowerCase().replace(/\s+/g, '');
       const usernameExists = db.users.some(
         u => u.id !== id && !u.isDeleted && u.username.trim().toLowerCase() === cleanUsername
@@ -2875,48 +3188,79 @@ async function startServer() {
           code: 'ACCOUNT_ALREADY_EXISTS'
         });
       }
-      user.username = cleanUsername;
+      updates.username = cleanUsername;
     }
 
-    if (phone !== undefined) user.phone = phone?.trim();
-    if (email !== undefined) user.email = email?.trim();
-    if (area !== undefined) user.area = area?.trim();
-    if (isSuperAdmin && contractor !== undefined) user.contractor = contractor?.trim();
+    if (phone !== undefined) updates.phone = phone?.trim();
+    if (email !== undefined) updates.email = email?.trim();
+    if (area !== undefined) updates.area = area?.trim();
 
-    if (isSuperAdmin && role && role !== user.role) {
-      // Disallow demoting the last super admin
-      if (user.role === 'super_admin') {
-        const superAdminCount = db.users.filter(u => u.role === 'super_admin' && !u.isDeleted && u.active).length;
-        if (superAdminCount <= 1) {
-          return res.status(400).json({ error: 'Tidak dapat mengubah role Super Admin terakhir dalam sistem.' });
+    if (isSuperAdmin) {
+      if (contractor !== undefined) updates.contractor = contractor?.trim();
+      if (contractorId !== undefined) updates.contractorId = contractorId?.trim();
+      if (role && role !== user.role) {
+        // Disallow demoting the last super admin
+        if (user.role === 'super_admin') {
+          const superAdminCount = db.users.filter(u => u.role === 'super_admin' && !u.isDeleted && u.active).length;
+          if (superAdminCount <= 1) {
+            return res.status(400).json({ error: 'Tidak dapat mengubah role Super Admin terakhir dalam sistem.' });
+          }
         }
+        updates.role = role;
       }
-      user.role = role;
     }
 
     if (active !== undefined && typeof active === 'boolean') {
-      user.active = active;
+      updates.active = active;
       if (!active) {
         // Revoke active sessions immediately
         SERVER_SESSIONS.forEach(s => {
-          if (s.userId === user.id) s.status = 'revoked';
+          if (s.userId === user!.id) s.status = 'revoked';
         });
       }
     }
 
+    if (sbClient) {
+      const sbRes = await updateUserInSupabase(id, updates);
+      if (!sbRes.success) {
+        return res.status(sbRes.error?.isNotFound ? 404 : 500).json({
+          error: sbRes.error?.message || 'Gagal memperbarui pengguna di database Supabase.',
+          code: sbRes.error?.code || 'DATABASE_ERROR'
+        });
+      }
+    }
+
+    const localIdx = db.users.findIndex(u => u.id === id);
+    if (localIdx !== -1) {
+      Object.assign(db.users[localIdx], updates);
+      user = db.users[localIdx];
+    }
     saveDatabaseToDisk();
+
     logServerAudit('User Updated', 'auth', id, `Akun ${user.name} (@${user.username}) berhasil diperbarui oleh ${req.user!.name}`, req.user);
 
     const { passwordHash: _, ...safeUser } = user;
     res.json({ success: true, user: safeUser, message: 'Data pengguna berhasil diperbarui.' });
   });
 
-  app.post('/api/users/:id/toggle', requireSuperAdmin, (req: AuthenticatedRequest, res) => {
+  app.post('/api/users/:id/toggle', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
     const user = db.users.find(u => u.id === id);
     if (!user) return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
 
-    user.active = !user.active;
+    const newActive = !user.active;
+    const sbClient = getSupabaseBackendClient();
+    if (sbClient) {
+      const sbRes = await updateUserInSupabase(id, { active: newActive });
+      if (!sbRes.success) {
+        return res.status(500).json({
+          error: sbRes.error?.message || 'Gagal mengubah status aktif di database Supabase.',
+          code: sbRes.error?.code || 'DATABASE_ERROR'
+        });
+      }
+    }
+
+    user.active = newActive;
     if (!user.active) {
       SERVER_SESSIONS.forEach(s => {
         if (s.userId === user.id) s.status = 'revoked';
@@ -2929,20 +3273,40 @@ async function startServer() {
     res.json({ success: true, user: safe });
   });
 
-  app.post('/api/users/:id/reset-password', requireSuperAdmin, (req: AuthenticatedRequest, res) => {
+  app.post('/api/users/:id/reset-password', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
     const user = db.users.find(u => u.id === id);
     if (!user) return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
 
-    user.passwordHash = DEFAULT_HASH;
-    user.mustChangePassword = true;
-    saveDatabaseToDisk();
-    logServerAudit('User Password Reset', 'auth', id, `Password akun ${user.name} di-reset ke default 12345678`, req.user);
+    const secureResetHash = hashPasswordSecure('12345678');
+    const sbClient = getSupabaseBackendClient();
+    if (sbClient) {
+      const sbRes = await updateUserInSupabase(id, {
+        passwordHash: secureResetHash,
+        mustChangePassword: true
+      });
+      if (!sbRes.success) {
+        return res.status(500).json({
+          error: sbRes.error?.message || 'Gagal mereset kata sandi di database Supabase.',
+          code: sbRes.error?.code || 'DATABASE_ERROR'
+        });
+      }
+    }
 
-    res.json({ success: true, message: 'Password berhasil di-reset ke default 12345678.' });
+    user.passwordHash = secureResetHash;
+    user.mustChangePassword = true;
+    SERVER_SESSIONS.forEach(s => {
+      if (s.userId === id && s.status === 'active') {
+        s.status = 'revoked';
+      }
+    });
+    saveDatabaseToDisk();
+    logServerAudit('User Password Reset', 'auth', id, `Password akun ${user.name} di-reset ke default oleh Super Admin`, req.user);
+
+    res.json({ success: true, message: 'Password berhasil di-reset ke default.' });
   });
 
-  app.delete('/api/users/:id', requireSuperAdmin, (req: AuthenticatedRequest, res) => {
+  app.delete('/api/users/:id', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
     const { reason, permanent } = req.body || {};
 
@@ -2958,6 +3322,17 @@ async function startServer() {
     const targetUser = db.users[userIndex];
     if (targetUser.id === req.user?.id) {
       return res.status(400).json({ error: 'Anda tidak dapat menghapus akun Anda sendiri saat sedang login.' });
+    }
+
+    const sbClient = getSupabaseBackendClient();
+    if (sbClient) {
+      const sbRes = await deleteUserInSupabase(id, reason, req.user?.name);
+      if (!sbRes.success) {
+        return res.status(sbRes.error?.isNotFound ? 404 : 500).json({
+          error: sbRes.error?.message || 'Gagal menghapus akun di database Supabase.',
+          code: sbRes.error?.code || 'DATABASE_ERROR'
+        });
+      }
     }
 
     // Revoke all sessions for target user immediately
@@ -4482,6 +4857,1382 @@ async function startServer() {
   });
 
   // ==============================================================================
+  // EXPRESS SUPABASE BACKEND PROXY API & RBAC ENDPOINTS (Section D)
+  // Strictly eliminates direct browser Supabase connections.
+  // Every request is authenticated, authorized, and validated on the backend.
+  // ==============================================================================
+
+  // --- Realtime Server-Sent Events (SSE) Hub for Supabase Data Changes ---
+  interface BackendSseClient {
+    id: string;
+    res: Response;
+    user: ServerUser;
+  }
+
+  const activeBackendSseClients = new Map<string, BackendSseClient>();
+
+  function broadcastBackendRealtimeEvent(
+    table: string,
+    eventType: 'INSERT' | 'UPDATE' | 'DELETE' | 'ARCHIVE' | 'RESTORE',
+    record: any,
+    oldRecord?: any
+  ) {
+    const payload = {
+      table,
+      entity: table,
+      eventType,
+      data: record,
+      oldData: oldRecord,
+      timestamp: new Date().toISOString()
+    };
+
+    const serialized = `data: ${JSON.stringify(payload)}\n\n`;
+
+    for (const [clientId, client] of activeBackendSseClients.entries()) {
+      try {
+        if (table === 'work_orders' || table === 'tickets') {
+          const u = client.user;
+          if (u.role === 'leader') {
+            const leaderCid = resolveUserContractorId(u);
+            const recCid = record?.contractorId || record?.contractor_id;
+            if (leaderCid && recCid) {
+              if (leaderCid !== recCid) continue;
+            } else {
+              const leaderContr = (u.contractor || '').toLowerCase().trim();
+              const recContr = (record?.contactorName || record?.contractorName || '').toLowerCase().trim();
+              if (leaderContr && (!recContr.includes(leaderContr) && !leaderContr.includes(recContr))) {
+                continue;
+              }
+            }
+            const leaderArea = (u.area || '').toLowerCase().trim();
+            const recArea = (record?.area || '').toLowerCase().trim();
+            if (leaderArea && (!recArea.includes(leaderArea) && !leaderArea.includes(recArea))) {
+              continue;
+            }
+          } else if (u.role === 'installer') {
+            const myName = (u.name || '').toLowerCase().trim();
+            const cleanMyName = myName.replace(/\(.*?\)/g, '').trim();
+            const recInst = (record?.installerName || '').toLowerCase().trim();
+            const recPhone = (record?.installerContact || '').replace(/\D/g, '');
+            const myPhone = (u.phone || '').replace(/\D/g, '');
+            const matchesName = recInst && (recInst.includes(cleanMyName) || cleanMyName.includes(recInst));
+            const matchesPhone = myPhone && recPhone && recPhone === myPhone;
+            if (!matchesName && !matchesPhone) {
+              continue;
+            }
+          }
+        }
+
+        if (table === 'users') {
+          const u = client.user;
+          if (u.role === 'leader') {
+            if (record?.role !== 'installer' || !isLeaderAllowedToManageInstaller(u, record)) {
+              continue;
+            }
+          } else if (u.role === 'installer') {
+            if (record?.id !== u.id) {
+              continue;
+            }
+          }
+        }
+        client.res.write(serialized);
+      } catch {
+        activeBackendSseClients.delete(clientId);
+      }
+    }
+  }
+
+  // 1. GET & POST /api/supabase/work-orders
+  app.get('/api/supabase/work-orders', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const area = typeof req.query.area === 'string' ? req.query.area.trim() : undefined;
+      const contractorId = typeof req.query.contractorId === 'string' ? req.query.contractorId.trim() : undefined;
+      const installerName = typeof req.query.installerName === 'string' ? req.query.installerName.trim() : undefined;
+      const statusWOAgent = typeof req.query.statusWOAgent === 'string' ? req.query.statusWOAgent.trim() : undefined;
+      const statusWOInstaller = typeof req.query.statusWOInstaller === 'string' ? req.query.statusWOInstaller.trim() : undefined;
+      const appointmentDate = typeof req.query.appointmentDate === 'string' ? req.query.appointmentDate.trim() : undefined;
+      const includeArchived = req.query.includeArchived === 'true';
+      const includeDeleted = req.query.includeDeleted === 'true';
+      const limit = req.query.limit ? Math.min(parseInt(String(req.query.limit), 10) || 500, 1000) : undefined;
+      const offset = req.query.offset ? Math.max(parseInt(String(req.query.offset), 10) || 0, 0) : undefined;
+
+      let tickets: any[] = [];
+      const sbClient = getSupabaseBackendClient();
+
+      if (sbClient) {
+        const sbResult = await getWorkOrdersFromSupabase({
+          area,
+          contractorId,
+          installerName,
+          statusWOAgent,
+          statusWOInstaller,
+          appointmentDate,
+          includeArchived,
+          includeDeleted,
+          limit,
+          offset
+        });
+        if (sbResult.success && Array.isArray(sbResult.data)) {
+          tickets = sbResult.data;
+        } else {
+          tickets = [...db.tickets];
+        }
+      } else {
+        tickets = [...db.tickets];
+      }
+
+      // Enforce server-side role scoping
+      let scopedTickets = scopeTicketsForUser(tickets, user);
+
+      // In-memory filter fallback
+      if (!includeDeleted) scopedTickets = scopedTickets.filter(t => !t.isDeleted);
+      if (!includeArchived) scopedTickets = scopedTickets.filter(t => !t.isArchived);
+      if (area) scopedTickets = scopedTickets.filter(t => t.area === area);
+      if (contractorId) scopedTickets = scopedTickets.filter(t => t.contractorId === contractorId);
+      if (installerName) scopedTickets = scopedTickets.filter(t => t.installerName === installerName);
+      if (statusWOAgent) scopedTickets = scopedTickets.filter(t => t.statusWOAgent === statusWOAgent);
+      if (statusWOInstaller) scopedTickets = scopedTickets.filter(t => t.statusWOInstaller === statusWOInstaller);
+      if (appointmentDate) scopedTickets = scopedTickets.filter(t => (t.appointmentDate || t.date) === appointmentDate);
+
+      res.json({
+        success: true,
+        data: scopedTickets,
+        count: scopedTickets.length,
+        role: user.role
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'FETCH_ERROR', message: 'Gagal mengambil data Work Order dari backend Supabase.' }
+      });
+    }
+  });
+
+  app.post('/api/supabase/work-orders', requireAuth, requireImportPermission, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const body = req.body;
+      const rawWo = body.woNumber || body.workOrderNumber;
+      if (!rawWo || typeof rawWo !== 'string' || !rawWo.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: 'Nomor Work Order (woNumber) wajib diisi.' }
+        });
+      }
+
+      const cleanWo = String(rawWo).trim().toUpperCase();
+      const existingInLocal = db.tickets.some(t => !t.isDeleted && (t.woNumber?.toUpperCase() === cleanWo || t.workOrderNumber?.toUpperCase() === cleanWo));
+      if (existingInLocal) {
+        return res.status(409).json({
+          success: false,
+          error: { code: '23505', isDuplicate: true, message: `Duplikasi terdeteksi: Nomor WO "${cleanWo}" sudah terdaftar.` }
+        });
+      }
+
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const existingInSb = await getWorkOrderByWoNumberFromSupabase(cleanWo);
+        if (existingInSb.success && existingInSb.data) {
+          return res.status(409).json({
+            success: false,
+            error: { code: '23505', isDuplicate: true, message: `Duplikasi terdeteksi di database: Nomor WO "${cleanWo}" sudah ada.` }
+          });
+        }
+      }
+
+      const ticketId = body.id || `wo_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const nowIso = new Date().toISOString();
+      const appDate = toDateOnlyString(body.appointmentDate || body.date) || body.appointmentDate || '';
+
+      const newTicket = {
+        ...body,
+        id: ticketId,
+        woNumber: cleanWo,
+        workOrderNumber: cleanWo,
+        appointmentDate: appDate,
+        date: appDate,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        updatedBy: user.name,
+        isArchived: false,
+        isDeleted: false
+      };
+
+      if (sbClient) {
+        const sbRes = await insertWorkOrderToSupabase(newTicket);
+        if (!sbRes.success) {
+          const isDup = sbRes.error?.isDuplicate || sbRes.error?.code === '23505';
+          return res.status(isDup ? 409 : 500).json({
+            success: false,
+            error: {
+              code: sbRes.error?.code || 'CREATE_ERROR',
+              isDuplicate: isDup,
+              message: sbRes.error?.message || 'Gagal menyimpan Work Order ke database Supabase.'
+            }
+          });
+        }
+      }
+
+      db.tickets.unshift(newTicket);
+      saveDatabaseToDisk();
+
+      logServerAudit('Create Work Order (Supabase API)', 'work_orders', cleanWo, `User ${user.name} (${user.role}) membuat Work Order baru ${cleanWo}`, user);
+      broadcastBackendRealtimeEvent('work_orders', 'INSERT', newTicket);
+
+      res.status(201).json({
+        success: true,
+        data: newTicket
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'CREATE_ERROR', message: 'Gagal membuat Work Order.' }
+      });
+    }
+  });
+
+  // 2. GET, PATCH, DELETE /api/supabase/work-orders/:id
+  app.get('/api/supabase/work-orders/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const user = req.user!;
+      let ticket: any = null;
+
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbResult = await getWorkOrderByIdFromSupabase(id);
+        if (sbResult.success && sbResult.data) {
+          ticket = sbResult.data;
+        }
+      }
+
+      if (!ticket) {
+        ticket = db.tickets.find(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
+      }
+
+      if (!ticket) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+        });
+      }
+
+      const scoped = scopeTicketsForUser([ticket], user);
+      if (scoped.length === 0) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN_SCOPE', message: 'Akses Ditolak: Anda tidak memiliki wewenang untuk melihat data Work Order ini.' }
+        });
+      }
+
+      res.json({
+        success: true,
+        data: ticket
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'FETCH_ERROR', message: 'Gagal memuat detail Work Order.' }
+      });
+    }
+  });
+
+  app.patch('/api/supabase/work-orders/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const user = req.user!;
+      const updates = req.body || {};
+
+      let ticketIndex = db.tickets.findIndex(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
+      let existingTicket = ticketIndex !== -1 ? db.tickets[ticketIndex] : null;
+
+      const sbClient = getSupabaseBackendClient();
+      if (!existingTicket && sbClient) {
+        const sbResult = await getWorkOrderByIdFromSupabase(id);
+        if (sbResult.success && sbResult.data) {
+          existingTicket = sbResult.data;
+        }
+      }
+
+      if (!existingTicket) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+        });
+      }
+
+      // Mass Assignment Protection & Role Permissions Whitelist
+      const allowedKeysAdmin = [
+        'date', 'appointmentDate', 'customerName', 'customerPhone', 'slotTime', 'area',
+        'clusterName', 'streetName', 'streetAlternatif', 'fdtCode', 'fatCode',
+        'ticketCategory', 'statusWOAgent', 'statusWOInstaller', 'statusWhatsApp',
+        'remarksAgent', 'remarksWOInstaller', 'contractorName', 'contactorName',
+        'contractorId', 'leaderName', 'installerName', 'installerContact', 'action',
+        'lossONT', 'lossFAT', 'cableLength', 'routerSn', 'stbSn', 'packageSpeed',
+        'additionalFields', 'distributionStatus', 'distributionNotes'
+      ];
+
+      const allowedKeysLeader = [
+        'installerName', 'installerContact', 'statusWOInstaller', 'remarksWOInstaller',
+        'action', 'distributionStatus', 'distributionNotes'
+      ];
+
+      const allowedKeysInstaller = [
+        'statusWOInstaller', 'statusWhatsApp', 'remarksWOInstaller', 'lossONT', 'lossFAT',
+        'cableLength', 'routerSn', 'stbSn', 'action', 'photoHouseONT', 'photoFatClamped',
+        'photoFatOpen', 'photoDistributionTape', 'photoLabelingFAT', 'photoLossONT',
+        'photoLossFAT', 'photoSignatureCustomer', 'photoSpeedtest', 'technicalReport'
+      ];
+
+      let allowedKeys: string[] = [];
+      if (user.role === 'super_admin' || user.role === 'dispatch' || user.role === 'management_data') {
+        allowedKeys = allowedKeysAdmin;
+      } else if (user.role === 'leader') {
+        const leaderContr = (user.contractor || '').toLowerCase().trim();
+        const ticketContr = (existingTicket.contactorName || existingTicket.contractorName || '').toLowerCase().trim();
+        if (leaderContr && !ticketContr.includes(leaderContr) && !leaderContr.includes(ticketContr)) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'FORBIDDEN_SCOPE', message: 'Akses Ditolak: Leader hanya berhak memperbarui WO kontraktornya sendiri.' }
+          });
+        }
+        allowedKeys = allowedKeysLeader;
+      } else if (user.role === 'installer') {
+        const myName = (user.name || '').toLowerCase().trim();
+        const cleanMyName = myName.replace(/\(.*?\)/g, '').trim();
+        const ticketInst = (existingTicket.installerName || '').toLowerCase().trim();
+        const phoneMatch = user.phone && existingTicket.installerContact && existingTicket.installerContact.replace(/\D/g, '') === user.phone.replace(/\D/g, '');
+        const nameMatch = ticketInst && (ticketInst.includes(cleanMyName) || cleanMyName.includes(ticketInst));
+        if (!nameMatch && !phoneMatch) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'FORBIDDEN_SCOPE', message: 'Akses Ditolak: Teknisi hanya berhak memperbarui WO yang ditugaskan kepadanya.' }
+          });
+        }
+        allowedKeys = allowedKeysInstaller;
+      } else {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN_ROLE', message: 'Akses Ditolak: Role Anda tidak berhak memperbarui Work Order.' }
+        });
+      }
+
+      const sanitizedUpdates: Record<string, any> = {};
+      for (const key of Object.keys(updates)) {
+        if (allowedKeys.includes(key)) {
+          sanitizedUpdates[key] = updates[key];
+        }
+      }
+
+      if (sanitizedUpdates.appointmentDate || sanitizedUpdates.date) {
+        const normalizedDate = toDateOnlyString(sanitizedUpdates.appointmentDate || sanitizedUpdates.date);
+        if (normalizedDate) {
+          sanitizedUpdates.appointmentDate = normalizedDate;
+          sanitizedUpdates.date = normalizedDate;
+        }
+      }
+
+      sanitizedUpdates.updatedAt = new Date().toISOString();
+      sanitizedUpdates.updatedBy = user.name;
+
+      const updatedTicket = { ...existingTicket, ...sanitizedUpdates };
+
+      if (sbClient) {
+        const sbRes = await updateWorkOrderInSupabase(existingTicket.id, sanitizedUpdates);
+        if (!sbRes.success) {
+          const isNotFound = sbRes.error?.isNotFound || sbRes.error?.code === 'PGRST116';
+          return res.status(isNotFound ? 404 : 500).json({
+            success: false,
+            error: {
+              code: sbRes.error?.code || 'UPDATE_ERROR',
+              isNotFound,
+              message: sbRes.error?.message || 'Gagal memperbarui Work Order di database Supabase.'
+            }
+          });
+        }
+      }
+
+      if (ticketIndex !== -1) {
+        db.tickets[ticketIndex] = updatedTicket;
+      } else {
+        db.tickets.unshift(updatedTicket);
+      }
+      saveDatabaseToDisk();
+
+      logServerAudit('Update Work Order (Supabase API)', 'work_orders', existingTicket.woNumber, `User ${user.name} (${user.role}) memperbarui Work Order ${existingTicket.woNumber}`, user);
+      broadcastBackendRealtimeEvent('work_orders', 'UPDATE', updatedTicket, existingTicket);
+
+      res.json({
+        success: true,
+        data: updatedTicket
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'UPDATE_ERROR', message: 'Gagal memperbarui Work Order.' }
+      });
+    }
+  });
+
+  app.delete('/api/supabase/work-orders/:id', requireAuth, requireManagementData, sensitiveOpRateLimiter, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const user = req.user!;
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : 'Soft deleted via Management Data portal';
+
+      let ticketIndex = db.tickets.findIndex(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
+      let existing = ticketIndex !== -1 ? db.tickets[ticketIndex] : null;
+
+      const sbClient = getSupabaseBackendClient();
+      if (!existing && sbClient) {
+        const sbResult = await getWorkOrderByIdFromSupabase(id);
+        if (sbResult.success && sbResult.data) {
+          existing = sbResult.data;
+        }
+      }
+
+      if (!existing) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      const deletedTicket = {
+        ...existing,
+        isDeleted: true,
+        deletedAt: nowIso,
+        deletedBy: user.name,
+        deletionReason: reason,
+        updatedAt: nowIso,
+        updatedBy: user.name
+      };
+
+      if (sbClient) {
+        const sbRes = await deleteWorkOrderFromSupabase(existing.id, reason, user.name);
+        if (!sbRes.success) {
+          return res.status(sbRes.error?.isNotFound ? 404 : 500).json({
+            success: false,
+            error: {
+              code: sbRes.error?.code || 'DELETE_ERROR',
+              message: sbRes.error?.message || 'Gagal menghapus Work Order di database Supabase.'
+            }
+          });
+        }
+      }
+
+      if (ticketIndex !== -1) {
+        db.tickets[ticketIndex] = deletedTicket;
+      } else {
+        db.tickets.unshift(deletedTicket);
+      }
+      saveDatabaseToDisk();
+
+      logServerAudit('Delete Work Order (Supabase API)', 'work_orders', existing.woNumber, `Management Data ${user.name} melakukan soft delete WO ${existing.woNumber}: ${reason}`, user);
+      broadcastBackendRealtimeEvent('work_orders', 'DELETE', deletedTicket);
+
+      res.json({
+        success: true,
+        data: deletedTicket
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'DELETE_ERROR', message: 'Gagal menghapus Work Order.' }
+      });
+    }
+  });
+
+  // 3. POST /api/supabase/work-orders/:id/archive & /restore
+  app.post('/api/supabase/work-orders/:id/archive', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const user = req.user!;
+      if (user.role !== 'super_admin' && user.role !== 'management_data' && user.role !== 'dispatch') {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN_ROLE', message: 'Akses Ditolak: Mengarsipkan Work Order dibatasi untuk Super Admin, Dispatch, dan Management Data.' }
+        });
+      }
+
+      const ticketIndex = db.tickets.findIndex(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
+      if (ticketIndex === -1) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await archiveWorkOrderInSupabase(id, user.name);
+        if (!sbRes.success) {
+          return res.status(sbRes.error?.isNotFound ? 404 : 500).json({
+            success: false,
+            error: {
+              code: sbRes.error?.code || 'ARCHIVE_ERROR',
+              message: sbRes.error?.message || 'Gagal mengarsipkan Work Order di database Supabase.'
+            }
+          });
+        }
+      }
+
+      db.tickets[ticketIndex].isArchived = true;
+      db.tickets[ticketIndex].archivedAt = nowIso;
+      db.tickets[ticketIndex].archivedBy = user.name;
+      saveDatabaseToDisk();
+
+      logServerAudit('Archive Work Order', 'work_orders', db.tickets[ticketIndex].woNumber, `User ${user.name} mengarsipkan WO ${db.tickets[ticketIndex].woNumber}`, user);
+      broadcastBackendRealtimeEvent('work_orders', 'ARCHIVE', db.tickets[ticketIndex]);
+
+      res.json({
+        success: true,
+        data: db.tickets[ticketIndex]
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'ARCHIVE_ERROR', message: 'Gagal mengarsipkan Work Order.' }
+      });
+    }
+  });
+
+  app.post('/api/supabase/work-orders/:id/restore', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const user = req.user!;
+      if (user.role !== 'super_admin' && user.role !== 'management_data') {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN_ROLE', message: 'Akses Ditolak: Memulihkan Work Order dibatasi untuk Super Admin dan Management Data.' }
+        });
+      }
+
+      const ticketIndex = db.tickets.findIndex(t => t.id === id || t.woNumber === id || t.workOrderNumber === id);
+      if (ticketIndex === -1) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'PGRST116', isNotFound: true, message: `Work Order ${id} tidak ditemukan.` }
+        });
+      }
+
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await restoreWorkOrderInSupabase(id, user.name);
+        if (!sbRes.success) {
+          return res.status(sbRes.error?.isNotFound ? 404 : 500).json({
+            success: false,
+            error: {
+              code: sbRes.error?.code || 'RESTORE_ERROR',
+              message: sbRes.error?.message || 'Gagal memulihkan Work Order di database Supabase.'
+            }
+          });
+        }
+      }
+
+      db.tickets[ticketIndex].isArchived = false;
+      db.tickets[ticketIndex].isDeleted = false;
+      delete db.tickets[ticketIndex].archivedAt;
+      delete db.tickets[ticketIndex].archivedBy;
+      delete db.tickets[ticketIndex].deletedAt;
+      delete db.tickets[ticketIndex].deletedBy;
+      saveDatabaseToDisk();
+
+      logServerAudit('Restore Work Order', 'work_orders', db.tickets[ticketIndex].woNumber, `User ${user.name} memulihkan WO ${db.tickets[ticketIndex].woNumber}`, user);
+      broadcastBackendRealtimeEvent('work_orders', 'RESTORE', db.tickets[ticketIndex]);
+
+      res.json({
+        success: true,
+        data: db.tickets[ticketIndex]
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'RESTORE_ERROR', message: 'Gagal memulihkan Work Order.' }
+      });
+    }
+  });
+
+  // 4. POST /api/supabase/work-orders/bulk-import (With In-File & DB Deduplication)
+  app.post('/api/supabase/work-orders/bulk-import', requireAuth, requireImportPermission, bulkImportRateLimiter, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const { tickets, batchId } = req.body;
+      if (!Array.isArray(tickets) || tickets.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: 'Daftar tickets harus berupa array dan tidak boleh kosong.' }
+        });
+      }
+
+      if (tickets.length > 5000) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'PAYLOAD_TOO_LARGE', message: 'Maksimum import per batch adalah 5000 records.' }
+        });
+      }
+
+      const summary = {
+        totalSubmitted: tickets.length,
+        imported: 0,
+        skippedDuplicates: 0,
+        duplicateInFile: [] as string[],
+        duplicateExisting: [] as string[]
+      };
+
+      const seenInBatch = new Set<string>();
+      const validToImport: any[] = [];
+      const currentBatchId = batchId || `batch_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const nowIso = new Date().toISOString();
+
+      // Collect existing keys from in-memory database
+      const existingKeys = new Set<string>();
+      db.tickets.forEach(t => {
+        if (!t.isDeleted) {
+          const k = canonicalWoKey(t.woNumber || t.workOrderNumber);
+          if (k) existingKeys.add(k);
+        }
+      });
+
+      for (const t of tickets) {
+        const rawWo = t.woNumber || t.workOrderNumber;
+        const norm = canonicalWoKey(rawWo);
+        if (!norm) continue;
+
+        // 1. In-File Deduplication
+        if (seenInBatch.has(norm)) {
+          summary.skippedDuplicates++;
+          summary.duplicateInFile.push(norm);
+          continue;
+        }
+        seenInBatch.add(norm);
+
+        // 2. Database Existing Deduplication
+        if (existingKeys.has(norm)) {
+          summary.skippedDuplicates++;
+          summary.duplicateExisting.push(norm);
+          continue;
+        }
+
+        const dateNorm = toDateOnlyString(t.appointmentDate || t.date) || t.appointmentDate || '';
+        const ticketId = t.id || `wo_imp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+        const cleanTicket = {
+          ...t,
+          id: ticketId,
+          woNumber: t.woNumber || t.workOrderNumber || norm,
+          workOrderNumber: t.workOrderNumber || t.woNumber || norm,
+          appointmentDate: dateNorm,
+          date: dateNorm,
+          importBatchId: currentBatchId,
+          createdAt: t.createdAt || nowIso,
+          updatedAt: nowIso,
+          updatedBy: user.name,
+          isArchived: false,
+          isDeleted: false
+        };
+
+        validToImport.push(cleanTicket);
+        existingKeys.add(norm);
+      }
+
+      if (validToImport.length > 0) {
+        const sbClient = getSupabaseBackendClient();
+        if (sbClient) {
+          const sbRes = await bulkImportWorkOrdersToSupabase(validToImport, currentBatchId, user.name);
+          if (!sbRes.success && (!sbRes.data || (sbRes.data.imported === 0 && sbRes.data.failedCount > 0))) {
+            return res.status(500).json({
+              success: false,
+              error: {
+                code: sbRes.error?.code || 'IMPORT_ERROR',
+                message: sbRes.error?.message || 'Gagal menyimpan bulk import Work Orders ke Supabase.'
+              }
+            });
+          }
+
+          if (sbRes.data) {
+            summary.imported = sbRes.data.imported;
+            summary.skippedDuplicates += sbRes.data.skippedDuplicates;
+            if (Array.isArray(sbRes.data.duplicateInFileWoNumbers)) {
+              summary.duplicateInFile.push(...sbRes.data.duplicateInFileWoNumbers);
+            }
+            if (Array.isArray(sbRes.data.duplicateExistingWoNumbers)) {
+              summary.duplicateExisting.push(...sbRes.data.duplicateExistingWoNumbers);
+            }
+
+            // Exclude tickets rejected by Supabase as existing duplicates
+            const skippedSet = new Set(sbRes.data.duplicateExistingWoNumbers || []);
+            const successfullyImported = validToImport.filter(t => !skippedSet.has(t.woNumber));
+            if (successfullyImported.length > 0) {
+              db.tickets.unshift(...successfullyImported);
+              saveDatabaseToDisk();
+            }
+          }
+        } else {
+          db.tickets.unshift(...validToImport);
+          saveDatabaseToDisk();
+          summary.imported = validToImport.length;
+        }
+
+        logServerAudit('Bulk Import Work Orders (Supabase API)', 'work_orders', currentBatchId, `User ${user.name} mengimpor ${summary.imported} WO baru (Dilewati: ${summary.skippedDuplicates} duplikat)`, user);
+        broadcastBackendRealtimeEvent('work_orders', 'INSERT', { batchId: currentBatchId, count: summary.imported });
+      }
+
+      res.json({
+        success: true,
+        data: summary
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'IMPORT_ERROR', message: 'Gagal melakukan bulk import Work Orders.' }
+      });
+    }
+  });
+
+  // 5. User Management Endpoints (/api/supabase/users)
+  app.get('/api/supabase/users', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const includeDeleted = req.query.includeDeleted === 'true';
+
+      let allUsers: ServerUser[] = [];
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await getUsersFromSupabase(includeDeleted);
+        if (sbRes.success && Array.isArray(sbRes.data)) {
+          allUsers = sbRes.data;
+        } else {
+          allUsers = [...db.users];
+        }
+      } else {
+        allUsers = [...db.users];
+      }
+
+      if (!includeDeleted) {
+        allUsers = allUsers.filter(u => !u.isDeleted);
+      }
+
+      // Role Scoping
+      let scopedUsers: ServerUser[] = [];
+      if (user.role === 'super_admin' || user.role === 'management_data' || user.role === 'it_support') {
+        scopedUsers = allUsers;
+      } else if (user.role === 'leader') {
+        scopedUsers = allUsers.filter(u => isLeaderAllowedToManageInstaller(user, u));
+      } else {
+        scopedUsers = allUsers.filter(u => u.id === user.id);
+      }
+
+      // STRICT SECURITY: Sanitize users (strip passwordHash and secrets)
+      const sanitized = scopedUsers.map(u => {
+        const { passwordHash: _, ...safe } = u;
+        return safe;
+      });
+
+      res.json({
+        success: true,
+        data: sanitized,
+        count: sanitized.length
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'FETCH_ERROR', message: 'Gagal memuat pengguna dari backend.' }
+      });
+    }
+  });
+
+  app.get('/api/supabase/users/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const user = req.user!;
+
+      let targetUser: ServerUser | null = null;
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await getUserByIdFromSupabase(id);
+        if (sbRes.success && sbRes.data) {
+          targetUser = sbRes.data;
+        }
+      }
+
+      if (!targetUser) {
+        targetUser = db.users.find(u => u.id === id) || null;
+      }
+
+      if (!targetUser) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
+        });
+      }
+
+      // Check permission to view
+      if (user.role !== 'super_admin' && user.role !== 'management_data' && user.role !== 'it_support' && user.id !== id) {
+        if (user.role === 'leader') {
+          if (!isLeaderAllowedToManageInstaller(user, targetUser)) {
+            return res.status(403).json({
+              success: false,
+              error: { code: 'FORBIDDEN_CONTRACTOR_SCOPE', message: 'Akses Ditolak: Leader hanya berhak mengakses akun Installer milik kontraktornya sendiri.' }
+            });
+          }
+        } else {
+          return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Akses Ditolak: Anda tidak memiliki wewenang untuk melihat profil pengguna ini.' } });
+        }
+      }
+
+      const { passwordHash: _, ...safe } = targetUser;
+      res.json({
+        success: true,
+        data: safe
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'FETCH_ERROR', message: 'Gagal memuat detail pengguna.' }
+      });
+    }
+  });
+
+  app.post('/api/supabase/users', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const actor = req.user!;
+      const { name, username, email, phone, role, contractor, contractorId, area, password } = req.body;
+
+      if (!name || !username || !role) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: 'Nama, username, dan role wajib diisi.' }
+        });
+      }
+
+      if (actor.role !== 'super_admin') {
+        if (actor.role === 'leader' && role === 'installer') {
+          // Leader allowed to create installer in their own contractor
+        } else {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'FORBIDDEN', message: 'Akses Ditolak: Anda tidak memiliki wewenang untuk membuat akun ini.' }
+          });
+        }
+      }
+
+      const cleanUsername = String(username).trim().toLowerCase().replace(/\s+/g, '');
+      const cleanName = String(name).trim();
+
+      const exists = db.users.some(u => !u.isDeleted && (u.username.toLowerCase() === cleanUsername || u.name.toLowerCase() === cleanName.toLowerCase()));
+      if (exists) {
+        return res.status(409).json({
+          success: false,
+          error: { code: 'ACCOUNT_EXISTS', message: 'Nama pengguna atau nama akun sudah terdaftar.' }
+        });
+      }
+
+      const initialPassword = password || '12345678';
+      const secureHash = hashPasswordSecure(initialPassword);
+      const nowIso = new Date().toISOString();
+
+      const assignedRole = actor.role === 'leader' ? 'installer' : role;
+      const assignedContractor = actor.role === 'leader' ? actor.contractor : contractor;
+      const assignedContractorId = actor.role === 'leader' ? resolveUserContractorId(actor) : contractorId;
+      const assignedArea = actor.role === 'leader' ? actor.area : area;
+
+      const newUser: ServerUser = {
+        id: `u-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        name: cleanName,
+        username: cleanUsername,
+        email: email ? String(email).trim().toLowerCase() : `${cleanUsername}@morajaws.net`,
+        phone: phone ? String(phone).trim() : undefined,
+        role: assignedRole,
+        contractor: assignedContractor,
+        contractorId: assignedContractorId,
+        area: assignedArea,
+        active: true,
+        passwordHash: secureHash,
+        mustChangePassword: true,
+        createdAt: nowIso
+      };
+
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await insertUserToSupabase(newUser);
+        if (!sbRes.success) {
+          const isDup = sbRes.error?.code === '23505' || sbRes.error?.isDuplicate;
+          return res.status(isDup ? 409 : 500).json({
+            success: false,
+            error: {
+              code: sbRes.error?.code || 'CREATE_ERROR',
+              message: sbRes.error?.message || 'Gagal membuat akun pengguna di database Supabase.'
+            }
+          });
+        }
+      }
+
+      db.users.push(newUser);
+      saveDatabaseToDisk();
+
+      logServerAudit('Create User (Supabase API)', 'users', newUser.id, `User ${actor.name} membuat akun baru: ${newUser.username} (${newUser.role})`, actor);
+
+      const { passwordHash: _, ...safe } = newUser;
+      res.status(201).json({
+        success: true,
+        data: safe
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'CREATE_ERROR', message: 'Gagal membuat akun pengguna.' }
+      });
+    }
+  });
+
+  app.patch('/api/supabase/users/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const actor = req.user!;
+      const { id } = req.params;
+      const updates = req.body || {};
+
+      let targetUser: ServerUser | null = null;
+      let userIndex = db.users.findIndex(u => u.id === id);
+      if (userIndex !== -1) {
+        targetUser = db.users[userIndex];
+      }
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await getUserByIdFromSupabase(id);
+        if (sbRes.success && sbRes.data) {
+          targetUser = sbRes.data;
+        }
+      }
+
+      if (!targetUser || targetUser.isDeleted) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
+        });
+      }
+
+      // Role check & Mass Assignment Protection
+      if (actor.role !== 'super_admin') {
+        if (actor.id === id) {
+          // Self update: only phone and name allowed, NEVER role, contractor, or permissions
+          delete updates.role;
+          delete updates.permissions;
+          delete updates.contractor;
+          delete updates.contractorId;
+          delete updates.active;
+          delete updates.passwordHash;
+          delete updates.id;
+        } else if (actor.role === 'leader') {
+          // Leader updating installer: MUST be installer in own contractor
+          if (!isLeaderAllowedToManageInstaller(actor, targetUser)) {
+            return res.status(403).json({
+              success: false,
+              error: { code: 'FORBIDDEN_CONTRACTOR_SCOPE', message: 'Akses Ditolak: Leader hanya berhak mengedit akun Installer milik kontraktornya sendiri.' }
+            });
+          }
+          delete updates.role;
+          delete updates.permissions;
+          delete updates.contractor;
+          delete updates.contractorId;
+          delete updates.id;
+          delete updates.username;
+          delete updates.passwordHash;
+        } else {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'FORBIDDEN', message: 'Akses Ditolak: Anda tidak memiliki wewenang untuk memperbarui pengguna ini.' }
+          });
+        }
+      }
+
+      // Whitelist update fields
+      const allowedKeys = ['name', 'phone', 'email', 'altEmail', 'area', 'contractor', 'contractorId', 'active', 'role', 'permissions', 'mustChangePassword'];
+      const sanitizedUpdates: Record<string, any> = {};
+      for (const k of Object.keys(updates)) {
+        if (allowedKeys.includes(k)) {
+          sanitizedUpdates[k] = updates[k];
+        }
+      }
+
+      if (sbClient) {
+        const sbRes = await updateUserInSupabase(id, sanitizedUpdates);
+        if (!sbRes.success) {
+          const isNotFound = sbRes.error?.isNotFound || sbRes.error?.code === 'PGRST116';
+          return res.status(isNotFound ? 404 : 500).json({
+            success: false,
+            error: {
+              code: sbRes.error?.code || 'UPDATE_ERROR',
+              message: sbRes.error?.message || 'Gagal memperbarui pengguna di database Supabase.'
+            }
+          });
+        }
+      }
+
+      if (userIndex !== -1) {
+        Object.assign(db.users[userIndex], sanitizedUpdates);
+        targetUser = db.users[userIndex];
+      } else {
+        targetUser = { ...targetUser, ...sanitizedUpdates };
+        db.users.push(targetUser);
+      }
+
+      if (sanitizedUpdates.active === false || (sanitizedUpdates.role && sanitizedUpdates.role !== targetUser.role)) {
+        SERVER_SESSIONS.forEach(s => {
+          if (s.userId === id && s.status === 'active') {
+            s.status = 'revoked';
+          }
+        });
+      }
+
+      saveDatabaseToDisk();
+
+      logServerAudit('Update User (Supabase API)', 'users', targetUser.id, `User ${actor.name} memperbarui data akun ${targetUser.username}`, actor);
+
+      const { passwordHash: _, ...safe } = targetUser;
+      res.json({
+        success: true,
+        data: safe
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'UPDATE_ERROR', message: 'Gagal memperbarui pengguna.' }
+      });
+    }
+  });
+
+  app.delete('/api/supabase/users/:id', requireAuth, requireSuperAdmin, sensitiveOpRateLimiter, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const actor = req.user!;
+      const { id } = req.params;
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : 'Dihapus oleh Super Admin';
+
+      if (actor.id === id) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'CANNOT_DELETE_SELF', message: 'Anda tidak dapat menghapus akun Anda sendiri.' }
+        });
+      }
+
+      const target = db.users.find(u => u.id === id);
+      if (!target) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await deleteUserInSupabase(id, reason, actor.name);
+        if (!sbRes.success) {
+          return res.status(sbRes.error?.isNotFound ? 404 : 500).json({
+            success: false,
+            error: {
+              code: sbRes.error?.code || 'DELETE_ERROR',
+              message: sbRes.error?.message || 'Gagal menghapus pengguna di database Supabase.'
+            }
+          });
+        }
+      }
+
+      target.isDeleted = true;
+      target.active = false;
+      target.deletedAt = nowIso;
+      target.deletedBy = actor.name;
+      target.deletionReason = reason;
+
+      // Revoke any active sessions for deleted user
+      SERVER_SESSIONS.forEach(s => {
+        if (s.userId === id && s.status === 'active') {
+          s.status = 'revoked';
+        }
+      });
+
+      saveDatabaseToDisk();
+
+      logServerAudit('Delete User (Supabase API)', 'users', target.id, `Super Admin ${actor.name} menghapus akun ${target.username}: ${reason}`, actor);
+
+      res.json({
+        success: true,
+        message: `Pengguna @${target.username} berhasil dihapus.`
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'DELETE_ERROR', message: 'Gagal menghapus pengguna.' }
+      });
+    }
+  });
+
+  app.post('/api/supabase/users/:id/reset-password', requireAuth, requireSuperAdmin, passwordResetRateLimiter, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const actor = req.user!;
+      const { id } = req.params;
+
+      const target = db.users.find(u => u.id === id);
+      if (!target) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: `Pengguna ${id} tidak ditemukan.` }
+        });
+      }
+
+      const secureResetHash = hashPasswordSecure('12345678');
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await updateUserInSupabase(id, {
+          passwordHash: secureResetHash,
+          mustChangePassword: true
+        });
+        if (!sbRes.success) {
+          return res.status(500).json({
+            success: false,
+            error: {
+              code: sbRes.error?.code || 'RESET_PASSWORD_ERROR',
+              message: sbRes.error?.message || 'Gagal mereset kata sandi di database Supabase.'
+            }
+          });
+        }
+      }
+
+      target.passwordHash = secureResetHash;
+      target.mustChangePassword = true;
+
+      // Revoke previous sessions
+      SERVER_SESSIONS.forEach(s => {
+        if (s.userId === id && s.status === 'active') {
+          s.status = 'revoked';
+        }
+      });
+
+      saveDatabaseToDisk();
+
+      logServerAudit('Reset User Password (Supabase API)', 'users', target.id, `Super Admin ${actor.name} mereset password akun ${target.username}`, actor);
+
+      res.json({
+        success: true,
+        message: `Kata sandi untuk @${target.username} berhasil direset ke password sementara default.`
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'RESET_ERROR', message: 'Gagal mereset kata sandi pengguna.' }
+      });
+  });
+
+  // 6. Contractors & Coverage Areas Endpoints
+  app.get('/api/supabase/contractors', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
+    try {
+      let contractors: any[] = [];
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await getContractorsFromSupabase();
+        if (sbRes.success && Array.isArray(sbRes.data)) {
+          contractors = sbRes.data;
+        } else {
+          contractors = db.contractors || [];
+        }
+      } else {
+        contractors = db.contractors || [];
+      }
+
+      res.json({
+        success: true,
+        data: contractors
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'FETCH_ERROR', message: 'Gagal memuat data kontraktor.' }
+      });
+    }
+  });
+
+  app.get('/api/supabase/coverage-areas', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
+    try {
+      let areas: any[] = [];
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await getCoverageAreasFromSupabase();
+        if (sbRes.success && Array.isArray(sbRes.data)) {
+          areas = sbRes.data;
+        } else {
+          areas = db.coverageAreas || [];
+        }
+      } else {
+        areas = db.coverageAreas || [];
+      }
+
+      res.json({
+        success: true,
+        data: areas
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'FETCH_ERROR', message: 'Gagal memuat data coverage area.' }
+      });
+    }
+  });
+
+  // 7. Configuration Endpoints (/api/supabase/settings/:key)
+  app.get('/api/supabase/settings/:key', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { key } = req.params;
+      const cleanKey = String(key).trim();
+      if (!/^[a-zA-Z0-9_\-]+$/.test(cleanKey)) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_KEY', message: 'Format key setting tidak valid.' } });
+      }
+
+      let settingValue: any = null;
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await getAppSettingFromSupabase(cleanKey);
+        if (sbRes.success && sbRes.data !== undefined) {
+          settingValue = sbRes.data;
+        }
+      }
+
+      if (settingValue === null && db.globalConfig) {
+        settingValue = db.globalConfig[cleanKey] ?? null;
+      }
+
+      res.json({
+        success: true,
+        data: settingValue
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'FETCH_ERROR', message: 'Gagal memuat setting konfigurasi.' }
+      });
+    }
+  });
+
+  app.post('/api/supabase/settings/:key', requireAuth, requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { key } = req.params;
+      const { value, description } = req.body;
+      const cleanKey = String(key).trim();
+      if (!/^[a-zA-Z0-9_\-]+$/.test(cleanKey)) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_KEY', message: 'Format key setting tidak valid.' } });
+      }
+
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await saveAppSettingToSupabase(cleanKey, value, description, req.user!.name);
+        if (!sbRes.success) {
+          return res.status(500).json({
+            success: false,
+            error: {
+              code: sbRes.error?.code || 'SAVE_ERROR',
+              message: sbRes.error?.message || 'Gagal menyimpan konfigurasi aplikasi di database Supabase.'
+            }
+          });
+        }
+      }
+
+      if (!db.globalConfig) db.globalConfig = {};
+      db.globalConfig[cleanKey] = value;
+      saveDatabaseToDisk();
+
+      logServerAudit('Save App Setting (Supabase API)', 'settings', cleanKey, `Super Admin ${req.user!.name} memperbarui setting "${cleanKey}"`, req.user);
+
+      res.json({
+        success: true,
+        data: true
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'SAVE_ERROR', message: 'Gagal menyimpan konfigurasi aplikasi.' }
+      });
+    }
+  });
+
+  // 8. Audit Logs Endpoint (/api/supabase/audit-logs)
+  app.get('/api/supabase/audit-logs', requireAuditLogViewer, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const limit = Math.min(parseInt(String(req.query.limit || 100), 10) || 100, 500);
+      let logs: any[] = [];
+
+      const sbClient = getSupabaseBackendClient();
+      if (sbClient) {
+        const sbRes = await getAuditLogsFromSupabase(limit);
+        if (sbRes.success && Array.isArray(sbRes.data)) {
+          logs = sbRes.data;
+        } else {
+          logs = (db.auditLogs || []).slice(0, limit);
+        }
+      } else {
+        logs = (db.auditLogs || []).slice(0, limit);
+      }
+
+      res.json({
+        success: true,
+        data: logs,
+        count: logs.length
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'FETCH_ERROR', message: 'Gagal memuat log audit.' }
+      });
+    }
+  });
+
+  // 9. Realtime Backend Server-Sent Events (SSE) Stream (/api/supabase/realtime/stream)
+  app.get('/api/supabase/realtime/stream', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+
+    const clientId = `sse_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const client: BackendSseClient = {
+      id: clientId,
+      res,
+      user: req.user!
+    };
+    activeBackendSseClients.set(clientId, client);
+
+    res.write(`data: ${JSON.stringify({ eventType: 'CONNECTED', message: 'Supabase backend SSE stream connected', clientId })}\n\n`);
+
+    const pingInterval = setInterval(() => {
+      try {
+        res.write(': keep-alive ping\n\n');
+      } catch {
+        clearInterval(pingInterval);
+        activeBackendSseClients.delete(clientId);
+      }
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(pingInterval);
+      activeBackendSseClients.delete(clientId);
+    });
+  });
+
+  app.post('/api/supabase/realtime/publish', requireAuth, requireSuperAdmin, (req: AuthenticatedRequest, res: Response) => {
+    const { table, eventType, data } = req.body;
+    if (!table || !eventType) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_INPUT', message: 'table dan eventType wajib disertakan.' } });
+    }
+
+    broadcastBackendRealtimeEvent(table, eventType, data);
+    res.json({ success: true, message: 'Event berhasil dibroadcast ke seluruh client SSE terotorisasi.' });
+  });
+
+  // ==============================================================================
   // PHASE 9C: SERVER-SENT EVENTS (SSE) FOUNDATION SANDBOX ENDPOINTS
   // Strictly isolated to dummy events. Protected by feature flag ENABLE_SSE_SANDBOX.
   // NEVER accesses production Firestore or Supabase database records.
@@ -5171,7 +6922,9 @@ async function startServer() {
       .then(res => {
         console.log(`[Startup Check] Supabase: ${res.status.toUpperCase()} - ${res.message}`);
       })
-      .catch(() => {});
+      .catch(err => {
+        console.warn(`[Startup Check] Supabase check error:`, err?.message || err);
+      });
 
     const fbHealth = checkFirebaseAdminHealth();
     console.log(`[Startup Check] Firebase Admin: ${fbHealth.status.toUpperCase()} - ${fbHealth.message}`);
