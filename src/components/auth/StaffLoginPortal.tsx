@@ -170,7 +170,14 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
       const uid = authResult.user.uid || '';
       const displayName = authResult.user.displayName || '';
 
-      const res = await loginWithFirebase({ email, uid, displayName });
+      let idToken: string | undefined;
+      try {
+        if (typeof (authResult.user as any).getIdToken === 'function') {
+          idToken = await (authResult.user as any).getIdToken();
+        }
+      } catch (tErr) {}
+
+      const res = await loginWithFirebase({ email, uid, displayName, idToken });
       if (res.success && res.user) {
         toast.success(`Berhasil masuk dengan akun Google: ${email}`, 'LOGIN BERHASIL');
         onLoginSuccess?.(res.user.role);

@@ -363,6 +363,15 @@ export const deduplicateContractors = (list: Contractor[]): Contractor[] => {
 
 const INITIAL_MESSAGES: TicketMessage[] = [];
 
+export const UNAUTHENTICATED_USER: User = {
+  id: '',
+  name: 'Tamu',
+  username: '',
+  role: 'installer',
+  active: false,
+  createdAt: '2026-01-01T00:00:00Z'
+};
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -415,8 +424,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [currentUser, setCurrentUser] = useState<User>(() => {
     try {
+      const stored = localStorage.getItem('morajaws_logged_in');
       const sessionStr = localStorage.getItem('morajaws_auth_session');
-      if (sessionStr) {
+      if (stored === 'true' && sessionStr) {
         const session = JSON.parse(sessionStr);
         const match = users.find(u => u.id === session.userId || u.username === session.username);
         if (match) return match;
@@ -437,7 +447,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     } catch (e) {}
-    return users[0] || DEFAULT_USERS[0];
+    return UNAUTHENTICATED_USER;
   });
 
   const [contractors, setContractors] = useState<Contractor[]>(() => {
@@ -882,6 +892,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           if (data.currentUser && data.isAuthenticated) {
             setCurrentUser(prev => ({ ...prev, ...data.currentUser }));
+          } else if (data.isAuthenticated === false && headers['Authorization']) {
+            setIsLoggedIn(false);
+            setCurrentUser(UNAUTHENTICATED_USER);
+            try {
+              localStorage.setItem('morajaws_logged_in', 'false');
+              localStorage.removeItem('morajaws_auth_session');
+            } catch (e) {}
           }
           if (Array.isArray(data.tickets) && data.tickets.length > 0) {
             setTickets(data.tickets);
@@ -1124,7 +1141,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      // 2. Identity Resolution: Map username/email to canonical Auth account via secure backend & Cloud Firestore
+      // 2. Identity Resolution: Map username/email to canonical Auth account via secure backend
       let resolveData: any = null;
       try {
         const resolveRes = await fetch('/api/auth/resolve-identity', {
@@ -1132,78 +1149,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifier: cleanUser })
         });
-        resolveData = await resolveRes.json();
+        if (resolveRes.ok) {
+          resolveData = await resolveRes.json();
+        } else {
+          resolveData = await resolveRes.json().catch(() => ({}));
+        }
       } catch (netErr: any) {
         console.warn('[Auth] Primary resolve-identity network issue:', netErr);
-      }
-
-      // If backend resolve didn't find the user, actively validate against live Cloud Firestore & user directory
-      if (!resolveData || !resolveData.found) {
-        const lowerClean = cleanUser.toLowerCase();
-        let matched = users.find(u => {
-          if (!u || (u as any).isDeleted) return false;
-          if (u.username && u.username.toLowerCase() === lowerClean) return true;
-          if (u.email && u.email.toLowerCase() === lowerClean) return true;
-          if ((u as any).altEmail && (u as any).altEmail.toLowerCase().includes(lowerClean)) return true;
-          const prefix = (u.email || '').split('@')[0].toLowerCase();
-          if (prefix === lowerClean) return true;
-          if (lowerClean === 'ray' && (prefix.startsWith('ray') || u.name.toLowerCase().includes('ray'))) return true;
-          return false;
-        });
-
-        // Direct query to Cloud Firestore users collection if not in local memory
-        if (!matched) {
-          try {
-            matched = (await findUserInFirestore(cleanUser)) || undefined;
-          } catch (fErr) {
-            console.warn('[Auth] Direct Firestore user lookup warning:', fErr);
-          }
-        }
-
-        // Developer / Super Admin account alias fallback (e.g. username "ray")
-        if (!matched && (lowerClean === 'ray' || lowerClean === 'rayjs666' || lowerClean.includes('rayjs666') || lowerClean.includes('rayhanafirzanx'))) {
-          matched = {
-            id: 'u-ray',
-            name: 'Ray (Super Admin)',
-            username: 'ray',
-            email: 'rayjs666@gmail.com',
-            role: 'super_admin',
-            active: true,
-            createdAt: new Date().toISOString()
-          };
-        }
-
-        if (matched) {
-          // Retry resolve-identity with userHint from Cloud Firestore / verified directory
-          try {
-            const retryRes = await fetch('/api/auth/resolve-identity', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ identifier: cleanUser, userHint: matched })
-            });
-            resolveData = await retryRes.json();
-          } catch (rErr) {
-            console.warn('[Auth] Retry resolve-identity warning:', rErr);
-          }
-
-          if (!resolveData || !resolveData.found) {
-            resolveData = {
-              success: true,
-              found: true,
-              active: matched.active !== false,
-              user: {
-                id: matched.id,
-                username: matched.username,
-                email: matched.email || `${cleanUser}@morajaws.net`,
-                name: matched.name,
-                role: matched.role,
-                contractor: matched.contractor,
-                area: matched.area,
-                firebaseUid: (matched as any).firebaseUid || null
-              }
-            };
-          }
-        }
+        return {
+          success: false,
+          error: 'Gagal terhubung ke server autentikasi MoraJaws. Periksa koneksi jaringan Anda.',
+          errorCode: 'auth/network-request-failed'
+        };
       }
 
       if (!resolveData || !resolveData.found) {
@@ -1387,36 +1344,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return { success: false, error: 'Respon server tidak valid' };
     } catch (err: any) {
-      const cleanEmail = String(firebaseData.email || '').trim().toLowerCase();
-      if (cleanEmail === 'tarnocepak@gmail.com') {
-        const superAdmin = users.find(u => u.role === 'super_admin') || DEFAULT_USERS[0];
-        const authedUser: User = {
-          ...superAdmin,
-          email: cleanEmail,
-          lastLoginAt: new Date().toISOString()
-        };
-        setCurrentUser(authedUser);
-        setIsLoggedIn(true);
-        try {
-          localStorage.setItem('morajaws_logged_in', 'true');
-          localStorage.setItem('morajaws_auth_session', JSON.stringify({
-            userId: authedUser.id,
-            username: authedUser.username,
-            role: authedUser.role,
-            name: authedUser.name,
-            loginAt: authedUser.lastLoginAt,
-            token: `mora_fb_${authedUser.id}_${Date.now()}`
-          }));
-        } catch (e) {}
-        return { success: true, user: authedUser };
-      }
-      return { success: false, error: err?.message || 'Gagal menghubungi server autentikasi.' };
+      addAuditLog('Firebase Login Error', 'auth', firebaseData.email, err?.message || 'Gagal menghubungi server autentikasi.');
+      return { success: false, error: 'Gagal menghubungi server autentikasi MoraJaws. Pastikan koneksi server tersedia.' };
     }
   };
 
   const logout = () => {
     addAuditLog('User Logout', 'auth', currentUser.id, `Pengguna ${currentUser.name} (${currentUser.role}) logout dari sistem`);
     setIsLoggedIn(false);
+    setCurrentUser(UNAUTHENTICATED_USER);
     try {
       localStorage.setItem('morajaws_logged_in', 'false');
       localStorage.removeItem('morajaws_auth_session');
@@ -1429,7 +1365,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     fetch('/api/auth/logout', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      }
     }).catch(() => {});
 
     // Reload public bootstrap after logout

@@ -24,9 +24,7 @@ import {
   bulkImportWorkOrdersToSupabase,
   getAppSettingFromSupabase,
   saveAppSettingToSupabase,
-  insertAuditLogToSupabase,
-  insertUserSessionToSupabase,
-  revokeUserSessionInSupabase
+  insertAuditLogToSupabase
 } from './server/supabaseAdapter.ts';
 import { runPhase8ShadowDryRunSuite } from './server/supabaseShadowService.ts';
 import { realtimeSandboxHub, requireSandboxSuperAdmin, getSandboxSuperAdminAllowlist } from './server/realtimeHub.ts';
@@ -1472,24 +1470,7 @@ async function startServer() {
     user.loginCount = (user.loginCount || 0) + 1;
     saveDatabaseToDisk();
 
-    // Asynchronously dual-write session metadata to Supabase user_sessions
-    insertUserSessionToSupabase({
-      sessionId,
-      userId: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
-      contractor: user.contractor,
-      loginAt: nowIso,
-      lastActivityAt: nowIso,
-      expiresAt: expiresIso,
-      status: 'active',
-      ipAddress: clientIp,
-      userAgent,
-      deviceType,
-      tokenFingerprint
-    }).catch(() => {});
-
+    // Session strictly managed via local persistent storage (SERVER_SESSIONS)
     logServerAudit('Firebase Login Success', 'auth', user.id, `User ${user.name} (${user.role}) berhasil masuk via Firebase Auth [${cleanEmail}]`, user);
 
     const { passwordHash: _, ...safeUser } = user;
@@ -1547,17 +1528,21 @@ async function startServer() {
 
     const clean = String(identifier).trim().toLowerCase();
 
-    // 1. Primary lookup in persistent user store
-    let user = db.users.find(u => {
-      if (u.isDeleted) return false;
-      if (u.username.toLowerCase() === clean) return true;
-      if (u.email && u.email.toLowerCase() === clean) return true;
-      if (u.altEmail && u.altEmail.toLowerCase().includes(clean)) return true;
-      // Email prefix matching (e.g. "ray" matching "rayjs666@gmail.com")
-      const prefix = (u.email || '').split('@')[0].toLowerCase();
-      if (prefix === clean) return true;
-      return false;
-    });
+    // 1. Primary lookup: exact username or email match first
+    let user = db.users.find(u =>
+      !u.isDeleted && (u.username.toLowerCase() === clean || u.email.toLowerCase() === clean)
+    );
+
+    // 1.B. Secondary lookup: altEmail or email prefix match
+    if (!user) {
+      user = db.users.find(u => {
+        if (u.isDeleted) return false;
+        if (u.altEmail && u.altEmail.toLowerCase().includes(clean)) return true;
+        const prefix = (u.email || '').split('@')[0].toLowerCase();
+        if (prefix === clean) return true;
+        return false;
+      });
+    }
 
     // 2. Fallback: Check Supabase database if connected
     if (!user) {
@@ -1688,12 +1673,19 @@ async function startServer() {
     }
 
     let user = db.users.find(
-      u => (
+      u => !u.isDeleted && (
         u.username.toLowerCase() === cleanUser ||
-        u.email.toLowerCase() === cleanUser ||
-        (u.altEmail && u.altEmail.toLowerCase().includes(cleanUser))
-      ) && !u.isDeleted
+        u.email.toLowerCase() === cleanUser
+      )
     );
+
+    if (!user) {
+      user = db.users.find(
+        u => !u.isDeleted && (
+          (u.altEmail && u.altEmail.toLowerCase().includes(cleanUser))
+        )
+      );
+    }
 
     // If not found in local persistent store, probe Supabase database
     if (!user) {
@@ -1780,7 +1772,6 @@ async function startServer() {
       SERVER_SESSIONS.forEach(s => {
         if (s.userId === user.id && s.status === 'active') {
           s.status = 'revoked';
-          revokeUserSessionInSupabase(s.sessionId).catch(() => {});
         }
       });
     } else {
@@ -1789,7 +1780,6 @@ async function startServer() {
         const oldest = activeUserSessions.sort((a, b) => new Date(a.loginAt).getTime() - new Date(b.loginAt).getTime())[0];
         if (oldest) {
           oldest.status = 'revoked';
-          revokeUserSessionInSupabase(oldest.sessionId).catch(() => {});
         }
       }
     }
@@ -1823,24 +1813,7 @@ async function startServer() {
     user.loginCount = (user.loginCount || 0) + 1;
     saveDatabaseToDisk();
 
-    // Asynchronously dual-write session metadata to Supabase user_sessions
-    insertUserSessionToSupabase({
-      sessionId,
-      userId: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
-      contractor: user.contractor,
-      loginAt: nowIso,
-      lastActivityAt: nowIso,
-      expiresAt: expiresIso,
-      status: 'active',
-      ipAddress: clientIp,
-      userAgent,
-      deviceType,
-      tokenFingerprint
-    }).catch(() => {});
-
+    // Session strictly managed via local persistent storage (SERVER_SESSIONS)
     logServerAudit('Login Success', 'auth', user.id, `User ${user.name} (${user.role}) berhasil masuk ke sistem`, user);
 
     const { passwordHash: _, ...safeUser } = user;
@@ -1857,7 +1830,6 @@ async function startServer() {
   app.post('/api/auth/logout', requireAuth, (req: AuthenticatedRequest, res) => {
     if (req.session) {
       req.session.status = 'revoked';
-      revokeUserSessionInSupabase(req.session.sessionId).catch(() => {});
     }
     if (req.user) {
       logServerAudit('Logout Success', 'auth', req.user.id, `User ${req.user.name} (${req.user.role}) logout dari sistem`, req.user);

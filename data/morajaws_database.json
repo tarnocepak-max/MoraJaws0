@@ -11,8 +11,8 @@
       "passwordHash": "28232849",
       "mustChangePassword": true,
       "createdAt": "2026-01-01T00:00:00Z",
-      "lastLoginAt": "2026-11-03T22:06:59.510Z",
-      "loginCount": 3
+      "lastLoginAt": "2026-11-04T12:47:32.501Z",
+      "loginCount": 4
     },
     {
       "id": "u-1",
@@ -24,8 +24,8 @@
       "active": true,
       "passwordHash": "28232849",
       "createdAt": "2026-01-01T00:00:00Z",
-      "lastLoginAt": "2026-10-28T16:45:10.911Z",
-      "loginCount": 3,
+      "lastLoginAt": "2026-11-04T13:23:37.147Z",
+      "loginCount": 5,
       "firebaseUid": "test-uid-123",
       "mustChangePassword": true
     },
@@ -487,6 +487,156 @@
   "assignmentHistory": [],
   "auditLogs": [
     {
+      "id": "log_1793798617168_mr10",
+      "action": "Logout Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) logout dari sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T13:23:37.168Z"
+    },
+    {
+      "id": "log_1793798617158_kn40",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T13:23:37.158Z"
+    },
+    {
+      "id": "log_1793798617148_403w",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T13:23:37.148Z"
+    },
+    {
+      "id": "log_1793796773188_n9aq",
+      "action": "Logout Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) logout dari sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:52:53.188Z"
+    },
+    {
+      "id": "log_1793796773178_9xd4",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T12:52:53.178Z"
+    },
+    {
+      "id": "log_1793796773169_fbxv",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:52:53.169Z"
+    },
+    {
+      "id": "log_1793796694922_vfll",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (2x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T12:51:34.922Z"
+    },
+    {
+      "id": "log_1793796694909_l5ub",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T12:51:34.909Z"
+    },
+    {
+      "id": "log_1793796487442_wo71",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:48:07.442Z"
+    },
+    {
+      "id": "log_1793796486572_l5n2",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:48:06.572Z"
+    },
+    {
+      "id": "log_1793796481145_6rht",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:48:01.145Z"
+    },
+    {
+      "id": "log_1793796479876_meu4",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:47:59.876Z"
+    },
+    {
+      "id": "log_1793796466432_tsfe",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:47:46.432Z"
+    },
+    {
+      "id": "log_1793796460764_5h5b",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:47:40.764Z"
+    },
+    {
+      "id": "log_1793796452503_no2q",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-ray",
+      "details": "User Ray (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:47:32.503Z"
+    },
+    {
       "id": "log_1793743619575_g1fl",
       "action": "Access Denied (Backup Download Required Super Admin or Management Data)",
       "entity": "rbac",
@@ -900,7 +1050,7 @@
   "globalConfig": {
     "id": "default_config_v1",
     "version": 1,
-    "updatedAt": "2026-11-03T22:06:38.630Z",
+    "updatedAt": "2026-11-04T12:48:07.441Z",
     "updatedBy": "Ray (Super Admin)",
     "global": {
       "appName": "MoraJaws",
@@ -919,1138 +1069,1138 @@
       "modalSize": "large"
     },
     "ticketsTable": {
-      "presets": [
-        {
-          "columns": [
-            {
-              "filterable": true,
-              "sticky": "left",
-              "width": 140,
-              "visible": true,
-              "format": "code",
-              "key": "woNumber",
-              "label": "WO Number",
-              "sortable": true,
-              "order": 1
-            },
-            {
-              "visible": true,
-              "key": "date",
-              "sortable": true,
-              "label": "Date",
-              "format": "date",
-              "width": 110,
-              "order": 2
-            },
-            {
-              "key": "idCustomer",
-              "sortable": true,
-              "filterable": true,
-              "format": "code",
-              "label": "Customer ID",
-              "visible": true,
-              "width": 130,
-              "order": 3
-            },
-            {
-              "label": "Customer Name",
-              "filterable": true,
-              "order": 4,
-              "key": "customerName",
-              "visible": true,
-              "width": 180,
-              "sortable": true
-            },
-            {
-              "format": "phone",
-              "label": "Phone",
-              "key": "customerPhone",
-              "visible": true,
-              "width": 140,
-              "order": 5
-            },
-            {
-              "order": 6,
-              "width": 120,
-              "sortable": true,
-              "visible": true,
-              "key": "area",
-              "label": "Area",
-              "filterable": true
-            },
-            {
-              "sortable": true,
-              "filterable": true,
-              "width": 140,
-              "order": 7,
-              "key": "clusterName",
-              "label": "Cluster",
-              "visible": true
-            },
-            {
-              "visible": true,
-              "label": "Slot Time",
-              "width": 130,
-              "order": 8,
-              "key": "slotTime",
-              "sortable": true
-            },
-            {
-              "sortable": true,
-              "format": "badge",
-              "filterable": true,
-              "order": 9,
-              "width": 130,
-              "key": "ticketCategory",
-              "visible": true,
-              "label": "Category"
-            },
-            {
-              "visible": true,
-              "sortable": true,
-              "label": "Contractor",
-              "key": "contactorName",
-              "width": 140,
-              "order": 10,
-              "filterable": true
-            },
-            {
-              "key": "installerName",
-              "order": 11,
-              "width": 140,
-              "sortable": true,
-              "filterable": true,
-              "visible": true,
-              "label": "Installer"
-            },
-            {
-              "label": "Status Agent",
-              "filterable": true,
-              "format": "status_agent",
-              "visible": true,
-              "sortable": true,
-              "width": 130,
-              "order": 12,
-              "key": "statusWOAgent"
-            },
-            {
-              "filterable": true,
-              "visible": true,
-              "label": "Status Installer",
-              "key": "statusWOInstaller",
-              "sortable": true,
-              "format": "status_installer",
-              "order": 13,
-              "width": 140
-            },
-            {
-              "key": "statusWhatsApp",
-              "sortable": true,
-              "label": "WhatsApp Status",
-              "filterable": true,
-              "format": "status_wa",
-              "visible": true,
-              "order": 14,
-              "width": 160
-            },
-            {
-              "visible": false,
-              "label": "FDT Code",
-              "format": "code",
-              "width": 110,
-              "order": 15,
-              "key": "fdtCode"
-            },
-            {
-              "width": 110,
-              "order": 16,
-              "label": "FAT Code",
-              "format": "code",
-              "visible": false,
-              "key": "fatCode"
-            },
-            {
-              "wrapText": true,
-              "width": 220,
-              "order": 17,
-              "visible": false,
-              "label": "Street Address",
-              "key": "streetName"
-            },
-            {
-              "label": "Installer Remarks",
-              "key": "remarksWOInstaller",
-              "visible": false,
-              "wrapText": true,
-              "order": 18,
-              "width": 200
-            },
-            {
-              "label": "Agent ID",
-              "visible": false,
-              "key": "agentId",
-              "order": 19,
-              "width": 100
-            },
-            {
-              "visible": false,
-              "label": "Date Uploaded",
-              "key": "dateUpload",
-              "width": 120,
-              "order": 20,
-              "format": "date"
-            },
-            {
-              "key": "fileName",
-              "label": "Source File",
-              "visible": false,
-              "order": 21,
-              "width": 150
-            },
-            {
-              "label": "Last Updated",
-              "sortable": true,
-              "order": 22,
-              "width": 130,
-              "visible": true,
-              "format": "date",
-              "key": "updatedAt"
-            },
-            {
-              "sticky": "right",
-              "label": "Actions",
-              "align": "center",
-              "visible": true,
-              "order": 23,
-              "width": 140,
-              "key": "actions"
-            }
-          ],
-          "rowsPerPage": 10,
-          "id": "preset_default",
-          "name": "Standard Dispatch View",
-          "density": "comfortable",
-          "description": "Balanced column layout for general ticket monitoring and routing"
-        },
-        {
-          "id": "preset_compact_dispatch",
-          "columns": [
-            {
-              "label": "WO Number",
-              "sortable": true,
-              "order": 1,
-              "filterable": true,
-              "format": "code",
-              "sticky": "left",
-              "key": "woNumber",
-              "visible": true,
-              "width": 120
-            },
-            {
-              "width": 110,
-              "order": 2,
-              "format": "date",
-              "sortable": true,
-              "visible": false,
-              "label": "Date",
-              "key": "date"
-            },
-            {
-              "label": "Customer ID",
-              "format": "code",
-              "visible": false,
-              "filterable": true,
-              "key": "idCustomer",
-              "sortable": true,
-              "order": 3,
-              "width": 130
-            },
-            {
-              "key": "customerName",
-              "label": "Customer Name",
-              "sortable": true,
-              "visible": true,
-              "width": 180,
-              "order": 4,
-              "filterable": true
-            },
-            {
-              "key": "customerPhone",
-              "label": "Phone",
-              "visible": false,
-              "width": 140,
-              "order": 5,
-              "format": "phone"
-            },
-            {
-              "visible": true,
-              "label": "Area",
-              "filterable": true,
-              "sortable": true,
-              "key": "area",
-              "width": 120,
-              "order": 6
-            },
-            {
-              "label": "Cluster",
-              "sortable": true,
-              "filterable": true,
-              "width": 140,
-              "order": 7,
-              "key": "clusterName",
-              "visible": false
-            },
-            {
-              "label": "Slot Time",
-              "sortable": true,
-              "key": "slotTime",
-              "visible": true,
-              "order": 8,
-              "width": 130
-            },
-            {
-              "filterable": true,
-              "format": "badge",
-              "order": 9,
-              "width": 130,
-              "key": "ticketCategory",
-              "label": "Category",
-              "sortable": true,
-              "visible": false
-            },
-            {
-              "label": "Contractor",
-              "key": "contactorName",
-              "sortable": true,
-              "order": 10,
-              "width": 140,
-              "filterable": true,
-              "visible": false
-            },
-            {
-              "sortable": true,
-              "order": 11,
-              "width": 140,
-              "filterable": true,
-              "label": "Installer",
-              "visible": true,
-              "key": "installerName"
-            },
-            {
-              "key": "statusWOAgent",
-              "label": "Status Agent",
-              "sortable": true,
-              "filterable": true,
-              "visible": false,
-              "format": "status_agent",
-              "order": 12,
-              "width": 130
-            },
-            {
-              "key": "statusWOInstaller",
-              "width": 140,
-              "order": 13,
-              "sortable": true,
-              "visible": true,
-              "format": "status_installer",
-              "label": "Status Installer",
-              "filterable": true
-            },
-            {
-              "format": "status_wa",
-              "width": 160,
-              "order": 14,
-              "sortable": true,
-              "key": "statusWhatsApp",
-              "filterable": true,
-              "label": "WhatsApp Status",
-              "visible": true
-            },
-            {
-              "visible": false,
-              "key": "fdtCode",
-              "format": "code",
-              "label": "FDT Code",
-              "width": 110,
-              "order": 15
-            },
-            {
-              "label": "FAT Code",
-              "key": "fatCode",
-              "width": 110,
-              "order": 16,
-              "visible": false,
-              "format": "code"
-            },
-            {
-              "wrapText": true,
-              "width": 220,
-              "order": 17,
-              "visible": false,
-              "key": "streetName",
-              "label": "Street Address"
-            },
-            {
-              "label": "Installer Remarks",
-              "key": "remarksWOInstaller",
-              "wrapText": true,
-              "width": 200,
-              "order": 18,
-              "visible": false
-            },
-            {
-              "order": 19,
-              "width": 100,
-              "label": "Agent ID",
-              "key": "agentId",
-              "visible": false
-            },
-            {
-              "label": "Date Uploaded",
-              "format": "date",
-              "width": 120,
-              "order": 20,
-              "key": "dateUpload",
-              "visible": false
-            },
-            {
-              "key": "fileName",
-              "label": "Source File",
-              "visible": false,
-              "width": 150,
-              "order": 21
-            },
-            {
-              "sortable": true,
-              "label": "Last Updated",
-              "key": "updatedAt",
-              "visible": false,
-              "width": 130,
-              "order": 22,
-              "format": "date"
-            },
-            {
-              "label": "Actions",
-              "sticky": "right",
-              "align": "center",
-              "visible": true,
-              "width": 140,
-              "order": 23,
-              "key": "actions"
-            }
-          ],
-          "density": "compact",
-          "rowsPerPage": 20,
-          "name": "Compact Operations",
-          "description": "High-density grid focused on installer assignments and work status"
-        },
-        {
-          "density": "comfortable",
-          "name": "Customer & WhatsApp Confirmation",
-          "id": "preset_customer_contact",
-          "rowsPerPage": 15,
-          "description": "Prioritizes customer contact, address, slot time and WhatsApp status",
-          "columns": [
-            {
-              "filterable": true,
-              "label": "WO Number",
-              "sortable": true,
-              "visible": true,
-              "order": 1,
-              "format": "code",
-              "key": "woNumber",
-              "sticky": "left",
-              "width": 140
-            },
-            {
-              "key": "date",
-              "sortable": true,
-              "visible": false,
-              "label": "Date",
-              "format": "date",
-              "width": 110,
-              "order": 2
-            },
-            {
-              "width": 130,
-              "order": 3,
-              "visible": false,
-              "sortable": true,
-              "label": "Customer ID",
-              "format": "code",
-              "filterable": true,
-              "key": "idCustomer"
-            },
-            {
-              "visible": true,
-              "sortable": true,
-              "order": 4,
-              "width": 180,
-              "filterable": true,
-              "key": "customerName",
-              "label": "Customer Name"
-            },
-            {
-              "key": "customerPhone",
-              "label": "Phone",
-              "visible": true,
-              "order": 5,
-              "width": 140,
-              "format": "phone"
-            },
-            {
-              "sortable": true,
-              "label": "Area",
-              "filterable": true,
-              "order": 6,
-              "width": 120,
-              "key": "area",
-              "visible": false
-            },
-            {
-              "label": "Cluster",
-              "key": "clusterName",
-              "sortable": true,
-              "visible": true,
-              "width": 140,
-              "order": 7,
-              "filterable": true
-            },
-            {
-              "visible": true,
-              "label": "Slot Time",
-              "key": "slotTime",
-              "order": 8,
-              "width": 130,
-              "sortable": true
-            },
-            {
-              "sortable": true,
-              "filterable": true,
-              "width": 130,
-              "order": 9,
-              "key": "ticketCategory",
-              "format": "badge",
-              "label": "Category",
-              "visible": false
-            },
-            {
-              "key": "contactorName",
-              "filterable": true,
-              "label": "Contractor",
-              "visible": false,
-              "width": 140,
-              "order": 10,
-              "sortable": true
-            },
-            {
-              "order": 11,
-              "width": 140,
-              "sortable": true,
-              "key": "installerName",
-              "filterable": true,
-              "label": "Installer",
-              "visible": true
-            },
-            {
-              "label": "Status Agent",
-              "visible": false,
-              "key": "statusWOAgent",
-              "sortable": true,
-              "width": 130,
-              "order": 12,
-              "filterable": true,
-              "format": "status_agent"
-            },
-            {
-              "sortable": true,
-              "format": "status_installer",
-              "order": 13,
-              "width": 140,
-              "visible": false,
-              "label": "Status Installer",
-              "filterable": true,
-              "key": "statusWOInstaller"
-            },
-            {
-              "key": "statusWhatsApp",
-              "filterable": true,
-              "sortable": true,
-              "visible": true,
-              "label": "WhatsApp Status",
-              "width": 160,
-              "order": 14,
-              "format": "status_wa"
-            },
-            {
-              "label": "FDT Code",
-              "order": 15,
-              "width": 110,
-              "key": "fdtCode",
-              "format": "code",
-              "visible": false
-            },
-            {
-              "label": "FAT Code",
-              "visible": false,
-              "order": 16,
-              "width": 110,
-              "key": "fatCode",
-              "format": "code"
-            },
-            {
-              "key": "streetName",
-              "order": 17,
-              "width": 220,
-              "wrapText": true,
-              "visible": false,
-              "label": "Street Address"
-            },
-            {
-              "visible": false,
-              "order": 18,
-              "width": 200,
-              "label": "Installer Remarks",
-              "wrapText": true,
-              "key": "remarksWOInstaller"
-            },
-            {
-              "order": 19,
-              "width": 100,
-              "key": "agentId",
-              "label": "Agent ID",
-              "visible": false
-            },
-            {
-              "key": "dateUpload",
-              "label": "Date Uploaded",
-              "format": "date",
-              "visible": false,
-              "width": 120,
-              "order": 20
-            },
-            {
-              "visible": false,
-              "label": "Source File",
-              "width": 150,
-              "key": "fileName",
-              "order": 21
-            },
-            {
-              "format": "date",
-              "visible": false,
-              "width": 130,
-              "order": 22,
-              "key": "updatedAt",
-              "label": "Last Updated",
-              "sortable": true
-            },
-            {
-              "key": "actions",
-              "visible": true,
-              "align": "center",
-              "sticky": "right",
-              "label": "Actions",
-              "width": 140,
-              "order": 23
-            }
-          ]
-        },
-        {
-          "columns": [
-            {
-              "visible": true,
-              "key": "woNumber",
-              "sticky": "left",
-              "width": 140,
-              "label": "WO Number",
-              "format": "code",
-              "sortable": true,
-              "filterable": true,
-              "order": 1
-            },
-            {
-              "label": "Date",
-              "visible": false,
-              "width": 110,
-              "order": 2,
-              "key": "date",
-              "format": "date",
-              "sortable": true
-            },
-            {
-              "filterable": true,
-              "order": 3,
-              "width": 130,
-              "key": "idCustomer",
-              "sortable": true,
-              "visible": false,
-              "format": "code",
-              "label": "Customer ID"
-            },
-            {
-              "order": 4,
-              "width": 180,
-              "sortable": true,
-              "label": "Customer Name",
-              "visible": false,
-              "filterable": true,
-              "key": "customerName"
-            },
-            {
-              "key": "customerPhone",
-              "order": 5,
-              "width": 140,
-              "format": "phone",
-              "label": "Phone",
-              "visible": false
-            },
-            {
-              "key": "area",
-              "width": 120,
-              "order": 6,
-              "sortable": true,
-              "visible": true,
-              "filterable": true,
-              "label": "Area"
-            },
-            {
-              "label": "Cluster",
-              "sortable": true,
-              "key": "clusterName",
-              "filterable": true,
-              "order": 7,
-              "visible": true,
-              "width": 140
-            },
-            {
-              "key": "slotTime",
-              "order": 8,
-              "width": 130,
-              "sortable": true,
-              "label": "Slot Time",
-              "visible": false
-            },
-            {
-              "format": "badge",
-              "order": 9,
-              "width": 130,
-              "visible": true,
-              "key": "ticketCategory",
-              "sortable": true,
-              "filterable": true,
-              "label": "Category"
-            },
-            {
-              "width": 140,
-              "order": 10,
-              "filterable": true,
-              "sortable": true,
-              "label": "Contractor",
-              "key": "contactorName",
-              "visible": false
-            },
-            {
-              "order": 11,
-              "width": 140,
-              "visible": true,
-              "filterable": true,
-              "label": "Installer",
-              "sortable": true,
-              "key": "installerName"
-            },
-            {
-              "format": "status_agent",
-              "width": 130,
-              "order": 12,
-              "visible": false,
-              "filterable": true,
-              "label": "Status Agent",
-              "key": "statusWOAgent",
-              "sortable": true
-            },
-            {
-              "key": "statusWOInstaller",
-              "label": "Status Installer",
-              "sortable": true,
-              "format": "status_installer",
-              "visible": true,
-              "filterable": true,
-              "width": 140,
-              "order": 13
-            },
-            {
-              "label": "WhatsApp Status",
-              "filterable": true,
-              "key": "statusWhatsApp",
-              "format": "status_wa",
-              "visible": false,
-              "sortable": true,
-              "width": 160,
-              "order": 14
-            },
-            {
-              "format": "code",
-              "width": 110,
-              "order": 15,
-              "label": "FDT Code",
-              "key": "fdtCode",
-              "visible": true
-            },
-            {
-              "visible": true,
-              "label": "FAT Code",
-              "key": "fatCode",
-              "format": "code",
-              "order": 16,
-              "width": 110
-            },
-            {
-              "wrapText": true,
-              "label": "Street Address",
-              "visible": false,
-              "order": 17,
-              "width": 220,
-              "key": "streetName"
-            },
-            {
-              "order": 18,
-              "width": 200,
-              "visible": false,
-              "key": "remarksWOInstaller",
-              "wrapText": true,
-              "label": "Installer Remarks"
-            },
-            {
-              "order": 19,
-              "width": 100,
-              "visible": false,
-              "label": "Agent ID",
-              "key": "agentId"
-            },
-            {
-              "label": "Date Uploaded",
-              "format": "date",
-              "key": "dateUpload",
-              "visible": false,
-              "order": 20,
-              "width": 120
-            },
-            {
-              "visible": false,
-              "key": "fileName",
-              "label": "Source File",
-              "width": 150,
-              "order": 21
-            },
-            {
-              "width": 130,
-              "order": 22,
-              "key": "updatedAt",
-              "visible": false,
-              "format": "date",
-              "label": "Last Updated",
-              "sortable": true
-            },
-            {
-              "key": "actions",
-              "align": "center",
-              "sticky": "right",
-              "label": "Actions",
-              "visible": true,
-              "width": 140,
-              "order": 23
-            }
-          ],
-          "name": "Technical & Infrastructure",
-          "id": "preset_technical",
-          "rowsPerPage": 15,
-          "density": "compact",
-          "description": "Focuses on FDT, FAT, category, and technical completion"
-        }
-      ],
+      "showEmptyFields": false,
       "columns": [
         {
           "order": 1,
-          "sticky": "left",
-          "label": "WO Number",
-          "width": 140,
-          "filterable": true,
-          "sortable": true,
           "visible": true,
           "key": "woNumber",
-          "format": "code"
+          "format": "code",
+          "label": "WO Number",
+          "sticky": "left",
+          "sortable": true,
+          "filterable": true,
+          "width": 140
         },
         {
-          "label": "Date",
-          "format": "date",
           "visible": true,
+          "format": "date",
+          "order": 2,
+          "label": "Date",
           "sortable": true,
           "width": 110,
-          "order": 2,
           "key": "date"
         },
         {
-          "key": "idCustomer",
           "filterable": true,
           "order": 3,
+          "visible": true,
           "width": 130,
-          "visible": true,
-          "format": "code",
+          "key": "idCustomer",
           "sortable": true,
-          "label": "Customer ID"
+          "label": "Customer ID",
+          "format": "code"
         },
         {
-          "visible": true,
-          "label": "Customer Name",
-          "sortable": true,
-          "key": "customerName",
-          "order": 4,
           "width": 180,
-          "filterable": true
+          "filterable": true,
+          "sortable": true,
+          "label": "Customer Name",
+          "order": 4,
+          "key": "customerName",
+          "visible": true
         },
         {
+          "visible": true,
           "format": "phone",
           "order": 5,
-          "width": 140,
           "label": "Phone",
-          "visible": true,
+          "width": 140,
           "key": "customerPhone"
         },
         {
           "label": "Area",
-          "filterable": true,
-          "order": 6,
-          "width": 120,
-          "sortable": true,
           "key": "area",
+          "width": 120,
+          "filterable": true,
+          "sortable": true,
+          "visible": true,
+          "order": 6
+        },
+        {
+          "order": 7,
+          "width": 140,
+          "sortable": true,
+          "filterable": true,
+          "key": "clusterName",
+          "label": "Cluster",
           "visible": true
         },
         {
-          "label": "Cluster",
-          "visible": true,
-          "sortable": true,
-          "order": 7,
-          "width": 140,
-          "key": "clusterName",
-          "filterable": true
-        },
-        {
+          "width": 130,
+          "label": "Slot Time",
           "sortable": true,
           "key": "slotTime",
-          "label": "Slot Time",
-          "visible": true,
           "order": 8,
-          "width": 130
+          "visible": true
         },
         {
-          "format": "badge",
+          "label": "Category",
+          "sortable": true,
           "width": 130,
+          "key": "ticketCategory",
+          "format": "badge",
           "order": 9,
           "visible": true,
-          "filterable": true,
-          "sortable": true,
-          "label": "Category",
-          "key": "ticketCategory"
-        },
-        {
-          "sortable": true,
-          "label": "Contractor",
-          "key": "contactorName",
-          "visible": true,
-          "width": 140,
-          "order": 10,
           "filterable": true
         },
         {
-          "visible": true,
-          "label": "Installer",
-          "filterable": true,
-          "order": 11,
           "width": 140,
+          "visible": true,
+          "filterable": true,
+          "label": "Contractor",
           "sortable": true,
-          "key": "installerName"
+          "order": 10,
+          "key": "contactorName"
         },
         {
-          "format": "status_agent",
+          "visible": true,
+          "order": 11,
+          "filterable": true,
+          "width": 140,
+          "key": "installerName",
+          "sortable": true,
+          "label": "Installer"
+        },
+        {
+          "sortable": true,
+          "order": 12,
           "visible": true,
           "width": 130,
-          "order": 12,
-          "sortable": true,
-          "filterable": true,
           "key": "statusWOAgent",
+          "filterable": true,
+          "format": "status_agent",
           "label": "Status Agent"
         },
         {
-          "filterable": true,
-          "label": "Status Installer",
           "visible": true,
-          "format": "status_installer",
-          "key": "statusWOInstaller",
           "sortable": true,
-          "order": 13,
-          "width": 140
+          "label": "Status Installer",
+          "width": 140,
+          "format": "status_installer",
+          "filterable": true,
+          "key": "statusWOInstaller",
+          "order": 13
         },
         {
-          "filterable": true,
-          "width": 160,
-          "order": 14,
-          "key": "statusWhatsApp",
           "visible": true,
+          "sortable": true,
+          "order": 14,
           "format": "status_wa",
+          "width": 160,
+          "filterable": true,
           "label": "WhatsApp Status",
-          "sortable": true
+          "key": "statusWhatsApp"
         },
         {
           "order": 15,
+          "format": "code",
           "width": 110,
           "visible": false,
           "key": "fdtCode",
-          "format": "code",
           "label": "FDT Code"
         },
         {
+          "label": "FAT Code",
+          "width": 110,
           "visible": false,
           "format": "code",
           "key": "fatCode",
-          "order": 16,
-          "width": 110,
-          "label": "FAT Code"
+          "order": 16
         },
         {
-          "visible": false,
           "order": 17,
           "width": 220,
-          "wrapText": true,
           "key": "streetName",
+          "wrapText": true,
+          "visible": false,
           "label": "Street Address"
         },
         {
           "order": 18,
-          "width": 200,
           "wrapText": true,
-          "key": "remarksWOInstaller",
           "label": "Installer Remarks",
-          "visible": false
+          "visible": false,
+          "width": 200,
+          "key": "remarksWOInstaller"
         },
         {
           "order": 19,
+          "visible": false,
           "width": 100,
-          "key": "agentId",
-          "visible": false,
-          "label": "Agent ID"
+          "label": "Agent ID",
+          "key": "agentId"
         },
         {
+          "key": "dateUpload",
+          "visible": false,
           "format": "date",
-          "order": 20,
           "width": 120,
-          "visible": false,
           "label": "Date Uploaded",
-          "key": "dateUpload"
+          "order": 20
         },
         {
-          "order": 21,
-          "width": 150,
           "label": "Source File",
+          "key": "fileName",
+          "width": 150,
           "visible": false,
-          "key": "fileName"
+          "order": 21
         },
         {
+          "sortable": true,
           "label": "Last Updated",
-          "visible": true,
-          "order": 22,
           "width": 130,
-          "key": "updatedAt",
+          "visible": true,
           "format": "date",
-          "sortable": true
+          "key": "updatedAt",
+          "order": 22
         },
         {
-          "sticky": "right",
-          "width": 140,
-          "order": 23,
-          "visible": true,
           "key": "actions",
+          "width": 140,
+          "sticky": "right",
           "label": "Actions",
+          "visible": true,
+          "order": 23,
           "align": "center"
         }
       ],
-      "activePresetId": "preset_default",
       "density": "comfortable",
       "rowsPerPage": 10,
-      "showEmptyFields": false
+      "activePresetId": "preset_default",
+      "presets": [
+        {
+          "columns": [
+            {
+              "order": 1,
+              "visible": true,
+              "label": "WO Number",
+              "key": "woNumber",
+              "format": "code",
+              "sortable": true,
+              "filterable": true,
+              "sticky": "left",
+              "width": 140
+            },
+            {
+              "key": "date",
+              "width": 110,
+              "format": "date",
+              "label": "Date",
+              "sortable": true,
+              "order": 2,
+              "visible": true
+            },
+            {
+              "format": "code",
+              "label": "Customer ID",
+              "visible": true,
+              "key": "idCustomer",
+              "filterable": true,
+              "width": 130,
+              "sortable": true,
+              "order": 3
+            },
+            {
+              "order": 4,
+              "key": "customerName",
+              "visible": true,
+              "filterable": true,
+              "sortable": true,
+              "width": 180,
+              "label": "Customer Name"
+            },
+            {
+              "width": 140,
+              "visible": true,
+              "format": "phone",
+              "label": "Phone",
+              "order": 5,
+              "key": "customerPhone"
+            },
+            {
+              "key": "area",
+              "order": 6,
+              "visible": true,
+              "sortable": true,
+              "width": 120,
+              "label": "Area",
+              "filterable": true
+            },
+            {
+              "filterable": true,
+              "sortable": true,
+              "order": 7,
+              "key": "clusterName",
+              "label": "Cluster",
+              "width": 140,
+              "visible": true
+            },
+            {
+              "order": 8,
+              "sortable": true,
+              "visible": true,
+              "key": "slotTime",
+              "label": "Slot Time",
+              "width": 130
+            },
+            {
+              "sortable": true,
+              "order": 9,
+              "filterable": true,
+              "visible": true,
+              "width": 130,
+              "key": "ticketCategory",
+              "label": "Category",
+              "format": "badge"
+            },
+            {
+              "label": "Contractor",
+              "key": "contactorName",
+              "width": 140,
+              "filterable": true,
+              "visible": true,
+              "order": 10,
+              "sortable": true
+            },
+            {
+              "visible": true,
+              "sortable": true,
+              "order": 11,
+              "key": "installerName",
+              "label": "Installer",
+              "filterable": true,
+              "width": 140
+            },
+            {
+              "order": 12,
+              "filterable": true,
+              "key": "statusWOAgent",
+              "width": 130,
+              "sortable": true,
+              "label": "Status Agent",
+              "format": "status_agent",
+              "visible": true
+            },
+            {
+              "label": "Status Installer",
+              "visible": true,
+              "format": "status_installer",
+              "filterable": true,
+              "key": "statusWOInstaller",
+              "width": 140,
+              "sortable": true,
+              "order": 13
+            },
+            {
+              "format": "status_wa",
+              "sortable": true,
+              "order": 14,
+              "key": "statusWhatsApp",
+              "visible": true,
+              "filterable": true,
+              "label": "WhatsApp Status",
+              "width": 160
+            },
+            {
+              "label": "FDT Code",
+              "visible": false,
+              "key": "fdtCode",
+              "width": 110,
+              "format": "code",
+              "order": 15
+            },
+            {
+              "label": "FAT Code",
+              "width": 110,
+              "visible": false,
+              "format": "code",
+              "order": 16,
+              "key": "fatCode"
+            },
+            {
+              "order": 17,
+              "key": "streetName",
+              "visible": false,
+              "width": 220,
+              "label": "Street Address",
+              "wrapText": true
+            },
+            {
+              "label": "Installer Remarks",
+              "key": "remarksWOInstaller",
+              "wrapText": true,
+              "width": 200,
+              "visible": false,
+              "order": 18
+            },
+            {
+              "visible": false,
+              "order": 19,
+              "key": "agentId",
+              "width": 100,
+              "label": "Agent ID"
+            },
+            {
+              "visible": false,
+              "format": "date",
+              "order": 20,
+              "label": "Date Uploaded",
+              "width": 120,
+              "key": "dateUpload"
+            },
+            {
+              "visible": false,
+              "order": 21,
+              "key": "fileName",
+              "label": "Source File",
+              "width": 150
+            },
+            {
+              "visible": true,
+              "key": "updatedAt",
+              "order": 22,
+              "format": "date",
+              "sortable": true,
+              "width": 130,
+              "label": "Last Updated"
+            },
+            {
+              "width": 140,
+              "label": "Actions",
+              "key": "actions",
+              "align": "center",
+              "order": 23,
+              "sticky": "right",
+              "visible": true
+            }
+          ],
+          "density": "comfortable",
+          "rowsPerPage": 10,
+          "name": "Standard Dispatch View",
+          "description": "Balanced column layout for general ticket monitoring and routing",
+          "id": "preset_default"
+        },
+        {
+          "columns": [
+            {
+              "format": "code",
+              "order": 1,
+              "label": "WO Number",
+              "sticky": "left",
+              "visible": true,
+              "sortable": true,
+              "filterable": true,
+              "key": "woNumber",
+              "width": 120
+            },
+            {
+              "key": "date",
+              "label": "Date",
+              "sortable": true,
+              "visible": false,
+              "width": 110,
+              "format": "date",
+              "order": 2
+            },
+            {
+              "filterable": true,
+              "width": 130,
+              "format": "code",
+              "sortable": true,
+              "label": "Customer ID",
+              "key": "idCustomer",
+              "order": 3,
+              "visible": false
+            },
+            {
+              "key": "customerName",
+              "order": 4,
+              "filterable": true,
+              "width": 180,
+              "visible": true,
+              "label": "Customer Name",
+              "sortable": true
+            },
+            {
+              "order": 5,
+              "key": "customerPhone",
+              "label": "Phone",
+              "format": "phone",
+              "visible": false,
+              "width": 140
+            },
+            {
+              "order": 6,
+              "visible": true,
+              "key": "area",
+              "sortable": true,
+              "width": 120,
+              "label": "Area",
+              "filterable": true
+            },
+            {
+              "visible": false,
+              "sortable": true,
+              "label": "Cluster",
+              "width": 140,
+              "filterable": true,
+              "key": "clusterName",
+              "order": 7
+            },
+            {
+              "key": "slotTime",
+              "sortable": true,
+              "label": "Slot Time",
+              "width": 130,
+              "order": 8,
+              "visible": true
+            },
+            {
+              "sortable": true,
+              "order": 9,
+              "key": "ticketCategory",
+              "format": "badge",
+              "width": 130,
+              "label": "Category",
+              "visible": false,
+              "filterable": true
+            },
+            {
+              "visible": false,
+              "order": 10,
+              "filterable": true,
+              "width": 140,
+              "key": "contactorName",
+              "sortable": true,
+              "label": "Contractor"
+            },
+            {
+              "visible": true,
+              "order": 11,
+              "key": "installerName",
+              "filterable": true,
+              "sortable": true,
+              "label": "Installer",
+              "width": 140
+            },
+            {
+              "sortable": true,
+              "order": 12,
+              "key": "statusWOAgent",
+              "label": "Status Agent",
+              "visible": false,
+              "format": "status_agent",
+              "filterable": true,
+              "width": 130
+            },
+            {
+              "format": "status_installer",
+              "label": "Status Installer",
+              "width": 140,
+              "sortable": true,
+              "key": "statusWOInstaller",
+              "visible": true,
+              "filterable": true,
+              "order": 13
+            },
+            {
+              "order": 14,
+              "key": "statusWhatsApp",
+              "filterable": true,
+              "visible": true,
+              "sortable": true,
+              "width": 160,
+              "label": "WhatsApp Status",
+              "format": "status_wa"
+            },
+            {
+              "width": 110,
+              "visible": false,
+              "label": "FDT Code",
+              "format": "code",
+              "order": 15,
+              "key": "fdtCode"
+            },
+            {
+              "visible": false,
+              "key": "fatCode",
+              "format": "code",
+              "order": 16,
+              "label": "FAT Code",
+              "width": 110
+            },
+            {
+              "label": "Street Address",
+              "width": 220,
+              "visible": false,
+              "wrapText": true,
+              "key": "streetName",
+              "order": 17
+            },
+            {
+              "wrapText": true,
+              "order": 18,
+              "label": "Installer Remarks",
+              "width": 200,
+              "visible": false,
+              "key": "remarksWOInstaller"
+            },
+            {
+              "visible": false,
+              "order": 19,
+              "width": 100,
+              "key": "agentId",
+              "label": "Agent ID"
+            },
+            {
+              "width": 120,
+              "format": "date",
+              "label": "Date Uploaded",
+              "key": "dateUpload",
+              "order": 20,
+              "visible": false
+            },
+            {
+              "key": "fileName",
+              "visible": false,
+              "order": 21,
+              "label": "Source File",
+              "width": 150
+            },
+            {
+              "label": "Last Updated",
+              "width": 130,
+              "format": "date",
+              "sortable": true,
+              "key": "updatedAt",
+              "order": 22,
+              "visible": false
+            },
+            {
+              "label": "Actions",
+              "sticky": "right",
+              "key": "actions",
+              "width": 140,
+              "order": 23,
+              "align": "center",
+              "visible": true
+            }
+          ],
+          "rowsPerPage": 20,
+          "density": "compact",
+          "name": "Compact Operations",
+          "id": "preset_compact_dispatch",
+          "description": "High-density grid focused on installer assignments and work status"
+        },
+        {
+          "name": "Customer & WhatsApp Confirmation",
+          "description": "Prioritizes customer contact, address, slot time and WhatsApp status",
+          "columns": [
+            {
+              "sticky": "left",
+              "format": "code",
+              "width": 140,
+              "filterable": true,
+              "visible": true,
+              "order": 1,
+              "sortable": true,
+              "label": "WO Number",
+              "key": "woNumber"
+            },
+            {
+              "visible": false,
+              "format": "date",
+              "order": 2,
+              "label": "Date",
+              "key": "date",
+              "width": 110,
+              "sortable": true
+            },
+            {
+              "label": "Customer ID",
+              "format": "code",
+              "width": 130,
+              "key": "idCustomer",
+              "sortable": true,
+              "visible": false,
+              "order": 3,
+              "filterable": true
+            },
+            {
+              "order": 4,
+              "key": "customerName",
+              "visible": true,
+              "width": 180,
+              "label": "Customer Name",
+              "sortable": true,
+              "filterable": true
+            },
+            {
+              "key": "customerPhone",
+              "width": 140,
+              "format": "phone",
+              "label": "Phone",
+              "order": 5,
+              "visible": true
+            },
+            {
+              "width": 120,
+              "label": "Area",
+              "filterable": true,
+              "sortable": true,
+              "key": "area",
+              "order": 6,
+              "visible": false
+            },
+            {
+              "visible": true,
+              "sortable": true,
+              "order": 7,
+              "key": "clusterName",
+              "label": "Cluster",
+              "filterable": true,
+              "width": 140
+            },
+            {
+              "sortable": true,
+              "order": 8,
+              "visible": true,
+              "width": 130,
+              "key": "slotTime",
+              "label": "Slot Time"
+            },
+            {
+              "order": 9,
+              "filterable": true,
+              "key": "ticketCategory",
+              "sortable": true,
+              "label": "Category",
+              "visible": false,
+              "format": "badge",
+              "width": 130
+            },
+            {
+              "visible": false,
+              "order": 10,
+              "key": "contactorName",
+              "filterable": true,
+              "width": 140,
+              "sortable": true,
+              "label": "Contractor"
+            },
+            {
+              "sortable": true,
+              "filterable": true,
+              "visible": true,
+              "order": 11,
+              "label": "Installer",
+              "key": "installerName",
+              "width": 140
+            },
+            {
+              "order": 12,
+              "sortable": true,
+              "key": "statusWOAgent",
+              "format": "status_agent",
+              "visible": false,
+              "width": 130,
+              "label": "Status Agent",
+              "filterable": true
+            },
+            {
+              "order": 13,
+              "filterable": true,
+              "key": "statusWOInstaller",
+              "label": "Status Installer",
+              "visible": false,
+              "sortable": true,
+              "format": "status_installer",
+              "width": 140
+            },
+            {
+              "width": 160,
+              "filterable": true,
+              "label": "WhatsApp Status",
+              "order": 14,
+              "format": "status_wa",
+              "key": "statusWhatsApp",
+              "sortable": true,
+              "visible": true
+            },
+            {
+              "width": 110,
+              "label": "FDT Code",
+              "key": "fdtCode",
+              "format": "code",
+              "order": 15,
+              "visible": false
+            },
+            {
+              "label": "FAT Code",
+              "width": 110,
+              "format": "code",
+              "key": "fatCode",
+              "order": 16,
+              "visible": false
+            },
+            {
+              "label": "Street Address",
+              "key": "streetName",
+              "wrapText": true,
+              "width": 220,
+              "visible": false,
+              "order": 17
+            },
+            {
+              "label": "Installer Remarks",
+              "key": "remarksWOInstaller",
+              "visible": false,
+              "width": 200,
+              "wrapText": true,
+              "order": 18
+            },
+            {
+              "label": "Agent ID",
+              "key": "agentId",
+              "visible": false,
+              "width": 100,
+              "order": 19
+            },
+            {
+              "order": 20,
+              "visible": false,
+              "width": 120,
+              "key": "dateUpload",
+              "format": "date",
+              "label": "Date Uploaded"
+            },
+            {
+              "order": 21,
+              "visible": false,
+              "width": 150,
+              "key": "fileName",
+              "label": "Source File"
+            },
+            {
+              "label": "Last Updated",
+              "width": 130,
+              "format": "date",
+              "key": "updatedAt",
+              "sortable": true,
+              "visible": false,
+              "order": 22
+            },
+            {
+              "visible": true,
+              "label": "Actions",
+              "width": 140,
+              "sticky": "right",
+              "align": "center",
+              "key": "actions",
+              "order": 23
+            }
+          ],
+          "id": "preset_customer_contact",
+          "density": "comfortable",
+          "rowsPerPage": 15
+        },
+        {
+          "description": "Focuses on FDT, FAT, category, and technical completion",
+          "name": "Technical & Infrastructure",
+          "id": "preset_technical",
+          "rowsPerPage": 15,
+          "density": "compact",
+          "columns": [
+            {
+              "width": 140,
+              "key": "woNumber",
+              "visible": true,
+              "sticky": "left",
+              "label": "WO Number",
+              "sortable": true,
+              "filterable": true,
+              "order": 1,
+              "format": "code"
+            },
+            {
+              "order": 2,
+              "format": "date",
+              "visible": false,
+              "width": 110,
+              "sortable": true,
+              "key": "date",
+              "label": "Date"
+            },
+            {
+              "format": "code",
+              "filterable": true,
+              "order": 3,
+              "visible": false,
+              "key": "idCustomer",
+              "label": "Customer ID",
+              "width": 130,
+              "sortable": true
+            },
+            {
+              "order": 4,
+              "key": "customerName",
+              "label": "Customer Name",
+              "sortable": true,
+              "visible": false,
+              "filterable": true,
+              "width": 180
+            },
+            {
+              "label": "Phone",
+              "key": "customerPhone",
+              "width": 140,
+              "visible": false,
+              "format": "phone",
+              "order": 5
+            },
+            {
+              "visible": true,
+              "order": 6,
+              "key": "area",
+              "sortable": true,
+              "label": "Area",
+              "filterable": true,
+              "width": 120
+            },
+            {
+              "order": 7,
+              "width": 140,
+              "visible": true,
+              "filterable": true,
+              "key": "clusterName",
+              "label": "Cluster",
+              "sortable": true
+            },
+            {
+              "order": 8,
+              "key": "slotTime",
+              "visible": false,
+              "width": 130,
+              "label": "Slot Time",
+              "sortable": true
+            },
+            {
+              "key": "ticketCategory",
+              "filterable": true,
+              "order": 9,
+              "sortable": true,
+              "label": "Category",
+              "format": "badge",
+              "visible": true,
+              "width": 130
+            },
+            {
+              "filterable": true,
+              "width": 140,
+              "label": "Contractor",
+              "key": "contactorName",
+              "order": 10,
+              "visible": false,
+              "sortable": true
+            },
+            {
+              "filterable": true,
+              "visible": true,
+              "order": 11,
+              "sortable": true,
+              "key": "installerName",
+              "label": "Installer",
+              "width": 140
+            },
+            {
+              "sortable": true,
+              "visible": false,
+              "order": 12,
+              "label": "Status Agent",
+              "format": "status_agent",
+              "key": "statusWOAgent",
+              "width": 130,
+              "filterable": true
+            },
+            {
+              "key": "statusWOInstaller",
+              "format": "status_installer",
+              "order": 13,
+              "sortable": true,
+              "visible": true,
+              "label": "Status Installer",
+              "filterable": true,
+              "width": 140
+            },
+            {
+              "order": 14,
+              "width": 160,
+              "filterable": true,
+              "sortable": true,
+              "visible": false,
+              "key": "statusWhatsApp",
+              "format": "status_wa",
+              "label": "WhatsApp Status"
+            },
+            {
+              "label": "FDT Code",
+              "width": 110,
+              "key": "fdtCode",
+              "format": "code",
+              "visible": true,
+              "order": 15
+            },
+            {
+              "visible": true,
+              "order": 16,
+              "key": "fatCode",
+              "width": 110,
+              "label": "FAT Code",
+              "format": "code"
+            },
+            {
+              "order": 17,
+              "visible": false,
+              "wrapText": true,
+              "label": "Street Address",
+              "key": "streetName",
+              "width": 220
+            },
+            {
+              "visible": false,
+              "label": "Installer Remarks",
+              "width": 200,
+              "wrapText": true,
+              "order": 18,
+              "key": "remarksWOInstaller"
+            },
+            {
+              "order": 19,
+              "visible": false,
+              "label": "Agent ID",
+              "width": 100,
+              "key": "agentId"
+            },
+            {
+              "order": 20,
+              "key": "dateUpload",
+              "label": "Date Uploaded",
+              "visible": false,
+              "format": "date",
+              "width": 120
+            },
+            {
+              "order": 21,
+              "visible": false,
+              "key": "fileName",
+              "width": 150,
+              "label": "Source File"
+            },
+            {
+              "format": "date",
+              "label": "Last Updated",
+              "visible": false,
+              "width": 130,
+              "sortable": true,
+              "key": "updatedAt",
+              "order": 22
+            },
+            {
+              "sticky": "right",
+              "align": "center",
+              "visible": true,
+              "order": 23,
+              "key": "actions",
+              "label": "Actions",
+              "width": 140
+            }
+          ]
+        }
+      ]
     },
     "toolbar": {
+      "showExport": true,
+      "showImport": true,
       "showDensityToggle": true,
+      "showArchiveToggle": true,
       "showFilters": true,
       "showSearch": true,
-      "showExport": true,
-      "showArchiveToggle": true,
-      "showImport": true,
       "buttons": [
         {
-          "icon": "RotateCw",
-          "order": 1,
+          "id": "btn_refresh",
           "visible": true,
-          "group": "secondary",
           "label": "Refresh",
-          "id": "btn_refresh"
+          "group": "secondary",
+          "icon": "RotateCw",
+          "order": 1
         },
         {
           "id": "btn_import_wo",
-          "visible": true,
-          "label": "Import WO",
-          "group": "primary",
-          "order": 2,
           "roleRequired": [
             "super_admin",
             "dispatch"
           ],
-          "icon": "FileSpreadsheet"
+          "icon": "FileSpreadsheet",
+          "group": "primary",
+          "visible": true,
+          "label": "Import WO",
+          "order": 2
         },
         {
-          "group": "secondary",
-          "icon": "Download",
+          "order": 3,
           "id": "btn_export",
-          "label": "Export Data",
+          "icon": "Download",
           "visible": true,
-          "order": 3
+          "group": "secondary",
+          "label": "Export Data"
         },
         {
-          "visible": true,
-          "order": 4,
           "id": "btn_view_presets",
-          "label": "View Presets",
+          "order": 4,
           "icon": "LayoutGrid",
-          "group": "secondary"
+          "visible": true,
+          "group": "secondary",
+          "label": "View Presets"
         },
         {
           "order": 5,
+          "visible": true,
+          "icon": "SlidersHorizontal",
           "id": "btn_table_settings",
           "label": "Customize Table",
-          "icon": "SlidersHorizontal",
-          "visible": true,
           "group": "secondary"
         },
         {
-          "icon": "Archive",
-          "visible": true,
           "order": 6,
           "group": "more_menu",
+          "icon": "Archive",
+          "id": "btn_archive_toggle",
           "label": "Archived Tickets",
-          "id": "btn_archive_toggle"
+          "visible": true
         },
         {
+          "visible": true,
           "order": 7,
+          "icon": "UserCheck",
+          "label": "Bulk Assign",
+          "id": "btn_bulk_assign",
+          "group": "more_menu",
           "roleRequired": [
             "super_admin",
             "dispatch",
             "leader"
-          ],
-          "id": "btn_bulk_assign",
-          "label": "Bulk Assign",
-          "visible": true,
-          "group": "more_menu",
-          "icon": "UserCheck"
+          ]
         }
       ]
     },
@@ -2058,261 +2208,261 @@
       "showEmptyFields": false,
       "sections": [
         {
-          "title": "Customer Information",
+          "visible": true,
+          "id": "customer_info",
           "order": 1,
+          "title": "Customer Information",
           "fields": [
             {
-              "key": "customerName",
               "order": 1,
               "width": "half",
+              "key": "customerName",
               "visible": true,
               "label": "Customer Name"
             },
             {
-              "width": "half",
-              "order": 2,
-              "visible": true,
+              "isReadOnly": true,
               "label": "Customer ID",
+              "width": "half",
               "key": "idCustomer",
-              "isReadOnly": true
+              "visible": true,
+              "order": 2
             },
             {
-              "label": "Phone Number",
               "visible": true,
-              "key": "customerPhone",
               "order": 3,
+              "label": "Phone Number",
+              "key": "customerPhone",
               "width": "half"
             },
             {
-              "width": "half",
+              "order": 4,
               "key": "area",
               "visible": true,
-              "order": 4,
+              "width": "half",
               "label": "Service Area"
             },
             {
-              "label": "Cluster / Complex",
-              "order": 5,
               "width": "half",
+              "visible": true,
               "key": "clusterName",
-              "visible": true
+              "label": "Cluster / Complex",
+              "order": 5
             },
             {
+              "width": "full",
               "label": "Primary Address",
-              "key": "streetName",
               "visible": true,
-              "width": "full",
-              "order": 6
-            },
-            {
-              "visible": true,
-              "label": "Alternative Address / Landmark",
-              "width": "full",
-              "order": 7,
-              "key": "streetAlternatif"
-            }
-          ],
-          "id": "customer_info",
-          "visible": true
-        },
-        {
-          "order": 2,
-          "title": "Work Order Information",
-          "id": "work_order_info",
-          "fields": [
-            {
-              "visible": true,
-              "label": "WO Number",
-              "key": "woNumber",
-              "order": 1,
-              "width": "half",
-              "isReadOnly": true
-            },
-            {
-              "order": 2,
-              "width": "half",
-              "visible": true,
-              "key": "ticketCategory",
-              "label": "Category / Service"
-            },
-            {
-              "width": "half",
-              "order": 3,
-              "visible": true,
-              "key": "slotTime",
-              "label": "Scheduled Slot Time"
-            },
-            {
-              "key": "date",
-              "width": "half",
-              "order": 4,
-              "visible": true,
-              "label": "Appointment Date"
-            },
-            {
-              "width": "half",
-              "order": 5,
-              "key": "ticketNumber",
-              "label": "Ticket Reference",
-              "visible": true
-            },
-            {
-              "label": "Import Source File",
-              "visible": true,
-              "width": "half",
               "order": 6,
-              "key": "fileName"
-            }
-          ],
-          "visible": true
-        },
-        {
-          "id": "location_technical",
-          "visible": true,
-          "title": "Location & Technical Information",
-          "order": 3,
-          "fields": [
+              "key": "streetName"
+            },
             {
+              "key": "streetAlternatif",
+              "order": 7,
               "visible": true,
-              "label": "FDT Code",
-              "key": "fdtCode",
-              "order": 1,
-              "width": "half"
-            },
-            {
-              "label": "FAT Code",
-              "key": "fatCode",
-              "width": "half",
-              "order": 2,
-              "visible": true
-            },
-            {
-              "visible": true,
-              "label": "Originating Agent ID",
-              "width": "half",
-              "order": 3,
-              "key": "agentId"
-            },
-            {
-              "order": 4,
-              "width": "half",
-              "key": "dateUpload",
-              "label": "Upload Date",
-              "visible": true
+              "width": "full",
+              "label": "Alternative Address / Landmark"
             }
           ]
         },
         {
           "fields": [
             {
+              "label": "WO Number",
+              "key": "woNumber",
               "visible": true,
-              "key": "contactorName",
-              "width": "third",
+              "width": "half",
               "order": 1,
-              "label": "Contractor Vendor"
-            },
-            {
-              "order": 2,
-              "width": "third",
-              "label": "Assigned Leader / Korlap",
-              "visible": true,
-              "key": "leaderName"
-            },
-            {
-              "visible": true,
-              "label": "Assigned Installer / Teknisi",
-              "key": "installerName",
-              "order": 3,
-              "width": "third"
-            }
-          ],
-          "order": 4,
-          "title": "Dispatch & Personnel Assignment",
-          "id": "dispatch_assignment",
-          "visible": true
-        },
-        {
-          "id": "status_reports",
-          "title": "Status & Execution Reports",
-          "order": 5,
-          "fields": [
-            {
-              "key": "statusWOAgent",
-              "label": "Agent Status",
-              "visible": true,
-              "width": "half",
-              "order": 1
-            },
-            {
-              "key": "statusWOInstaller",
-              "width": "half",
-              "order": 2,
-              "visible": true,
-              "label": "Installer Field Status"
-            },
-            {
-              "label": "Agent Dispatch Notes",
-              "key": "remarksAgent",
-              "order": 3,
-              "width": "full",
-              "visible": true
-            },
-            {
-              "order": 4,
-              "width": "full",
-              "visible": true,
-              "label": "Installer Field Remarks",
-              "key": "remarksWOInstaller"
-            }
-          ],
-          "visible": true
-        },
-        {
-          "fields": [
-            {
-              "visible": true,
-              "key": "statusWhatsApp",
-              "isReadOnly": true,
-              "label": "Confirmation Status",
-              "width": "half",
-              "order": 1
-            },
-            {
-              "label": "Last Opened in WhatsApp",
-              "isReadOnly": true,
-              "key": "waLastOpenedAt",
-              "visible": true,
-              "width": "half",
-              "order": 2
-            },
-            {
-              "label": "Confirmed At",
-              "visible": true,
-              "order": 3,
-              "width": "half",
-              "key": "waConfirmedAt",
               "isReadOnly": true
             },
             {
-              "key": "waConfirmedBy",
-              "isReadOnly": true,
-              "order": 4,
               "width": "half",
-              "visible": true,
-              "label": "Confirmed By Officer"
+              "key": "ticketCategory",
+              "label": "Category / Service",
+              "order": 2,
+              "visible": true
             },
             {
-              "key": "waConfirmationNotes",
+              "key": "slotTime",
+              "order": 3,
+              "label": "Scheduled Slot Time",
+              "visible": true,
+              "width": "half"
+            },
+            {
+              "label": "Appointment Date",
+              "key": "date",
+              "width": "half",
+              "visible": true,
+              "order": 4
+            },
+            {
               "order": 5,
-              "width": "full",
-              "label": "Customer Confirmation Notes",
+              "label": "Ticket Reference",
+              "key": "ticketNumber",
+              "visible": true,
+              "width": "half"
+            },
+            {
+              "width": "half",
+              "label": "Import Source File",
+              "key": "fileName",
+              "order": 6,
               "visible": true
             }
           ],
-          "title": "WhatsApp Customer Confirmation",
-          "order": 6,
-          "id": "whatsapp_confirmation",
+          "visible": true,
+          "id": "work_order_info",
+          "order": 2,
+          "title": "Work Order Information"
+        },
+        {
+          "id": "location_technical",
+          "fields": [
+            {
+              "visible": true,
+              "order": 1,
+              "label": "FDT Code",
+              "width": "half",
+              "key": "fdtCode"
+            },
+            {
+              "visible": true,
+              "order": 2,
+              "key": "fatCode",
+              "label": "FAT Code",
+              "width": "half"
+            },
+            {
+              "key": "agentId",
+              "width": "half",
+              "visible": true,
+              "label": "Originating Agent ID",
+              "order": 3
+            },
+            {
+              "order": 4,
+              "key": "dateUpload",
+              "visible": true,
+              "width": "half",
+              "label": "Upload Date"
+            }
+          ],
+          "order": 3,
+          "title": "Location & Technical Information",
           "visible": true
+        },
+        {
+          "fields": [
+            {
+              "order": 1,
+              "key": "contactorName",
+              "label": "Contractor Vendor",
+              "visible": true,
+              "width": "third"
+            },
+            {
+              "order": 2,
+              "key": "leaderName",
+              "visible": true,
+              "width": "third",
+              "label": "Assigned Leader / Korlap"
+            },
+            {
+              "visible": true,
+              "order": 3,
+              "label": "Assigned Installer / Teknisi",
+              "key": "installerName",
+              "width": "third"
+            }
+          ],
+          "visible": true,
+          "order": 4,
+          "title": "Dispatch & Personnel Assignment",
+          "id": "dispatch_assignment"
+        },
+        {
+          "fields": [
+            {
+              "visible": true,
+              "order": 1,
+              "key": "statusWOAgent",
+              "label": "Agent Status",
+              "width": "half"
+            },
+            {
+              "width": "half",
+              "visible": true,
+              "label": "Installer Field Status",
+              "order": 2,
+              "key": "statusWOInstaller"
+            },
+            {
+              "order": 3,
+              "key": "remarksAgent",
+              "width": "full",
+              "visible": true,
+              "label": "Agent Dispatch Notes"
+            },
+            {
+              "visible": true,
+              "order": 4,
+              "key": "remarksWOInstaller",
+              "label": "Installer Field Remarks",
+              "width": "full"
+            }
+          ],
+          "id": "status_reports",
+          "title": "Status & Execution Reports",
+          "visible": true,
+          "order": 5
+        },
+        {
+          "fields": [
+            {
+              "label": "Confirmation Status",
+              "width": "half",
+              "key": "statusWhatsApp",
+              "isReadOnly": true,
+              "visible": true,
+              "order": 1
+            },
+            {
+              "width": "half",
+              "isReadOnly": true,
+              "label": "Last Opened in WhatsApp",
+              "visible": true,
+              "key": "waLastOpenedAt",
+              "order": 2
+            },
+            {
+              "order": 3,
+              "width": "half",
+              "isReadOnly": true,
+              "visible": true,
+              "key": "waConfirmedAt",
+              "label": "Confirmed At"
+            },
+            {
+              "order": 4,
+              "key": "waConfirmedBy",
+              "visible": true,
+              "width": "half",
+              "label": "Confirmed By Officer",
+              "isReadOnly": true
+            },
+            {
+              "order": 5,
+              "key": "waConfirmationNotes",
+              "visible": true,
+              "label": "Customer Confirmation Notes",
+              "width": "full"
+            }
+          ],
+          "visible": true,
+          "id": "whatsapp_confirmation",
+          "title": "WhatsApp Customer Confirmation",
+          "order": 6
         }
       ]
     },
@@ -2321,13 +2471,13 @@
         "showInstructions": true
       },
       "dashboard": {
-        "columns": 4,
         "sectionOrder": [
           "kpi_cards",
           "quick_actions",
           "contractor_distribution",
           "recent_wos"
-        ]
+        ],
+        "columns": 4
       },
       "detail": {
         "layout": "two_column"
@@ -2361,17 +2511,17 @@
       }
     },
     "navigationSettings": {
-      "roleModes": {
-        "super_admin": "static",
-        "it_support": "accordion",
-        "leader": "static",
-        "dispatch": "accordion",
-        "management_data": "accordion",
-        "installer": "static"
-      },
       "categoryModes": {},
-      "allowMultipleOpenGroups": true,
       "defaultMode": "static",
+      "allowMultipleOpenGroups": true,
+      "roleModes": {
+        "it_support": "accordion",
+        "dispatch": "accordion",
+        "installer": "static",
+        "leader": "static",
+        "super_admin": "static",
+        "management_data": "accordion"
+      },
       "categories": {
         "contractor&area": {
           "accordionEnabled": true
@@ -2385,23 +2535,23 @@
         "task_installer": {
           "accordionEnabled": true
         },
-        "dashboard": {
-          "accordionEnabled": false
-        },
-        "setup": {
-          "accordionEnabled": false
-        },
         "pelanggan": {
           "accordionEnabled": true
         },
-        "woContractor": {
+        "operasional": {
+          "accordionEnabled": true
+        },
+        "setup": {
           "accordionEnabled": false
         },
         "laporan": {
           "accordionEnabled": true
         },
-        "operasional": {
-          "accordionEnabled": true
+        "dashboard": {
+          "accordionEnabled": false
+        },
+        "woContractor": {
+          "accordionEnabled": false
         }
       }
     },
@@ -2419,6 +2569,51 @@
   "operationalDateOverride": "2026-10-28",
   "attachments": [],
   "sessions": [
+    {
+      "sessionId": "sess_1793798617147_4fbc14b0e365",
+      "token": "1762efd8d47ad29e33019a4b62095b47d8cc9ba1595c313b151d1574157ed872",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T13:23:37.147Z",
+      "lastActivityAt": "2026-11-04T13:23:37.168Z",
+      "expiresAt": "2026-11-04T21:23:37.147Z",
+      "status": "revoked",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793796773168_fb9e9a2af82c",
+      "token": "5c93cfd2699966c1e62263022e19059dfcf45aaee7ad6ae72d1c945034421905",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T12:52:53.168Z",
+      "lastActivityAt": "2026-11-04T12:52:53.187Z",
+      "expiresAt": "2026-11-04T20:52:53.168Z",
+      "status": "revoked",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793796452501_c63a5ba8f4ec",
+      "token": "f2d1c9dbb41fe22bc815d980daaef56c8e7fd64301257e78d4aad816319d38f9",
+      "userId": "u-ray",
+      "username": "ray",
+      "name": "Ray (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T12:47:32.501Z",
+      "lastActivityAt": "2026-11-04T12:48:07.441Z",
+      "expiresAt": "2026-11-04T20:47:32.501Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
+      "deviceType": "mobile"
+    },
     {
       "sessionId": "sess_1793743619534_2873c9b61f44",
       "token": "ed17471181887ba452d4ff01bbd46bc5b7cd27d8f12c70fef81976f6264aebd5",
@@ -2583,7 +2778,7 @@
       "loginAt": "2026-11-03T22:04:28.195Z",
       "lastActivityAt": "2026-11-03T22:04:28.295Z",
       "expiresAt": "2026-11-04T06:04:28.195Z",
-      "status": "active",
+      "status": "revoked",
       "ipAddress": "127.0.0.1",
       "userAgent": "node",
       "deviceType": "desktop"
