@@ -218,10 +218,10 @@ async function runTargetedSecurityFixSuite() {
   console.log('\n--- 3. DEDUPLICATION PROTECTION & AUDIT TOOLING ---');
 
   // Verify auditAndCleanDuplicates is a pure function that does not throw or mutate state
-  const sampleTickets: Ticket[] = [
+  const sampleTickets = [
     { id: 't1', woNumber: 'WO-100', statusWOAgent: 'Pending', statusWOInstaller: 'Unassigned', customerName: 'A' },
     { id: 't2', woNumber: 'WO-100', statusWOAgent: 'Pending', statusWOInstaller: 'Assigned', customerName: 'A' }
-  ];
+  ] as unknown as Ticket[];
   let auditCallCount = 0;
   const auditReport = auditAndCleanDuplicates(sampleTickets, () => { auditCallCount++; });
   assert('auditAndCleanDuplicates correctly identifies duplicates', auditReport.totalDuplicatesDetected === 1 || auditReport.duplicatesCleaned === 1);
