@@ -9,7 +9,7 @@
         "name": { "type": "string" },
         "username": { "type": "string" },
         "email": { "type": "string", "format": "email" },
-        "role": { "type": "string", "enum": ["super_admin", "dispatch", "leader", "installer", "management_data"] },
+        "role": { "type": "string", "enum": ["super_admin", "dispatch", "leader", "installer", "management_data", "it_support"] },
         "active": { "type": "boolean" },
         "contractor": { "type": "string" },
         "contractorId": { "type": "string" },

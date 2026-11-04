@@ -24,8 +24,8 @@
       "active": true,
       "passwordHash": "28232849",
       "createdAt": "2026-01-01T00:00:00Z",
-      "lastLoginAt": "2026-11-04T14:56:58.512Z",
-      "loginCount": 6,
+      "lastLoginAt": "2026-11-04T15:34:21.902Z",
+      "loginCount": 10,
       "firebaseUid": "test-uid-123",
       "mustChangePassword": true
     },
@@ -48,8 +48,8 @@
       ],
       "createdAt": "2026-01-01T00:00:00Z",
       "mustChangePassword": true,
-      "lastLoginAt": "2026-11-03T22:06:59.521Z",
-      "loginCount": 3
+      "lastLoginAt": "2026-11-04T15:33:52.777Z",
+      "loginCount": 4
     },
     {
       "id": "u-dispatch-1",
@@ -62,8 +62,8 @@
       "passwordHash": "28232849",
       "createdAt": "2026-01-01T00:00:00Z",
       "mustChangePassword": true,
-      "lastLoginAt": "2026-11-03T22:06:59.527Z",
-      "loginCount": 2
+      "lastLoginAt": "2026-11-04T15:33:52.785Z",
+      "loginCount": 3
     },
     {
       "id": "u-leader-1",
@@ -78,8 +78,8 @@
       "active": true,
       "passwordHash": "28232849",
       "createdAt": "2026-01-01T00:00:00Z",
-      "lastLoginAt": "2026-11-03T22:06:59.531Z",
-      "loginCount": 3,
+      "lastLoginAt": "2026-11-04T15:33:52.801Z",
+      "loginCount": 4,
       "mustChangePassword": true
     },
     {
@@ -96,8 +96,8 @@
       "passwordHash": "28232849",
       "createdAt": "2026-01-01T00:00:00Z",
       "mustChangePassword": true,
-      "lastLoginAt": "2026-11-03T22:06:59.534Z",
-      "loginCount": 2
+      "lastLoginAt": "2026-11-04T15:33:52.814Z",
+      "loginCount": 3
     },
     {
       "id": "u-leader-2",
@@ -147,7 +147,9 @@
         "setting_droplist",
         "view_audit_logs"
       ],
-      "createdAt": "2026-01-01T00:00:00Z"
+      "createdAt": "2026-01-01T00:00:00Z",
+      "lastLoginAt": "2026-11-04T15:33:52.769Z",
+      "loginCount": 1
     }
   ],
   "tickets": [
@@ -486,6 +488,196 @@
   ],
   "assignmentHistory": [],
   "auditLogs": [
+    {
+      "id": "log_1793806461914_7lzl",
+      "action": "Logout Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) logout dari sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:34:21.914Z"
+    },
+    {
+      "id": "log_1793806461907_k6tl",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T15:34:21.907Z"
+    },
+    {
+      "id": "log_1793806461903_q0dg",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:34:21.903Z"
+    },
+    {
+      "id": "log_1793806443171_9of6",
+      "action": "Logout Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) logout dari sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:34:03.171Z"
+    },
+    {
+      "id": "log_1793806443164_ex9d",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T15:34:03.164Z"
+    },
+    {
+      "id": "log_1793806443158_pq6p",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:34:03.158Z"
+    },
+    {
+      "id": "log_1793806432925_fqfk",
+      "action": "Bypass Attempt: WO Delete via Update Endpoint",
+      "entity": "ticket",
+      "entityId": "WO20267399330",
+      "details": "User Alamsyah (Super Admin) (super_admin) mencoba memanipulasi status isDeleted tiket via PUT/PATCH endpoint",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:33:52.925Z"
+    },
+    {
+      "id": "log_1793806432885_z8d9",
+      "action": "Access Denied (WO Deletion Restricted to Management Data)",
+      "entity": "rbac",
+      "entityId": "/api/tickets/WO20267399330",
+      "details": "User Alamsyah (Super Admin) (super_admin) ditolak menghapus WO. Sesuai Konstitusi Keamanan, fitur Hapus WO dibatasi KHUSUS role Management Data.",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:33:52.885Z"
+    },
+    {
+      "id": "log_1793806432855_lrcu",
+      "action": "Access Denied (Audit Log Viewer Required)",
+      "entity": "rbac",
+      "entityId": "/api/audit-logs",
+      "details": "User Andi Saputra (installer) ditolak membaca Audit Logs",
+      "performedBy": "Andi Saputra",
+      "userRole": "installer",
+      "timestamp": "2026-11-04T15:33:52.855Z"
+    },
+    {
+      "id": "log_1793806432849_lumz",
+      "action": "Access Denied (Audit Log Viewer Required)",
+      "entity": "rbac",
+      "entityId": "/api/audit-logs",
+      "details": "User Hendra Gunawan (Leader MJS) (leader) ditolak membaca Audit Logs",
+      "performedBy": "Hendra Gunawan (Leader MJS)",
+      "userRole": "leader",
+      "timestamp": "2026-11-04T15:33:52.849Z"
+    },
+    {
+      "id": "log_1793806432843_1qfo",
+      "action": "Access Denied (Audit Log Viewer Required)",
+      "entity": "rbac",
+      "entityId": "/api/audit-logs",
+      "details": "User Siti Rahma (Dispatcher) (dispatch) ditolak membaca Audit Logs",
+      "performedBy": "Siti Rahma (Dispatcher)",
+      "userRole": "dispatch",
+      "timestamp": "2026-11-04T15:33:52.843Z"
+    },
+    {
+      "id": "log_1793806432839_jijf",
+      "action": "Access Denied (Audit Log Viewer Required)",
+      "entity": "rbac",
+      "entityId": "/api/audit-logs",
+      "details": "User Staff Management Data (management_data) ditolak membaca Audit Logs",
+      "performedBy": "Staff Management Data",
+      "userRole": "management_data",
+      "timestamp": "2026-11-04T15:33:52.839Z"
+    },
+    {
+      "id": "log_1793806432814_kof3",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-installer-1",
+      "details": "User Andi Saputra (installer) berhasil masuk ke sistem",
+      "performedBy": "Andi Saputra",
+      "userRole": "installer",
+      "timestamp": "2026-11-04T15:33:52.814Z"
+    },
+    {
+      "id": "log_1793806432802_x1rj",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-leader-1",
+      "details": "User Hendra Gunawan (Leader MJS) (leader) berhasil masuk ke sistem",
+      "performedBy": "Hendra Gunawan (Leader MJS)",
+      "userRole": "leader",
+      "timestamp": "2026-11-04T15:33:52.802Z"
+    },
+    {
+      "id": "log_1793806432786_egwq",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-dispatch-1",
+      "details": "User Siti Rahma (Dispatcher) (dispatch) berhasil masuk ke sistem",
+      "performedBy": "Siti Rahma (Dispatcher)",
+      "userRole": "dispatch",
+      "timestamp": "2026-11-04T15:33:52.786Z"
+    },
+    {
+      "id": "log_1793806432778_wr39",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-mgmt",
+      "details": "User Staff Management Data (management_data) berhasil masuk ke sistem",
+      "performedBy": "Staff Management Data",
+      "userRole": "management_data",
+      "timestamp": "2026-11-04T15:33:52.778Z"
+    },
+    {
+      "id": "log_1793806432770_gtqa",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-itsupport-1",
+      "details": "User Fajar Pratama (IT Support) (it_support) berhasil masuk ke sistem",
+      "performedBy": "Fajar Pratama (IT Support)",
+      "userRole": "it_support",
+      "timestamp": "2026-11-04T15:33:52.770Z"
+    },
+    {
+      "id": "log_1793806432755_gpjm",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:33:52.755Z"
+    },
+    {
+      "id": "log_1793805848281_09tp",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:24:08.281Z"
+    },
     {
       "id": "log_1793804218539_j4a4",
       "action": "Logout Success",
@@ -2600,6 +2792,143 @@
   "attachments": [],
   "sessions": [
     {
+      "sessionId": "sess_1793806461902_baacac610a35",
+      "token": "897501a60db4fb67827c559f7c673d03f3aa65e7213e59e4b4b643dc1d751bbb",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T15:34:21.902Z",
+      "lastActivityAt": "2026-11-04T15:34:21.914Z",
+      "expiresAt": "2026-11-04T23:34:21.902Z",
+      "status": "revoked",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806443157_85eadd71b035",
+      "token": "d0655cd71debf6208a3031c08384508328f485c9f637aab14c08fa96ba4919cf",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T15:34:03.157Z",
+      "lastActivityAt": "2026-11-04T15:34:03.171Z",
+      "expiresAt": "2026-11-04T23:34:03.157Z",
+      "status": "revoked",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806432814_4ce3b3108b10",
+      "token": "5b458ec30fb2fd1e49ff937a46aea957fefacfbbb7c61a0292ac67028bc2c363",
+      "userId": "u-installer-1",
+      "username": "installer1",
+      "name": "Andi Saputra",
+      "role": "installer",
+      "contractor": "PT Mitra Jaringan Solusi",
+      "loginAt": "2026-11-04T15:33:52.814Z",
+      "lastActivityAt": "2026-11-04T15:33:52.855Z",
+      "expiresAt": "2026-11-04T23:33:52.813Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806432801_d3bb9fe6656d",
+      "token": "2e1745fe9b596d52d4023479714da5f2bf1d544712d4568eb8598fbb6c0015a9",
+      "userId": "u-leader-1",
+      "username": "leadermjs",
+      "name": "Hendra Gunawan (Leader MJS)",
+      "role": "leader",
+      "contractor": "PT Mitra Jaringan Solusi",
+      "loginAt": "2026-11-04T15:33:52.801Z",
+      "lastActivityAt": "2026-11-04T15:33:52.849Z",
+      "expiresAt": "2026-11-04T23:33:52.801Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806432786_fed08c661aaa",
+      "token": "e8267996e876c0dd0741490ad276e506f5977cced7fa763c7979c6d74ebd2d7e",
+      "userId": "u-dispatch-1",
+      "username": "dispatch",
+      "name": "Siti Rahma (Dispatcher)",
+      "role": "dispatch",
+      "loginAt": "2026-11-04T15:33:52.785Z",
+      "lastActivityAt": "2026-11-04T15:33:52.843Z",
+      "expiresAt": "2026-11-04T23:33:52.785Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806432777_5ad46bce82e1",
+      "token": "d2d9a0674e7e6ab0d373dd2037a124771457ed7c201a31249aaa3939450d0625",
+      "userId": "u-mgmt",
+      "username": "datamgmt",
+      "name": "Staff Management Data",
+      "role": "management_data",
+      "loginAt": "2026-11-04T15:33:52.777Z",
+      "lastActivityAt": "2026-11-04T15:33:52.920Z",
+      "expiresAt": "2026-11-04T23:33:52.777Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806432769_03069b39964a",
+      "token": "2bb22d379ddd48fc0b47bae2744271cbd27508fc5ccc5c42ec1ed360bb53b641",
+      "userId": "u-itsupport-1",
+      "username": "itsupport",
+      "name": "Fajar Pratama (IT Support)",
+      "role": "it_support",
+      "loginAt": "2026-11-04T15:33:52.769Z",
+      "lastActivityAt": "2026-11-04T15:33:52.864Z",
+      "expiresAt": "2026-11-04T23:33:52.769Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806432754_5912e20d4b38",
+      "token": "2c22e79acbb7b3efcdc5addd04c5c24c99344229f96efe51db639d1159b4c673",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T15:33:52.754Z",
+      "lastActivityAt": "2026-11-04T15:33:52.924Z",
+      "expiresAt": "2026-11-04T23:33:52.753Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793805848280_38e644c711f6",
+      "token": "5f7127b2149e039ea7c474666bc319dac526aba2e0ae9eddc30b014736ed7aa7",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T15:24:08.279Z",
+      "lastActivityAt": "2026-11-04T15:24:08.279Z",
+      "expiresAt": "2026-11-04T23:24:08.279Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
+      "deviceType": "mobile"
+    },
+    {
       "sessionId": "sess_1793804218512_51e27b22fa40",
       "token": "9a6b491d4909685e949f0c303337d9196cbe04c980d15e6da736d87784189586",
       "userId": "u-1",
@@ -2838,7 +3167,7 @@
       "loginAt": "2026-11-03T21:53:00.692Z",
       "lastActivityAt": "2026-11-03T22:05:03.294Z",
       "expiresAt": "2026-11-04T05:53:00.692Z",
-      "status": "active",
+      "status": "revoked",
       "ipAddress": "127.0.0.1",
       "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
       "deviceType": "mobile"
@@ -2853,7 +3182,7 @@
       "loginAt": "2026-10-28T16:45:10.911Z",
       "lastActivityAt": "2026-10-28T16:45:10.911Z",
       "expiresAt": "2026-10-29T00:45:10.911Z",
-      "status": "active",
+      "status": "revoked",
       "ipAddress": "127.0.0.1",
       "userAgent": "curl/7.88.1",
       "deviceType": "desktop"

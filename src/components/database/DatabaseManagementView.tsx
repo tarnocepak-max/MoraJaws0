@@ -259,6 +259,10 @@ export const DatabaseManagementView: React.FC = () => {
 
   // Comprehensive automated deduplication across Firestore
   const handleRunComprehensiveDeduplication = async () => {
+    if (currentUser.role !== 'management_data') {
+      toast.error('Akses Ditolak: Hanya role Management Data yang berwenang mengeksekusi pembersihan dan penghapusan duplikasi Work Order.', 'Akses Ditolak');
+      return;
+    }
     setIsDeduplicating(true);
     try {
       const report = await executeComprehensiveDeduplication();

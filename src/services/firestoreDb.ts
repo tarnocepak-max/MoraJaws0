@@ -114,6 +114,7 @@ export interface FirestoreSubscriptionCallbacks {
   onChatCategoriesChange?: (categories: ChatCategoryConfig[]) => void;
   onHierarchicalDroplistsChange?: (statuses: HierarchicalStatus[]) => void;
   onError?: (error: Error) => void;
+  userRole?: string;
 }
 
 export function subscribeToMoraJawsFirestore(callbacks: FirestoreSubscriptionCallbacks): () => void {
@@ -250,8 +251,8 @@ export function subscribeToMoraJawsFirestore(callbacks: FirestoreSubscriptionCal
     }
   }
 
-  // 5. Audit Logs Real-Time Listener
-  if (callbacks.onAuditLogsChange) {
+  // 5. Audit Logs Real-Time Listener (Strictly restricted to super_admin and it_support)
+  if (callbacks.onAuditLogsChange && (callbacks.userRole === 'super_admin' || callbacks.userRole === 'it_support')) {
     try {
       const auditRef = collection(db, COLLECTIONS.AUDIT_LOGS);
       const auditQuery = query(auditRef, orderBy('timestamp', 'desc'), limit(150));
@@ -265,16 +266,8 @@ export function subscribeToMoraJawsFirestore(callbacks: FirestoreSubscriptionCal
           callbacks.onAuditLogsChange?.(logs);
         },
         (error) => {
-          if (isPermissionError(error)) {
-            try {
-              handleFirestoreError(error, OperationType.LIST, COLLECTIONS.AUDIT_LOGS);
-            } catch (e: any) {
-              callbacks.onError?.(e);
-            }
-          } else {
-            console.warn('[Firestore] Audit logs subscription notice:', error?.message || error);
-            callbacks.onError?.(error instanceof Error ? error : new Error(String(error)));
-          }
+          // Remediation 4.5: Non-fatal notice. Never disrupt global sync status due to audit logs!
+          console.warn('[Firestore] Audit logs subscription notice (non-fatal):', error?.message || error);
         }
       );
       unsubs.push(unsub);
@@ -442,6 +435,39 @@ export function subscribeToMoraJawsFirestore(callbacks: FirestoreSubscriptionCal
   return () => {
     unsubs.forEach(unsub => unsub());
   };
+}
+
+/**
+ * Dedicated Real-Time Listener for Audit Logs.
+ * Strictly registered only after user identity and role are verified (super_admin or it_support).
+ * Non-fatal error handling guarantees main application data sync is never disrupted.
+ */
+export function subscribeToAuditLogs(
+  onAuditLogsChange: (logs: AuditLog[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  try {
+    const auditRef = collection(db, COLLECTIONS.AUDIT_LOGS);
+    const auditQuery = query(auditRef, orderBy('timestamp', 'desc'), limit(150));
+    const unsub = onSnapshot(
+      auditQuery,
+      (snapshot) => {
+        const logs: AuditLog[] = [];
+        snapshot.forEach((docSnap) => {
+          logs.push(docSnap.data() as AuditLog);
+        });
+        onAuditLogsChange(logs);
+      },
+      (error) => {
+        console.warn('[Firestore] Dedicated audit logs subscription notice (non-fatal):', error?.message || error);
+        onError?.(error instanceof Error ? error : new Error(String(error)));
+      }
+    );
+    return unsub;
+  } catch (err: any) {
+    console.warn('[Firestore] Failed attaching dedicated audit logs listener:', err);
+    return () => {};
+  }
 }
 
 // -------------------------------------------------------------

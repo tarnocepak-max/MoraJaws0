@@ -2618,7 +2618,7 @@ async function startServer() {
   // Purge imported tickets by date within 7-day window (Management Data Role Exclusive - Requirement 5)
   const handlePurgeTicketsByDate = (importDate: string, reason: string, req: AuthenticatedRequest, res: Response) => {
     if (!importDate) return res.status(400).json({ error: 'Tanggal import wajib disertakan.' });
-    if (!reason || reason.trim().length < 5) return res.status(400).json({ error: 'Alasan wajib minimal 5 karakter.' });
+    if (!reason || reason.trim().length < 5) return res.status(400).json({ error: 'Alasan penghapusan batch wajib diisi minimal 5 karakter.' });
 
     const beforeCount = db.tickets.length;
     db.tickets = db.tickets.filter(t => {
@@ -2638,14 +2638,21 @@ async function startServer() {
   };
 
   app.post('/api/tickets/purge-by-date', requireManagementData, (req: AuthenticatedRequest, res) => {
-    const { importDate, reason } = req.body;
-    handlePurgeTicketsByDate(importDate, reason, req, res);
+    const { importDate } = req.body;
+    const rawReason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    if (!rawReason || rawReason.length < 5) {
+      return res.status(400).json({ error: 'Alasan penghapusan batch wajib diisi minimal 5 karakter.' });
+    }
+    handlePurgeTicketsByDate(importDate, rawReason, req, res);
   });
 
   app.delete('/api/tickets/batch/:date', requireManagementData, (req: AuthenticatedRequest, res) => {
     const importDate = req.params.date;
-    const reason = req.body?.reason || 'Batch deletion via TextToTable importer';
-    handlePurgeTicketsByDate(importDate, reason, req, res);
+    const rawReason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    if (!rawReason || rawReason.length < 5) {
+      return res.status(400).json({ error: 'Alasan penghapusan batch wajib diisi minimal 5 karakter.' });
+    }
+    handlePurgeTicketsByDate(importDate, rawReason, req, res);
   });
 
   // Get Assignment History
@@ -5124,10 +5131,12 @@ async function startServer() {
     res.json({ logs: db.auditLogs });
   });
 
-  app.post('/api/audit-logs', requireAuth, (req: AuthenticatedRequest, res) => {
-    const { action, entity, entityId, details } = req.body;
-    const entry = logServerAudit(action, entity, entityId, details, req.user || null);
-    res.json(entry);
+  // Disabled per Phase 9O Remediation: Audit records must exclusively originate from trusted server operations
+  app.post('/api/audit-logs', requireAuth, (_req: AuthenticatedRequest, res) => {
+    return res.status(405).json({
+      error: 'Pencatatan Audit Log melalui endpoint HTTP dinonaktifkan. Seluruh audit record hanya dicatat oleh operasi server internal tepercaya.',
+      code: 'METHOD_NOT_ALLOWED'
+    });
   });
 
   // ---------------------------------------------------------------------------

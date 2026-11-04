@@ -221,7 +221,7 @@ async function runRemediationSuite() {
   assertTest('Leader cannot delete users', !hasPermission('leader', 'delete_user'));
   assertTest('Dispatch cannot delete users', !hasPermission('dispatch', 'delete_user'));
   assertTest('Management data has import permissions', hasPermission('management_data', 'import_data'));
-  assertTest('Super admin has permanent_delete permission', hasPermission('super_admin', 'permanent_delete'));
+  assertTest('Super admin DOES NOT have permanent_delete permission (exclusive to management_data)', !hasPermission('super_admin', 'permanent_delete'));
 
   // ---------------------------------------------------------------------------
   // SUMMARY

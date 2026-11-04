@@ -70,6 +70,7 @@ import { auth, testFirestoreConnection, pingFirestore, isQuotaExceededError } fr
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import {
   subscribeToMoraJawsFirestore,
+  subscribeToAuditLogs,
   saveTicketToFirestore,
   batchSaveTicketsToFirestore,
   batchDeleteTicketsFromFirestore,
@@ -745,12 +746,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               setTicketMessages(liveMessages);
             }
           },
-          onAuditLogsChange: (liveLogs) => {
-            if (isCancelled) return;
-            if (liveLogs) {
-              setAuditLogs(liveLogs);
-            }
-          },
           onTemplatesChange: (liveTemplates) => {
             if (isCancelled) return;
             if (liveTemplates) {
@@ -846,6 +841,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
   }, []);
+
+  // Remediation 4: Dedicated Audit Logs Listener strictly restricted to verified super_admin and it_support
+  useEffect(() => {
+    let unsubAudit: (() => void) | null = null;
+    const canViewAudit = Boolean(
+      currentUser.id &&
+      currentUser.active &&
+      (currentUser.role === 'super_admin' || currentUser.role === 'it_support')
+    );
+
+    if (canViewAudit && firestoreStatus !== 'offline') {
+      try {
+        unsubAudit = subscribeToAuditLogs(
+          (liveLogs) => {
+            if (liveLogs) {
+              setAuditLogs(liveLogs);
+            }
+          },
+          (err) => {
+            console.warn('[AuditLogs] Non-fatal notice in audit logs listener:', err?.message || err);
+          }
+        );
+      } catch (err) {
+        console.warn('[AuditLogs] Failed attaching audit logs listener:', err);
+      }
+    } else {
+      if (!canViewAudit) {
+        setAuditLogs([]);
+      }
+    }
+
+    return () => {
+      if (unsubAudit) {
+        unsubAudit();
+        unsubAudit = null;
+      }
+    };
+  }, [currentUser.id, currentUser.role, currentUser.active, firestoreStatus]);
 
   // Explicit Firestore data refresh (re-queries Cloud Firestore without reloading the browser page)
   const refreshFirestoreData = async () => {
@@ -1570,6 +1603,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const executeComprehensiveDeduplication = async (): Promise<DuplicateAuditReport> => {
+    // Strict RBAC: Exclusive to Management Data role
+    if (currentUser.role !== 'management_data') {
+      const errMsg = 'Akses Ditolak: Hanya akun dengan peran Management Data yang memiliki wewenang merekonsiliasi atau menghapus duplikasi Work Order.';
+      addAuditLog(
+        'Unauthorized Deduplication Attempt Blocked',
+        'ticket',
+        'deduplication',
+        `User ${currentUser.name} (${currentUser.role}) ditolak menjalankan penghapusan duplikasi dokumen WO. Otoritas eksklusif Management Data.`
+      );
+      toast.error(errMsg, 'Akses Ditolak');
+      return {
+        totalExamined: tickets.length,
+        totalValid: tickets.length,
+        duplicatesFound: 0,
+        duplicatesCleaned: 0,
+        conflictsFound: 0,
+        manualReviewList: [],
+        failedCount: 0,
+        cleanedTicketList: tickets,
+        duplicateDocIdsToDelete: [],
+        mergedMasterTickets: [],
+        totalInspected: tickets.length,
+        totalDuplicatesDetected: 0,
+        totalDuplicatesCleaned: 0,
+        totalConflicts: 0,
+        totalManualReviewNeeded: 0,
+        totalFailed: 0,
+        conflictItems: []
+      };
+    }
+
     const report = auditAndCleanDuplicates(tickets, (action, _entity, id, details) => {
       addAuditLog(action, 'ticket', id, details);
     });
