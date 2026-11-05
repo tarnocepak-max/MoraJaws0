@@ -214,7 +214,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
   const availableAppointmentDates = useMemo(() => {
     const set = new Set<string>();
     tickets.forEach(t => {
-      const raw = t.appointmentDate || t.date;
+      const raw = t.appointmentDate;
       if (raw) {
         const parsed = parseAppointmentDate(raw);
         if (parsed.date) set.add(parsed.date);
@@ -398,7 +398,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
     if (!sortDirection) return filteredTickets;
     return sortDataArray(filteredTickets, { column: sortField, direction: sortDirection }, (item, col) => {
       if (col === 'woNumber') return item.woNumber;
-      if (col === 'date' || col === 'appointmentDate') return item.appointmentDate || item.date || '';
+      if (col === 'date' || col === 'appointmentDate') return item.appointmentDate || '';
       if (col === 'statusWOInstaller') return item.statusWOInstaller;
       if (col === 'statusWOAgent') return item.statusWOAgent;
       if (col === 'slotTime') return item.slotTime;

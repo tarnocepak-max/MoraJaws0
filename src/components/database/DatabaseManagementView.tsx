@@ -202,7 +202,7 @@ export const DatabaseManagementView: React.FC = () => {
         if (t.statusWOInstaller !== selectedStatus && t.statusWOAgent !== selectedStatus) return false;
       }
       if (selectedAppointmentDate) {
-        const raw = t.appointmentDate || t.date || '';
+        const raw = t.appointmentDate || '';
         const parsed = parseAppointmentDate(raw);
         const ticketDate = parsed.date || (raw.length >= 10 ? raw.slice(0, 10) : raw.trim());
         if (ticketDate !== selectedAppointmentDate && !ticketDate.startsWith(selectedAppointmentDate)) return false;
@@ -222,7 +222,7 @@ export const DatabaseManagementView: React.FC = () => {
     setEditForm({
       customerName: ticket.customerName,
       customerPhone: ticket.customerPhone,
-      appointmentDate: ticket.appointmentDate || ticket.date,
+      appointmentDate: ticket.appointmentDate || '',
       slotTime: ticket.slotTime,
       contactorName: ticket.contactorName || ticket.contractorName,
       area: ticket.area,

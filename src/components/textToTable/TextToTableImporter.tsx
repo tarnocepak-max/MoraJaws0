@@ -273,8 +273,8 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
         'No': t.id,
         'WO Number': t.woNumber,
         'Ticket Number': t.ticketNumber || '',
-        'Date': t.date,
-        'Appointment Date': t.appointmentDate || t.date,
+        'Date': t.appointmentDate || '',
+        'Appointment Date': t.appointmentDate || '',
         'ID Customer': t.idCustomer,
         'Customer Name': t.customerName,
         'Customer Phone': t.customerPhone || '',
@@ -579,7 +579,7 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
       }
 
       // 10. Appointment Date
-      const dateVal = (updatedMapped.appointmentDate || updatedMapped.date || '').trim();
+      const dateVal = (updatedMapped.appointmentDate || '').trim();
       if (!dateVal) {
         emptyCols.push('Appointment Date');
         probCols.push('Appointment Date');
@@ -1303,7 +1303,7 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
                           />
                         ) : (
                           <div className="font-semibold text-slate-700 dark:text-slate-300">
-                            {row.mapped.appointmentDate || row.mapped.date || <span className="text-rose-500 font-bold">[Kosong / Tidak Valid]</span>}
+                            {row.mapped.appointmentDate || <span className="text-rose-500 font-bold">[Kosong / Tidak Valid]</span>}
                           </div>
                         )}
                       </td>

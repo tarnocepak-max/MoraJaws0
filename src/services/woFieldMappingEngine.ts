@@ -1685,13 +1685,14 @@ export function processRawImportWithEngine(
     }
 
     // 10. Appointment Date
-    if (!rawAppointmentDateValue && !mapped.appointmentDate && !mapped.date) {
+    const rawApptInput = rawAppointmentDateValue || mapped.appointmentDate || '';
+    if (!rawApptInput) {
       emptyFields.push('Appointment Date');
       problematicColumns.push('Appointment Date');
     } else {
-      const parsedCheck: DateParseResult = rowAppointmentDateMeta || parseAppointmentDate(mapped.appointmentDate || mapped.date || rawAppointmentDateValue);
+      const parsedCheck: DateParseResult = rowAppointmentDateMeta || parseAppointmentDate(rawApptInput);
       if (!parsedCheck.isValid || !parsedCheck.date) {
-        formatErrors.push(parsedCheck.error || `Format tanggal Appointment Date '${rawAppointmentDateValue || mapped.appointmentDate || mapped.date}' tidak valid`);
+        formatErrors.push(parsedCheck.error || `Format tanggal Appointment Date '${rawApptInput}' tidak valid`);
         problematicColumns.push('Appointment Date');
       } else {
         mapped.appointmentDate = parsedCheck.date;

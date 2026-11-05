@@ -834,10 +834,20 @@ function saveDatabaseToDisk() {
   }
 }
 
+export interface AuditLogOptions {
+  level?: 'critical' | 'informational';
+  previousState?: any;
+  newState?: any;
+  ipAddress?: string;
+  userAgent?: string;
+  metadata?: any;
+}
+
 export interface AuditLogResult {
   success: boolean;
   logId: string;
   status: 'persisted' | 'failed' | 'unverified' | 'skipped';
+  level: 'critical' | 'informational';
   error?: string;
 }
 
@@ -877,14 +887,15 @@ export async function logServerAuditAsync(
   entityId: string,
   details: string,
   user?: ServerUser | null,
-  extra?: { previousState?: any; newState?: any; ipAddress?: string; userAgent?: string; metadata?: any }
+  extra?: AuditLogOptions
 ): Promise<AuditLogResult> {
+  const level: 'critical' | 'informational' = extra?.level || 'critical';
   const logId = 'log_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
   const nowIso = new Date().toISOString();
   const cleanDetails = sanitizeAuditDetails(details);
   const cleanPrev = sanitizeAuditObj(extra?.previousState);
   const cleanNew = sanitizeAuditObj(extra?.newState);
-  const cleanMeta = sanitizeAuditObj(extra?.metadata || { source: 'morajaws_server_backend' });
+  const cleanMeta = sanitizeAuditObj(extra?.metadata || { source: 'morajaws_server_backend', auditLevel: level });
 
   const localEntry = {
     id: logId,
@@ -921,7 +932,8 @@ export async function logServerAuditAsync(
           success: false,
           logId,
           status: 'failed',
-          error: 'Supabase menolak penyimpanan audit log atau tabel tidak dapat diakses.'
+          level,
+          error: 'Supabase menolak penyimpanan audit log atau tabel audit_logs tidak dapat diakses.'
         };
       }
 
@@ -934,7 +946,8 @@ export async function logServerAuditAsync(
       return {
         success: true,
         logId,
-        status: 'persisted'
+        status: 'persisted',
+        level
       };
     } catch (err: any) {
       console.error(`[Audit Log] Exception saat menyimpan audit log ke Supabase:`, err?.message || err);
@@ -942,6 +955,7 @@ export async function logServerAuditAsync(
         success: false,
         logId,
         status: 'failed',
+        level,
         error: err?.message || 'Exception during Supabase audit insert'
       };
     }
@@ -954,43 +968,34 @@ export async function logServerAuditAsync(
     return {
       success: true,
       logId,
-      status: 'persisted'
+      status: 'persisted',
+      level
     };
   }
 
   return {
     success: false,
     logId,
-    status: 'unverified',
-    error: 'Database audit backend belum dikonfigurasi.'
+    status: 'failed',
+    level,
+    error: 'Database audit backend belum dikonfigurasi dan mode lokal JSON dilarang di lingkungan produksi.'
   };
 }
 
-// Helper to log server audit entries with synchronous fallback wrapper
+// Helper to log server audit entries with non-critical wrapper (explicitly unconfirmed persistence)
 export function logServerAudit(
   action: string,
   entity: string,
   entityId: string,
   details: string,
   user?: ServerUser | null,
-  extra?: { previousState?: any; newState?: any; ipAddress?: string; userAgent?: string; metadata?: any }
-) {
-  const localEntry = {
-    id: 'log_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-    action,
-    entity,
-    entityId,
-    details: sanitizeAuditDetails(details),
-    performedBy: user ? user.name : 'Anonymous / System',
-    userRole: user ? user.role : 'system',
-    timestamp: new Date().toISOString()
-  };
-
-  logServerAuditAsync(action, entity, entityId, details, user, extra).catch(err => {
-    console.error(`[Audit Log Background] Warning:`, err);
+  extra?: AuditLogOptions
+): { queued: true; logId: string; status: 'queued'; level: 'informational' } {
+  const logId = 'log_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+  logServerAuditAsync(action, entity, entityId, details, user, { ...extra, level: 'informational' }).catch(err => {
+    console.warn(`[Audit Log Background] Warning for non-critical audit [${action}]:`, err?.message || err);
   });
-
-  return localEntry;
+  return { queued: true, logId, status: 'queued', level: 'informational' };
 }
 
 // --- Realtime SSE Event Bus (Server-Side Managed) ---
@@ -1066,7 +1071,8 @@ function renderWhatsAppMessage(templateBody: string, ticket: any) {
     contractor_name: ticket?.contactorName || ticket?.contractorName || '',
     contactor_name: ticket?.contactorName || ticket?.contractorName || '',
     installer_name: ticket?.installerName || '',
-    date: ticket?.appointmentDate || ticket?.date || '',
+    date: ticket?.appointmentDate || '',
+    appointment_date: ticket?.appointmentDate || '',
     fdt_code: ticket?.fdtCode || '',
     fat_code: ticket?.fatCode || ''
   };
@@ -1116,7 +1122,7 @@ interface AuthenticatedRequest extends Request {
   decodedFirebaseToken?: any;
 }
 
-async function resolveUserFromHeader(req: AuthenticatedRequest, _res: Response, next: NextFunction) {
+async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   let found: ServerUser | undefined;
   let activeSession: ServerSession | undefined;
   let authSource: 'firebase_token' | 'server_session' | undefined;
@@ -1136,12 +1142,30 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, _res: Response, 
         authSource = 'firebase_token';
         verifiedDecodedFirebaseToken = decodedFirebaseToken;
 
-        // 1.A. Match UID with user in Supabase
-        const supabaseUser = await findUserInSupabase(decodedFirebaseToken.uid);
-        if (supabaseUser && supabaseUser.active && !supabaseUser.isDeleted) {
-          found = supabaseUser;
-        } else {
-          // 1.B. Fallback match with local persistent storage
+        // 1.A. Match UID or email with user in Supabase
+        if (isSupabaseMode()) {
+          try {
+            const cleanEmail = (decodedFirebaseToken.email || '').toLowerCase().trim();
+            const sbUser = (await findUserInSupabase(decodedFirebaseToken.uid)) ||
+              (cleanEmail ? await findUserInSupabase(cleanEmail) : null);
+            if (sbUser && sbUser.active && !sbUser.isDeleted) {
+              found = sbUser;
+            } else if (!sbUser && !isLocalJsonModeAllowed()) {
+              // User not registered in authoritative Supabase: access denied in production
+              found = undefined;
+            }
+          } catch (sbErr) {
+            if (!isLocalJsonModeAllowed()) {
+              return res.status(503).json({
+                error: 'Database authoritative tidak tersedia saat verifikasi token Firebase.',
+                code: 'DATABASE_UNAVAILABLE'
+              });
+            }
+          }
+        }
+
+        // 1.B. Match with local persistent storage ONLY when explicitly allowed (non-production)
+        if (!found && isLocalJsonModeAllowed()) {
           const cleanEmail = (decodedFirebaseToken.email || '').toLowerCase().trim();
           found = db.users.find(u =>
             !u.isDeleted && u.active && (
@@ -1703,28 +1727,44 @@ async function startServer() {
     const cleanUid = String(decoded.uid).trim();
     const cleanEmail = String(decoded.email || '').trim().toLowerCase();
 
-    let user = db.users.find(u => {
-      if (u.isDeleted) return false;
-      if (cleanEmail && (
-        u.email.toLowerCase() === cleanEmail ||
-        (u.altEmail && u.altEmail.toLowerCase().includes(cleanEmail))
-      )) return true;
-      if (cleanUid && u.firebaseUid === cleanUid) return true;
-      return false;
-    });
+    let user: ServerUser | null = null;
 
-    // Check Supabase if user is not found in local persistent store
-    if (!user) {
+    if (isSupabaseMode()) {
       try {
-        const sbUser = (await findUserInSupabase(cleanUid)) || (await findUserInSupabase(cleanEmail));
+        const sbUser = (await findUserInSupabase(cleanUid)) || (cleanEmail ? await findUserInSupabase(cleanEmail) : null);
         if (sbUser && !sbUser.isDeleted) {
           user = sbUser;
+        } else if (!sbUser && !isLocalJsonModeAllowed()) {
+          await logServerAuditAsync('Firebase Login Rejected', 'auth', cleanEmail || cleanUid, `Percobaan login Firebase ditolak: Akun belum terdaftar di Supabase (${cleanEmail || cleanUid})`, null, { level: 'critical' });
+          return res.status(403).json({
+            error: `Akun Google / Firebase (${cleanEmail || cleanUid}) belum terdaftar dalam sistem MoraJaws. Hubungi Super Admin untuk mendaftarkan akun staf Anda.`,
+            code: 'USER_NOT_REGISTERED'
+          });
         }
-      } catch {}
+      } catch (err: any) {
+        if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({
+            error: 'Database authoritative Supabase tidak dapat diakses saat login Firebase.',
+            code: 'DATABASE_UNAVAILABLE'
+          });
+        }
+      }
+    }
+
+    if (!user && isLocalJsonModeAllowed()) {
+      user = db.users.find(u => {
+        if (u.isDeleted) return false;
+        if (cleanEmail && (
+          u.email.toLowerCase() === cleanEmail ||
+          (u.altEmail && u.altEmail.toLowerCase().includes(cleanEmail))
+        )) return true;
+        if (cleanUid && u.firebaseUid === cleanUid) return true;
+        return false;
+      }) || null;
     }
 
     if (!user) {
-      logServerAudit('Firebase Login Rejected', 'auth', cleanEmail || cleanUid, `Percobaan login Firebase ditolak: Akun belum terdaftar (${cleanEmail || cleanUid})`, null);
+      await logServerAuditAsync('Firebase Login Rejected', 'auth', cleanEmail || cleanUid, `Percobaan login Firebase ditolak: Akun belum terdaftar (${cleanEmail || cleanUid})`, null, { level: 'critical' });
       return res.status(403).json({
         error: `Akun Google / Firebase (${cleanEmail || cleanUid}) belum terdaftar dalam sistem MoraJaws. Hubungi Super Admin untuk mendaftarkan akun staf Anda.`,
         code: 'USER_NOT_REGISTERED'
@@ -1732,7 +1772,7 @@ async function startServer() {
     }
 
     if (!user.active) {
-      logServerAudit('Firebase Login Blocked Inactive', 'auth', user.id, `Akun dinonaktifkan mencoba login Firebase: ${user.name}`, user);
+      await logServerAuditAsync('Firebase Login Blocked Inactive', 'auth', user.id, `Akun dinonaktifkan mencoba login Firebase: ${user.name}`, user, { level: 'critical' });
       return res.status(403).json({
         error: 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.',
         code: 'USER_INACTIVE'
@@ -1750,7 +1790,6 @@ async function startServer() {
 
     const sessionId = 'sess_' + Date.now() + '_' + crypto.randomBytes(6).toString('hex');
     const token = crypto.randomBytes(32).toString('hex');
-    const tokenFingerprint = crypto.createHash('sha256').update(token).digest('hex');
     const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
     const userAgent = req.headers['user-agent'] || 'Firebase Web Client';
     const deviceType = userAgent.toLowerCase().includes('mobi') ? 'mobile' : 'desktop';
@@ -1776,10 +1815,11 @@ async function startServer() {
     SERVER_SESSIONS.unshift(newSession);
     user.lastLoginAt = nowIso;
     user.loginCount = (user.loginCount || 0) + 1;
-    saveDatabaseToDisk();
+    if (isLocalJsonModeAllowed()) {
+      saveDatabaseToDisk();
+    }
 
-    // Session strictly managed via local persistent storage (SERVER_SESSIONS)
-    logServerAudit('Firebase Login Success', 'auth', user.id, `User ${user.name} (${user.role}) berhasil masuk via Firebase Auth [${cleanEmail}]`, user);
+    await logServerAuditAsync('Firebase Login Success', 'auth', user.id, `User ${user.name} (${user.role}) berhasil masuk via Firebase Auth [${cleanEmail}]`, user, { level: 'critical' });
 
     const { passwordHash: _, ...safeUser } = user;
     res.json({
@@ -1792,9 +1832,28 @@ async function startServer() {
   });
 
   // --- Bootstrap Initial State for Client Startup ---
-  app.get('/api/bootstrap', (req: AuthenticatedRequest, res) => {
+  app.get('/api/bootstrap', async (req: AuthenticatedRequest, res) => {
     const user = req.user;
-    const scopedTickets = user ? scopeTicketsForUser(db.tickets, user) : [];
+    let baseTickets: any[] = [];
+
+    if (isSupabaseMode()) {
+      try {
+        const sbResult = await getWorkOrdersFromSupabase();
+        if (sbResult.success && sbResult.data) {
+          baseTickets = sbResult.data;
+        } else if (isLocalJsonModeAllowed()) {
+          baseTickets = db.tickets;
+        }
+      } catch {
+        if (isLocalJsonModeAllowed()) {
+          baseTickets = db.tickets;
+        }
+      }
+    } else {
+      baseTickets = db.tickets;
+    }
+
+    const scopedTickets = user ? scopeTicketsForUser(baseTickets, user) : [];
 
     res.json({
       success: true,
@@ -1835,47 +1894,45 @@ async function startServer() {
     }
 
     const clean = String(identifier).trim().toLowerCase();
+    let user: ServerUser | null = null;
 
-    // 1. Primary lookup: exact username or email match first
-    let user = db.users.find(u =>
-      !u.isDeleted && (u.username.toLowerCase() === clean || u.email.toLowerCase() === clean)
-    );
-
-    // 1.B. Secondary lookup: altEmail or email prefix match
-    if (!user) {
-      user = db.users.find(u => {
-        if (u.isDeleted) return false;
-        if (u.altEmail && u.altEmail.toLowerCase().includes(clean)) return true;
-        const prefix = (u.email || '').split('@')[0].toLowerCase();
-        if (prefix === clean) return true;
-        return false;
-      });
-    }
-
-    // 2. Fallback: Check Supabase database if connected
-    if (!user) {
+    if (isSupabaseMode()) {
       try {
         const sbUser = await findUserInSupabase(clean);
         if (sbUser && !sbUser.isDeleted) {
-          user = {
-            id: sbUser.id,
-            name: sbUser.name,
-            username: sbUser.username || clean,
-            email: sbUser.email || `${clean}@morajaws.net`,
-            role: sbUser.role || 'installer',
-            contractor: sbUser.contractor,
-            contractorId: sbUser.contractorId,
-            area: sbUser.area,
-            phone: sbUser.phone,
-            active: sbUser.active !== false,
-            passwordHash: DEFAULT_HASH,
-            createdAt: sbUser.createdAt || new Date().toISOString()
-          };
-          db.users.push(user);
-          saveDatabaseToDisk();
+          user = sbUser;
+        } else if (!sbUser && !isLocalJsonModeAllowed()) {
+          return res.status(404).json({
+            success: false,
+            found: false,
+            error: `Nama pengguna atau email "${identifier}" tidak terdaftar dalam direktori staf MoraJaws.`,
+            code: 'auth/user-not-found'
+          });
         }
-      } catch (err) {
-        // Standby lookup error ignored
+      } catch (err: any) {
+        if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({
+            success: false,
+            found: false,
+            error: 'Database direktori staf tidak dapat diakses saat ini.',
+            code: 'DATABASE_UNAVAILABLE'
+          });
+        }
+      }
+    }
+
+    if (!user && isLocalJsonModeAllowed()) {
+      user = db.users.find(u =>
+        !u.isDeleted && (u.username.toLowerCase() === clean || u.email.toLowerCase() === clean)
+      ) || null;
+
+      if (!user) {
+        user = db.users.find(u => {
+          if (u.isDeleted) return false;
+          if (u.altEmail && u.altEmail.toLowerCase().includes(clean)) return true;
+          const prefix = (u.email || '').split('@')[0].toLowerCase();
+          return prefix === clean;
+        }) || null;
       }
     }
 
@@ -1981,57 +2038,60 @@ async function startServer() {
       });
     }
 
-    let user = db.users.find(
-      u => !u.isDeleted && (
-        u.username.toLowerCase() === cleanUser ||
-        u.email.toLowerCase() === cleanUser
-      )
-    );
+    let user: ServerUser | null = null;
 
-    if (!user) {
-      user = db.users.find(
-        u => !u.isDeleted && (
-          (u.altEmail && u.altEmail.toLowerCase().includes(cleanUser))
-        )
-      );
-    }
-
-    // If not found in local persistent store, probe Supabase database
-    if (!user) {
+    if (isSupabaseMode()) {
       try {
         const sbUser = await findUserInSupabase(cleanUser);
         if (sbUser && !sbUser.isDeleted) {
-          user = {
-            id: sbUser.id,
-            name: sbUser.name,
-            username: sbUser.username || cleanUser,
-            email: sbUser.email || `${cleanUser}@morajaws.net`,
-            role: sbUser.role || 'installer',
-            contractor: sbUser.contractor,
-            contractorId: sbUser.contractorId,
-            area: sbUser.area,
-            phone: sbUser.phone,
-            active: sbUser.active !== false,
-            passwordHash: DEFAULT_HASH,
-            createdAt: sbUser.createdAt || new Date().toISOString()
-          };
-          db.users.push(user);
-          saveDatabaseToDisk();
+          user = sbUser;
+        } else if (!sbUser && !isLocalJsonModeAllowed()) {
+          await logServerAuditAsync('Login Failed (User Not Found)', 'auth', cleanUser, `Percobaan login untuk identitas tidak dikenal: ${cleanUser}`, null, { level: 'critical' });
+          return res.status(404).json({
+            success: false,
+            error: `Nama pengguna atau email "${rawUser}" tidak ditemukan dalam direktori staf MoraJaws.`,
+            code: 'auth/user-not-found'
+          });
         }
-      } catch {}
+      } catch (err: any) {
+        if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({
+            success: false,
+            error: 'Database authoritative Supabase tidak dapat diakses saat login.',
+            code: 'DATABASE_UNAVAILABLE'
+          });
+        }
+      }
+    }
+
+    if (!user && isLocalJsonModeAllowed()) {
+      user = db.users.find(
+        u => !u.isDeleted && (
+          u.username.toLowerCase() === cleanUser ||
+          u.email.toLowerCase() === cleanUser
+        )
+      ) || null;
+
+      if (!user) {
+        user = db.users.find(
+          u => !u.isDeleted && (
+            (u.altEmail && u.altEmail.toLowerCase().includes(cleanUser))
+          )
+        ) || null;
+      }
     }
 
     if (!user) {
-      logServerAudit('Login Failed (User Not Found)', 'auth', cleanUser, `Percobaan login untuk identitas tidak dikenal: ${cleanUser}`, null);
+      await logServerAuditAsync('Login Failed (User Not Found)', 'auth', cleanUser, `Percobaan login untuk identitas tidak dikenal: ${cleanUser}`, null, { level: 'critical' });
       return res.status(404).json({
         success: false,
-        error: `Nama pengguna atau email "${username}" tidak ditemukan dalam direktori staf MoraJaws.`,
+        error: `Nama pengguna atau email "${rawUser}" tidak ditemukan dalam direktori staf MoraJaws.`,
         code: 'auth/user-not-found'
       });
     }
 
     if (!user.active) {
-      logServerAudit('Login Blocked Inactive', 'auth', user.id, `Akun nonaktif mencoba login: ${user.username}`, user);
+      await logServerAuditAsync('Login Blocked Inactive', 'auth', user.id, `Akun nonaktif mencoba login: ${user.username}`, user, { level: 'critical' });
       return res.status(403).json({
         success: false,
         error: 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.',
@@ -2055,7 +2115,7 @@ async function startServer() {
         lockedUntil
       });
 
-      logServerAudit('Login Failed (Wrong Password)', 'auth', cleanUser, `Percobaan login gagal untuk: ${cleanUser} (${currentAttempts}x gagal)`, null);
+      await logServerAuditAsync('Login Failed (Wrong Password)', 'auth', cleanUser, `Percobaan login gagal untuk: ${cleanUser} (${currentAttempts}x gagal)`, null, { level: 'critical' });
       return res.status(401).json({
         success: false,
         error: 'Autentikasi gagal. Kredensial tidak cocok. Pastikan kata sandi yang Anda masukkan benar.',
@@ -2079,12 +2139,12 @@ async function startServer() {
 
     if (db.sessionConfig.revokePreviousOnLogin) {
       SERVER_SESSIONS.forEach(s => {
-        if (s.userId === user.id && s.status === 'active') {
+        if (s.userId === user!.id && s.status === 'active') {
           s.status = 'revoked';
         }
       });
     } else {
-      const activeUserSessions = SERVER_SESSIONS.filter(s => s.userId === user.id && s.status === 'active');
+      const activeUserSessions = SERVER_SESSIONS.filter(s => s.userId === user!.id && s.status === 'active');
       if (activeUserSessions.length >= (db.sessionConfig.maxActiveSessionsPerUser || 3)) {
         const oldest = activeUserSessions.sort((a, b) => new Date(a.loginAt).getTime() - new Date(b.loginAt).getTime())[0];
         if (oldest) {
@@ -2095,7 +2155,6 @@ async function startServer() {
 
     const sessionId = 'sess_' + Date.now() + '_' + crypto.randomBytes(6).toString('hex');
     const token = crypto.randomBytes(32).toString('hex');
-    const tokenFingerprint = crypto.createHash('sha256').update(token).digest('hex');
     const userAgent = req.headers['user-agent'] || 'Web Browser';
     const deviceType = userAgent.toLowerCase().includes('mobi') ? 'mobile' : 'desktop';
 
@@ -2122,10 +2181,11 @@ async function startServer() {
     user.sessionVersion = user.sessionVersion || 1;
     user.lastLoginAt = nowIso;
     user.loginCount = (user.loginCount || 0) + 1;
-    saveDatabaseToDisk();
+    if (isLocalJsonModeAllowed()) {
+      saveDatabaseToDisk();
+    }
 
-    // Session strictly managed via local persistent storage (SERVER_SESSIONS)
-    logServerAudit('Login Success', 'auth', user.id, `User ${user.name} (${user.role}) berhasil masuk ke sistem`, user);
+    await logServerAuditAsync('Login Success', 'auth', user.id, `User ${user.name} (${user.role}) berhasil masuk ke sistem`, user, { level: 'critical' });
 
     const { passwordHash: _, ...safeUser } = user;
 
@@ -2138,18 +2198,27 @@ async function startServer() {
     });
   });
 
-  app.post('/api/auth/logout', requireAuth, (req: AuthenticatedRequest, res) => {
+  app.post('/api/auth/logout', requireAuth, async (req: AuthenticatedRequest, res) => {
     if (req.session) {
       req.session.status = 'revoked';
     }
     if (req.user) {
-      logServerAudit('Logout Success', 'auth', req.user.id, `User ${req.user.name} (${req.user.role}) logout dari sistem`, req.user);
+      req.user.sessionVersion = (req.user.sessionVersion || 1) + 1;
+      if (isSupabaseMode()) {
+        try {
+          await updateUserInSupabase(req.user.id, { sessionVersion: req.user.sessionVersion });
+        } catch {}
+      }
+      if (isLocalJsonModeAllowed()) {
+        saveDatabaseToDisk();
+      }
+      await logServerAuditAsync('Logout Success', 'auth', req.user.id, `User ${req.user.name} (${req.user.role}) logout dari sistem`, req.user, { level: 'critical' });
     }
     res.json({ success: true, message: 'Sesi berhasil diakhiri' });
   });
 
   // --- Change Password for Authenticated Users (Enforces transition from default seed password) ---
-  app.post('/api/auth/change-password', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/auth/change-password', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     const { currentPassword, newPassword } = req.body;
 
@@ -2187,16 +2256,46 @@ async function startServer() {
       });
     }
 
-    user.passwordHash = hashPassword(newPassword);
+    const newHash = hashPassword(newPassword);
+    const newVersion = (user.sessionVersion || 1) + 1;
+    user.passwordHash = newHash;
     user.mustChangePassword = false;
-    saveDatabaseToDisk();
+    user.sessionVersion = newVersion;
 
-    logServerAudit('Password Changed', 'auth', user.id, `User ${user.name} (@${user.username}) berhasil memperbarui kata sandi`, user);
+    // Invalidate all other sessions for this user
+    SERVER_SESSIONS.forEach(s => {
+      if (s.userId === user.id && (!req.session || s.sessionId !== req.session.sessionId)) {
+        s.status = 'revoked';
+      }
+    });
+
+    if (req.session) {
+      req.session.sessionVersion = newVersion;
+    }
+
+    if (isSupabaseMode()) {
+      try {
+        await updateUserInSupabase(user.id, {
+          passwordHash: newHash,
+          mustChangePassword: false,
+          sessionVersion: newVersion
+        });
+      } catch (sbErr) {
+        console.error('[Change Password] Supabase update failed:', sbErr);
+      }
+    }
+
+    if (isLocalJsonModeAllowed()) {
+      saveDatabaseToDisk();
+    }
+
+    const auditRes = await logServerAuditAsync('Password Changed', 'auth', user.id, `User ${user.name} (@${user.username}) berhasil memperbarui kata sandi`, user, { level: 'critical' });
 
     const { passwordHash: _, ...safeUser } = user;
     return res.json({
       success: true,
       message: 'Kata sandi Anda berhasil diperbarui. Silakan gunakan kata sandi baru untuk login berikutnya.',
+      auditStatus: auditRes.success ? 'PERSISTED' : 'FAILED',
       user: safeUser
     });
   });
@@ -2384,7 +2483,7 @@ async function startServer() {
       const upperWo = rawWo.toUpperCase();
 
       // Normalize appointment date
-      const appDate = normalizeAppointmentDate(item.appointmentDate || item.date);
+      const appDate = normalizeAppointmentDate(item.appointmentDate);
 
       // Customer ID validation (7 digits)
       const rawCustId = (item.idCustomer || item.customerId || '').trim();

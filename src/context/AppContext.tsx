@@ -2558,7 +2558,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       rootcauseLabel: finalRootcauseName,
       remarksReport: finalRemarks,
       installerName: ticket.installerName,
-      appointmentDate: ticket.appointmentDate || ticket.date,
+      appointmentDate: ticket.appointmentDate || '',
       slotTime: ticket.slotTime,
       approvalStatus: 'BUTUH APPROVAL'
     };

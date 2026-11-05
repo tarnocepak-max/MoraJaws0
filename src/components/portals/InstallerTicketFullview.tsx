@@ -365,7 +365,7 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
           activeTicket.technicalReport.correctiveAction ||
           'Pengerjaan telah dilaksanakan sesuai prosedur teknis.',
         installerName: activeTicket.installerName,
-        appointmentDate: activeTicket.appointmentDate || activeTicket.date,
+        appointmentDate: activeTicket.appointmentDate || '',
         slotTime: activeTicket.slotTime
       });
     }
@@ -557,7 +557,7 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
               <StatusWhatsAppBadge status={activeTicket.statusWhatsApp} />
             </div>
             <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-              Jadwal: <strong className="text-[#3B1D78] dark:text-white font-mono">{activeTicket.appointmentDate || activeTicket.date}</strong> · Slot: <strong className="text-[#5B35B1] dark:text-[#A78BFA] font-mono">{activeTicket.slotTime}</strong>
+              Jadwal: <strong className="text-[#3B1D78] dark:text-white font-mono">{activeTicket.appointmentDate || 'Tanggal Belum Ada'}</strong> · Slot: <strong className="text-[#5B35B1] dark:text-[#A78BFA] font-mono">{activeTicket.slotTime}</strong>
             </div>
           </div>
         </div>
@@ -708,7 +708,7 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 text-[11px]">Appointment Date:</span>
                   <span className="font-mono font-bold text-slate-900 dark:text-white">
-                    {activeTicket.appointmentDate || activeTicket.date || '-'}
+                    {activeTicket.appointmentDate || '-'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -1333,7 +1333,7 @@ export const InstallerTicketFullview: React.FC<InstallerTicketFullviewProps> = (
                       <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2 flex-wrap">
                         <span>Installer: <strong className="text-slate-700 dark:text-slate-300">{item.installerName || activeTicket.installerName || '-'}</strong></span>
                         <span>·</span>
-                        <span>Jadwal: <strong className="text-slate-700 dark:text-slate-300 font-mono">{item.appointmentDate || activeTicket.appointmentDate || activeTicket.date} ({item.slotTime || activeTicket.slotTime})</strong></span>
+                        <span>Jadwal: <strong className="text-slate-700 dark:text-slate-300 font-mono">{item.appointmentDate || activeTicket.appointmentDate || '-'} ({item.slotTime || activeTicket.slotTime})</strong></span>
                       </div>
                     )}
 

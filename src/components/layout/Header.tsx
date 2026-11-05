@@ -91,7 +91,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onNavigate }) => {
   const todayTickets = React.useMemo(() => {
     return tickets.filter(t => {
       if (t.isArchived || t.isDeleted) return false;
-      const raw = t.appointmentDate || t.date;
+      const raw = t.appointmentDate;
       if (!raw) return false;
       const clean = String(raw).slice(0, 10);
       return clean === todayWIB || (raw.includes('T') && raw.split('T')[0] === todayWIB);

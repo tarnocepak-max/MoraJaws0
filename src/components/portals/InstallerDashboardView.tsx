@@ -119,12 +119,12 @@ export const InstallerDashboardView: React.FC<InstallerDashboardViewProps> = ({
     };
   }, [myTickets]);
 
-  // Daftar tugas terbaru (sorted by appointment date or created date)
+  // Daftar tugas terbaru (sorted by appointment date)
   const recentTickets = useMemo(() => {
     return [...myTickets]
       .sort((a, b) => {
-        const dateA = a.appointmentDate || a.createdAt || '';
-        const dateB = b.appointmentDate || b.createdAt || '';
+        const dateA = a.appointmentDate || '';
+        const dateB = b.appointmentDate || '';
         return dateB.localeCompare(dateA);
       })
       .slice(0, 6);

@@ -62,8 +62,8 @@ export function renderWhatsAppMessage(templateBody: string, ticket: Partial<Tick
     installer_name: ticket.installerName || '',
     installer_phone: (ticket as any).installerContact || (ticket as any).installerPhone || '',
     leader_name: ticket.leaderName || '',
-    date: ticket.date || '',
-    appointment_date: ticket.appointmentDate || ticket.date || '',
+    date: ticket.appointmentDate || '',
+    appointment_date: ticket.appointmentDate || '',
     fdt_code: ticket.fdtCode || '',
     fat_code: ticket.fatCode || ''
   };

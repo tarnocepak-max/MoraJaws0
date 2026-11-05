@@ -192,7 +192,7 @@ export const TicketMobileCard: React.FC<TicketMobileCardProps> = ({
           <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
             <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
             <span className="text-[11px] text-slate-500">Appointment Date:</span>
-            <span className="font-mono font-bold text-slate-900 dark:text-white">{ticket.appointmentDate || ticket.date}</span>
+            <span className="font-mono font-bold text-slate-900 dark:text-white">{ticket.appointmentDate || 'Tanggal Belum Ada'}</span>
           </div>
           {ticket.slotTime && (
             <span className="font-mono text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">

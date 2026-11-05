@@ -178,7 +178,7 @@ export const ManagementDataDeleteModal: React.FC<ManagementDataDeleteModalProps>
                     <div>
                       <span className="text-slate-400 block text-[10.5px]">Appointment Date:</span>
                       <span className="font-mono text-slate-800 dark:text-slate-200 font-semibold">
-                        {ticket.appointmentDate || ticket.date || '-'} ({ticket.slotTime || '-'})
+                        {ticket.appointmentDate || '-'} ({ticket.slotTime || '-'})
                       </span>
                     </div>
                   </div>

@@ -731,7 +731,7 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({
                       <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200">
                         <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                         <span className="font-semibold">
-                          {ticket.appointmentDate || ticket.date || 'Tanggal Belum Ada'}
+                          {ticket.appointmentDate || 'Tanggal Belum Ada'}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 text-indigo-700 dark:text-indigo-400">
@@ -1055,7 +1055,7 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({
                       <div className="grid grid-cols-2 gap-2 text-[11px]">
                         <div>
                           <span className="text-slate-400 block">Tanggal Janji:</span>
-                          <span className="font-semibold">{detailTicket.appointmentDate || detailTicket.date}</span>
+                          <span className="font-semibold">{detailTicket.appointmentDate || 'Tanggal Belum Ada'}</span>
                         </div>
                         <div>
                           <span className="text-slate-400 block">Slot Waktu:</span>

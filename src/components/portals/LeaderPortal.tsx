@@ -473,7 +473,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
     return contractorTickets.filter(t => {
       if (t.installerName?.toLowerCase().trim() !== installerName.toLowerCase().trim()) return false;
       if (targetDate) {
-        const rawDate = t.appointmentDate || t.date;
+        const rawDate = t.appointmentDate;
         const parsed = parseAppointmentDate(rawDate);
         const tDate = parsed.date || (rawDate ? String(rawDate).slice(0, 10) : '');
         return tDate === targetDate;
@@ -681,7 +681,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
         case 'streetName':
           return t.streetName || t.clusterName || '';
         case 'appointmentDate':
-          return getTicketAppointmentDate(t) || t.appointmentDate || t.date || '';
+          return getTicketAppointmentDate(t) || t.appointmentDate || '';
         case 'slotTime':
           return t.slotTime || '';
         case 'contractor':
@@ -778,8 +778,8 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
       leaderName: currentUser.name,
       contractorName: leaderContractor,
       contactorName: leaderContractor,
-      appointmentDate: ticket.appointmentDate || ticket.date,
-      appointment_date: ticket.appointmentDate || ticket.date,
+      appointmentDate: ticket.appointmentDate || '',
+      appointment_date: ticket.appointmentDate || '',
       street_alternatif: ticket.streetAlternatif || 'Tidak ada patokan khusus'
     };
 
@@ -788,7 +788,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
       return res.renderedText;
     }
 
-    return `Halo Rekan Teknisi ${installer.name},\n\nAda penugasan Work Order baru untuk Anda dari Korlap (${currentUser.name} - ${leaderContractor}):\n\n📌 Detail Work Order:\n- No. WO: ${ticket.woNumber}\n- Kategori: ${ticket.ticketCategory}\n- Tanggal Kunjungan: ${ticket.appointmentDate || ticket.date}\n- Slot Waktu: ${ticket.slotTime}\n\n📍 Lokasi Pelanggan:\n- Nama: ${ticket.customerName}\n- No. Kontak: ${ticket.customerPhone}\n- Alamat: ${ticket.streetName || '-'}\n- Patokan: ${ticket.streetAlternatif || '-'}\n- Cluster: ${ticket.clusterName || '-'}\n- Area: ${ticket.area}\n\n🔧 Data Jaringan:\n- OLT/FDT: ${ticket.fdtCode || '-'}\n- FAT Code: ${ticket.fatCode || '-'}\n\nHarap segera konfirmasi penerimaan tugas melalui Portal Teknisi Lapangan.\nTerima kasih, selamat bertugas!`;
+    return `Halo Rekan Teknisi ${installer.name},\n\nAda penugasan Work Order baru untuk Anda dari Korlap (${currentUser.name} - ${leaderContractor}):\n\n📌 Detail Work Order:\n- No. WO: ${ticket.woNumber}\n- Kategori: ${ticket.ticketCategory}\n- Tanggal Kunjungan: ${ticket.appointmentDate || 'Belum Ditentukan'}\n- Slot Waktu: ${ticket.slotTime}\n\n📍 Lokasi Pelanggan:\n- Nama: ${ticket.customerName}\n- No. Kontak: ${ticket.customerPhone}\n- Alamat: ${ticket.streetName || '-'}\n- Patokan: ${ticket.streetAlternatif || '-'}\n- Cluster: ${ticket.clusterName || '-'}\n- Area: ${ticket.area}\n\n🔧 Data Jaringan:\n- OLT/FDT: ${ticket.fdtCode || '-'}\n- FAT Code: ${ticket.fatCode || '-'}\n\nHarap segera konfirmasi penerimaan tugas melalui Portal Teknisi Lapangan.\nTerima kasih, selamat bertugas!`;
   };
 
   // Single Ticket Assignment
@@ -799,7 +799,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
       u => u.name.toLowerCase().trim() === installerName.toLowerCase().trim()
     );
 
-    const targetDate = ticket.appointmentDate || ticket.date || scheduleDate;
+    const targetDate = ticket.appointmentDate || scheduleDate;
     const currentCount = getInstallerWOCountForDate(installerName, targetDate);
     const maxLimit = getMaxQuotaForInstaller(installerName);
 
@@ -880,7 +880,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
     const headers = ['WO Number', 'Tanggal', 'Customer ID', 'Customer Name', 'Phone', 'Slot', 'Cluster', 'Street', 'Teknisi', 'Status'];
     const rows = sortedTickets.map(t => [
       t.woNumber,
-      t.appointmentDate || t.date,
+      t.appointmentDate || '-',
       t.idCustomer,
       t.customerName,
       t.customerPhone,
@@ -900,8 +900,8 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
     const worksheet = XLSX.utils.json_to_sheet(
       sortedTickets.map(t => ({
         'WO Number': t.woNumber,
-        'Tanggal WO': t.date,
-        'Appointment Date': t.appointmentDate || t.date,
+        'Tanggal WO': t.appointmentDate || '',
+        'Appointment Date': t.appointmentDate || '',
         'Customer ID': t.idCustomer,
         'Customer Name': t.customerName,
         'Customer Phone': t.customerPhone,
@@ -931,8 +931,8 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
     const worksheet = XLSX.utils.json_to_sheet(
       sortedTickets.map(t => ({
         'WO Number': t.woNumber,
-        'Tanggal WO': t.date,
-        'Appointment Date': t.appointmentDate || t.date,
+        'Tanggal WO': t.appointmentDate || '',
+        'Appointment Date': t.appointmentDate || '',
         'Customer ID': t.idCustomer,
         'Customer Name': t.customerName,
         'Customer Phone': t.customerPhone,
@@ -1368,7 +1368,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
       case 'appointmentDate':
         return (
           <td key={col.id} className="py-2.5 px-3 font-mono whitespace-nowrap text-slate-700 dark:text-slate-300">
-            {t.appointmentDate || t.date || '-'}
+            {t.appointmentDate || '-'}
           </td>
         );
       case 'slotTime':
@@ -1401,7 +1401,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
             >
               <option value="">{t.installerName ? 'Ganti Teknisi...' : 'Pilih Teknisi...'}</option>
               {myInstallers.map(inst => {
-                const targetDate = t.appointmentDate || t.date || scheduleDate;
+                const targetDate = t.appointmentDate || scheduleDate;
                 const currentCount = getInstallerWOCountForDate(inst.name, targetDate);
                 const maxLimit = getMaxQuotaForInstaller(inst.name);
                 return (
@@ -2621,7 +2621,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
                             <MapPin className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0 group-hover:scale-110 transition-transform" />
                             <span className="truncate">{t.streetName || t.clusterName || t.area}</span>
                           </button>
-                          <div className="text-[11px] font-medium text-purple-700 dark:text-purple-300">{t.slotTime} · {t.appointmentDate || t.date}</div>
+                          <div className="text-[11px] font-medium text-purple-700 dark:text-purple-300">{t.slotTime} · {t.appointmentDate || 'Tanggal Belum Ada'}</div>
                         </div>
 
                         {/* Progress Bar mini */}
@@ -3143,7 +3143,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
                     <div>
                       <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">3. Appointment Date:</span>
                       <span className="font-mono font-medium text-slate-800 dark:text-slate-200">
-                        {firstTicket?.appointmentDate || firstTicket?.date || scheduleDate}
+                        {firstTicket?.appointmentDate || scheduleDate}
                       </span>
                     </div>
 

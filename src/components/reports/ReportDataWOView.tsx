@@ -101,7 +101,7 @@ export const ReportDataWOView: React.FC = () => {
 
   // Overdue calculation (past appointment date and not completed/closed/resolved)
   const isOverdue = (t: Ticket): boolean => {
-    const raw = t.appointmentDate || t.date || '';
+    const raw = t.appointmentDate || '';
     const parsed = parseAppointmentDate(raw);
     if (!parsed.date) return false;
     const isFinished = t.statusWOInstaller === 'Completed' || t.statusWOAgent === 'Closed' || t.statusWOAgent === 'Resolved';
@@ -145,7 +145,7 @@ export const ReportDataWOView: React.FC = () => {
       if (areaFilter !== 'ALL' && t.area !== areaFilter) return false;
 
       // 3. Date Range
-      const d = t.appointmentDate || t.date || '';
+      const d = t.appointmentDate || '';
       if (dateStart && d < dateStart) return false;
       if (dateEnd && d > dateEnd) return false;
 
@@ -179,7 +179,7 @@ export const ReportDataWOView: React.FC = () => {
       }
       if (colFilters.appointmentDate.trim()) {
         const q = colFilters.appointmentDate.toLowerCase().trim();
-        const d = (t.appointmentDate || t.date || '').toLowerCase();
+        const d = (t.appointmentDate || '').toLowerCase();
         if (!d.includes(q)) return false;
       }
       if (colFilters.slotTime.trim()) {
@@ -243,7 +243,7 @@ export const ReportDataWOView: React.FC = () => {
         case 'area':
           return item.area || '';
         case 'appointmentDate':
-          return item.appointmentDate || item.date || '';
+          return item.appointmentDate || '';
         case 'slotTime':
           return item.slotTime || '';
         case 'contractor':
@@ -313,7 +313,7 @@ export const ReportDataWOView: React.FC = () => {
         t.idCustomer || t.customerId || '',
         t.customerName || '',
         t.customerPhone || '',
-        t.appointmentDate || t.date || '',
+        t.appointmentDate || '',
         t.slotTime || '',
         t.area || '',
         t.contactorName || t.contractorName || '',
@@ -344,7 +344,7 @@ export const ReportDataWOView: React.FC = () => {
       'Customer ID': t.idCustomer || t.customerId,
       'Customer Name': t.customerName,
       'Phone': t.customerPhone,
-      'Appointment Date': t.appointmentDate || t.date,
+      'Appointment Date': t.appointmentDate || '',
       'Slot Time': t.slotTime,
       'Area': t.area,
       'Cluster': t.clusterName,
@@ -378,7 +378,7 @@ export const ReportDataWOView: React.FC = () => {
       'Customer ID': t.idCustomer || t.customerId,
       'Customer Name': t.customerName,
       'Phone': t.customerPhone,
-      'Appointment Date': t.appointmentDate || t.date,
+      'Appointment Date': t.appointmentDate || '',
       'Slot Time': t.slotTime,
       'Area': t.area,
       'Cluster': t.clusterName,
@@ -408,7 +408,7 @@ export const ReportDataWOView: React.FC = () => {
       'Customer ID': t.idCustomer || t.customerId,
       'Customer Name': t.customerName,
       'Phone': t.customerPhone,
-      'Appointment Date': t.appointmentDate || t.date,
+      'Appointment Date': t.appointmentDate || '',
       'Slot Time': t.slotTime,
       'Area': t.area,
       'Contractor': t.contactorName || t.contractorName,
@@ -905,7 +905,7 @@ export const ReportDataWOView: React.FC = () => {
                       <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">{t.customerName}</td>
                       <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{t.area || '-'}</td>
                       <td className="py-2.5 px-3 whitespace-nowrap text-purple-700 dark:text-purple-300 font-medium">
-                        {t.appointmentDate || t.date || '-'}
+                        {t.appointmentDate || '-'}
                       </td>
                       <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{t.slotTime || '-'}</td>
                       <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">{t.contactorName || t.contractorName || '-'}</td>

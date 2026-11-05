@@ -109,7 +109,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
   // Day view tickets (matching selectedDate)
   const dayTickets = useMemo(() => {
     return filteredTickets.filter(t => {
-      const raw = t.appointmentDate || t.date || '';
+      const raw = t.appointmentDate || '';
       const parsed = parseAppointmentDate(raw);
       const d = parsed.date || (raw.length >= 10 ? raw.slice(0, 10) : raw.trim());
       return d === selectedDate;
@@ -126,7 +126,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
 
   // Overdue tickets check
   const isOverdue = (t: Ticket): boolean => {
-    const raw = t.appointmentDate || t.date || '';
+    const raw = t.appointmentDate || '';
     const parsed = parseAppointmentDate(raw);
     const d = parsed.date;
     if (!d) return false;
