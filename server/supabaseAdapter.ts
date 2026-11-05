@@ -21,6 +21,7 @@ export interface SupabaseOpError {
   isSchemaError?: boolean;
   isDuplicate?: boolean;
   isNotFound?: boolean;
+  isUnavailable?: boolean;
 }
 
 export interface SupabaseOpResult<T = any> {
@@ -83,6 +84,8 @@ export function classifySupabaseError(error: any): SupabaseOpError {
     code === 'ECONNREFUSED' ||
     code === 'ETIMEDOUT';
 
+  const isUnavailable = isConnectionError || isSchemaError || code === 'NOT_CONFIGURED';
+
   return {
     code: error?.code || 'DB_ERROR',
     message: error?.message || 'Database operation failed',
@@ -90,7 +93,8 @@ export function classifySupabaseError(error: any): SupabaseOpError {
     isConnectionError,
     isSchemaError,
     isDuplicate,
-    isNotFound
+    isNotFound,
+    isUnavailable
   };
 }
 
@@ -3077,4 +3081,569 @@ export async function getUserSessionsFromSupabase(userId?: string): Promise<Supa
   }
 }
 
+// ------------------------------------------------------------------------------
+// DATA ACCESS LAYER: ASSIGNMENT HISTORY
+// ------------------------------------------------------------------------------
 
+/**
+ * Inserts an assignment history record into PostgreSQL assignment_history table.
+ */
+export async function insertAssignmentHistoryToSupabase(entry: any): Promise<SupabaseOpResult<any>> {
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
+  }
+  if (!entry) {
+    return { success: false, error: { code: 'INVALID_DATA', message: 'Data history assignment kosong.' } };
+  }
+
+  try {
+    const rawWo = entry.woNumber || entry.wo_number || '';
+    const normWo = normalizeWoNumber(rawWo);
+    const performedBy = entry.performedBy || entry.performed_by || entry.leaderName || 'System';
+    const performedByRole = entry.performedByRole || entry.performed_by_role || 'leader';
+
+    const row = {
+      id: entry.id || `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      work_order_id: entry.workOrderId || entry.work_order_id || entry.ticketId || null,
+      wo_number: normWo || rawWo,
+      contractor_id: entry.contractorId || entry.contractor_id || null,
+      contractor_name: entry.contractorName || entry.contractor_name || null,
+      leader_id: entry.leaderId || entry.leader_id || null,
+      leader_name: entry.leaderName || entry.leader_name || null,
+      previous_installer_name: entry.previousInstallerName || entry.previous_installer_name || null,
+      previous_installer: entry.previousInstaller || entry.previous_installer || entry.previousInstallerName || null,
+      installer_name: entry.installerName || entry.installer_name || entry.newInstallerName || null,
+      assigned_installer: entry.assignedInstaller || entry.assigned_installer || entry.installerName || entry.newInstallerName || null,
+      installer_contact: entry.installerContact || entry.installer_contact || null,
+      slot_time: entry.slotTime || entry.slot_time || null,
+      appointment_date: toDateOnlyString(entry.appointmentDate || entry.appointment_date) || null,
+      source_action: entry.sourceAction || entry.source_action || 'initial_assignment',
+      previous_status: entry.previousStatus || entry.previous_status || null,
+      new_status: entry.newStatus || entry.new_status || null,
+      reason: entry.reason || null,
+      notes: entry.notes || null,
+      performed_by_id: entry.performedById || entry.performed_by_id || null,
+      performed_by: performedBy,
+      performed_by_role: performedByRole,
+      payload: entry.payload && typeof entry.payload === 'object' ? entry.payload : {},
+      created_at: entry.createdAt || entry.created_at || entry.timestamp || new Date().toISOString()
+    };
+
+    const { data, error } = await client.from('assignment_history').insert([row]).select('*').maybeSingle();
+    if (error) {
+      const classified = classifySupabaseError(error);
+      console.error('[Supabase DAL] insertAssignmentHistoryToSupabase error:', classified.message);
+      return { success: false, error: classified };
+    }
+    return { success: true, data };
+  } catch (err: any) {
+    return { success: false, error: classifySupabaseError(err) };
+  }
+}
+
+/**
+ * Retrieves assignment history by WO number or Work Order ID from PostgreSQL.
+ */
+export async function getAssignmentHistoryFromSupabase(woNumberOrId: string): Promise<SupabaseOpResult<any[]>> {
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
+  }
+  if (!woNumberOrId || !woNumberOrId.trim()) {
+    return { success: true, data: [] };
+  }
+
+  try {
+    const rawClean = woNumberOrId.trim();
+    const normClean = normalizeWoNumber(rawClean);
+
+    let query = client.from('assignment_history').select('*');
+    if (normClean && normClean !== rawClean) {
+      query = query.or(`wo_number.ilike.${escapePostgrestLikeValue(normClean)},wo_number.ilike.${escapePostgrestLikeValue(rawClean)},work_order_id.eq.${escapePostgrestLikeValue(rawClean)}`);
+    } else {
+      query = query.or(`wo_number.ilike.${escapePostgrestLikeValue(rawClean)},work_order_id.eq.${escapePostgrestLikeValue(rawClean)}`);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error) {
+      return { success: false, error: classifySupabaseError(error) };
+    }
+
+    const list = (data || []).map(row => ({
+      id: row.id,
+      ticketId: row.work_order_id,
+      workOrderId: row.work_order_id,
+      woNumber: row.wo_number,
+      contractorId: row.contractor_id,
+      contractorName: row.contractor_name,
+      leaderId: row.leader_id,
+      leaderName: row.leader_name,
+      previousInstallerName: row.previous_installer_name || row.previous_installer,
+      newInstallerName: row.installer_name || row.assigned_installer,
+      installerName: row.installer_name || row.assigned_installer,
+      installerContact: row.installer_contact,
+      slotTime: row.slot_time,
+      appointmentDate: row.appointment_date,
+      sourceAction: row.source_action,
+      previousStatus: row.previous_status,
+      newStatus: row.new_status,
+      reason: row.reason,
+      notes: row.notes,
+      performedById: row.performed_by_id,
+      performedBy: row.performed_by,
+      performedByRole: row.performed_by_role,
+      timestamp: row.created_at,
+      createdAt: row.created_at,
+      payload: row.payload
+    }));
+
+    return { success: true, data: list };
+  } catch (err: any) {
+    return { success: false, error: classifySupabaseError(err) };
+  }
+}
+
+/**
+ * Updates an existing coverage area in Supabase.
+ */
+export async function updateCoverageAreaInSupabase(id: string, updates: any): Promise<SupabaseOpResult<any>> {
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
+  }
+  try {
+    const updateRow: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (updates.name !== undefined) updateRow.name = String(updates.name).trim();
+    if (updates.clusters !== undefined && Array.isArray(updates.clusters)) updateRow.clusters = updates.clusters;
+    if (updates.active !== undefined) updateRow.active = Boolean(updates.active);
+
+    const { data, error } = await client.from('coverage_areas').update(updateRow).eq('id', id).select().maybeSingle();
+    if (error) {
+      return { success: false, error: classifySupabaseError(error) };
+    }
+    return { success: true, data };
+  } catch (err: any) {
+    return { success: false, error: classifySupabaseError(err) };
+  }
+}
+
+/**
+ * Deletes / archives a coverage area in Supabase.
+ */
+export async function deleteCoverageAreaInSupabase(id: string): Promise<SupabaseOpResult<boolean>> {
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
+  }
+  try {
+    const { error } = await client.from('coverage_areas').delete().eq('id', id);
+    if (error) {
+      return { success: false, error: classifySupabaseError(error) };
+    }
+    return { success: true, data: true };
+  } catch (err: any) {
+    return { success: false, error: classifySupabaseError(err) };
+  }
+}
+
+/**
+ * Deletes / archives a contractor in Supabase.
+ */
+export async function deleteContractorInSupabase(id: string): Promise<SupabaseOpResult<boolean>> {
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
+  }
+  try {
+    const { error } = await client.from('contractors').update({
+      active: false,
+      is_archived: true,
+      archived_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }).eq('id', id);
+    if (error) {
+      return { success: false, error: classifySupabaseError(error) };
+    }
+    return { success: true, data: true };
+  } catch (err: any) {
+    return { success: false, error: classifySupabaseError(err) };
+  }
+}
+
+export interface AssignTicketOptions {
+  workOrderIdOrWoNumber?: string;
+  ticketIdOrWoNumber?: string;
+  installerName?: string;
+  installerId?: string;
+  slotTime?: string | null;
+  remarks?: string | null;
+  reason?: string | null;
+  performedBy: string;
+  performedByRole?: string;
+  performedById?: string;
+  userContractor?: string | null;
+  userRole?: string;
+}
+
+export interface ReassignTicketOptions {
+  workOrderIdOrWoNumber?: string;
+  ticketIdOrWoNumber?: string;
+  previousInstallerName?: string | null;
+  newInstallerName?: string;
+  installerName?: string;
+  reason: string;
+  contractorName?: string | null;
+  performedBy: string;
+  performedByRole?: string;
+  performedById?: string;
+  userContractor?: string | null;
+  userRole?: string;
+}
+
+export interface ConsistentAssignmentResult {
+  workOrder: any;
+  history: any;
+}
+
+/**
+ * Hardened atomic-like assignment with compensating rollback.
+ * Validates RBAC, contractor scope, and soft-deleted protected WOs.
+ * Updates the Work Order in Supabase and inserts assignment history.
+ * If history insert fails after WO update, automatically triggers a compensating
+ * rollback to revert the WO to its previous state and returns failure.
+ */
+export async function assignTicketInSupabase(
+  options: AssignTicketOptions
+): Promise<SupabaseOpResult<ConsistentAssignmentResult>> {
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.', isUnavailable: true } };
+  }
+
+  const {
+    workOrderIdOrWoNumber,
+    ticketIdOrWoNumber,
+    installerName,
+    installerId,
+    slotTime,
+    remarks,
+    reason,
+    performedBy,
+    performedByRole,
+    performedById,
+    userContractor,
+    userRole
+  } = options;
+
+  const effInstallerName = (installerName || installerId || '').trim();
+  if (!effInstallerName) {
+    return { success: false, error: { code: 'INVALID_INPUT', message: 'Nama teknisi tujuan wajib diisi.' } };
+  }
+
+  const cleanKey = (workOrderIdOrWoNumber || ticketIdOrWoNumber || '').trim();
+  if (!cleanKey) {
+    return { success: false, error: { code: 'INVALID_ID', message: 'ID atau nomor WO wajib diisi.' } };
+  }
+
+  if (PROTECTED_PRODUCTION_WO_IDS.has(cleanKey)) {
+    return {
+      success: false,
+      error: {
+        code: 'PROTECTED_PRODUCTION_RECORD',
+        message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang dimutasi.'
+      }
+    };
+  }
+
+  // 1. Fetch current WO from Supabase
+  let targetWO: any = null;
+  const supaRes = await getWorkOrderByIdFromSupabase(cleanKey);
+  if (supaRes.success && supaRes.data) {
+    targetWO = supaRes.data;
+  } else {
+    const supaByWo = await getWorkOrderByWoNumberFromSupabase(cleanKey);
+    if (supaByWo.success && supaByWo.data) {
+      targetWO = supaByWo.data;
+    } else {
+      if (supaRes.error?.isUnavailable || supaByWo.error?.isUnavailable) {
+        return { success: false, error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.', isUnavailable: true } };
+      }
+      return { success: false, error: { code: 'NOT_FOUND', isNotFound: true, message: `Work Order "${cleanKey}" tidak ditemukan di database Supabase.` } };
+    }
+  }
+
+  if (PROTECTED_PRODUCTION_WO_IDS.has(targetWO.id) || PROTECTED_PRODUCTION_WO_IDS.has(targetWO.woNumber)) {
+    return {
+      success: false,
+      error: {
+        code: 'PROTECTED_RECORD',
+        message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang dimutasi.'
+      }
+    };
+  }
+
+  // 2. Validate contractor scope if Leader
+  if (userRole === 'leader' && userContractor) {
+    const leaderContr = userContractor.toLowerCase().trim();
+    const woContr = String(targetWO.contactorName || targetWO.contractorName || '').toLowerCase().trim();
+    if (woContr && !woContr.includes(leaderContr) && !leaderContr.includes(woContr)) {
+      return {
+        success: false,
+        error: {
+          code: 'SCOPE_MISMATCH',
+          message: `Akses Ditolak: Anda hanya dapat menugaskan Work Order dalam cakupan mitra kontraktor Anda (${userContractor}).`
+        }
+      };
+    }
+  }
+
+  // 3. Snapshot original state for rollback compensation
+  const originalState: Record<string, any> = {
+    installerName: targetWO.installerName || null,
+    slotTime: targetWO.slotTime || null,
+    statusWOInstaller: targetWO.statusWOInstaller || 'Unassigned',
+    remarksWOInstaller: targetWO.remarksWOInstaller || null,
+    updatedAt: targetWO.updatedAt || null,
+    updatedBy: targetWO.updatedBy || null,
+    assignedAt: targetWO.assignedAt || null,
+    assignedBy: targetWO.assignedBy || null
+  };
+
+  const now = new Date().toISOString();
+  const woUpdates: Record<string, any> = {
+    installerName: installerName.trim(),
+    slotTime: slotTime || targetWO.slotTime,
+    statusWOInstaller: 'Assigned',
+    remarksWOInstaller: remarks ? (targetWO.remarksWOInstaller ? `${targetWO.remarksWOInstaller}; ${remarks}` : remarks) : targetWO.remarksWOInstaller,
+    assignedAt: now,
+    assignedBy: performedBy,
+    updatedAt: now,
+    updatedBy: performedBy
+  };
+
+  // 4. Update Work Order in Supabase
+  const updateRes = await updateWorkOrderInSupabase(targetWO.id, woUpdates);
+  if (!updateRes.success) {
+    return {
+      success: false,
+      error: updateRes.error || { code: 'WO_UPDATE_FAILED', message: 'Gagal memperbarui data penugasan Work Order di Supabase.' }
+    };
+  }
+
+  // 5. Insert Assignment History
+  const historyEntry = {
+    workOrderId: targetWO.id,
+    woNumber: targetWO.woNumber,
+    contractorName: targetWO.contactorName || targetWO.contractorName || userContractor || 'MoraJaws Partner',
+    leaderName: performedBy,
+    leaderId: performedById || null,
+    previousInstallerName: targetWO.installerName || null,
+    installerName: installerName.trim(),
+    slotTime: slotTime || targetWO.slotTime,
+    appointmentDate: targetWO.appointmentDate,
+    sourceAction: 'initial_assignment',
+    previousStatus: targetWO.statusWOInstaller || 'Unassigned',
+    newStatus: 'Assigned',
+    reason: reason || 'Penugasan awal oleh Leader',
+    notes: remarks || null,
+    performedBy,
+    performedByRole
+  };
+
+  const histRes = await insertAssignmentHistoryToSupabase(historyEntry);
+  if (!histRes.success) {
+    // COMPENSATING ROLLBACK: Revert the Work Order update immediately
+    const rollbackRes = await updateWorkOrderInSupabase(targetWO.id, originalState);
+    console.error(`[Compensating Rollback] WO update reverted for ${targetWO.id} due to history insert failure: ${histRes.error?.message}. Rollback success: ${rollbackRes.success}`);
+    return {
+      success: false,
+      error: {
+        code: 'ASSIGNMENT_HISTORY_FAILED',
+        message: 'Gagal menyimpan riwayat penugasan ke database Supabase. Perubahan Work Order telah dibatalkan secara kompensatoris.',
+        details: { historyError: histRes.error, rollbackSucceeded: rollbackRes.success },
+        isUnavailable: histRes.error?.isUnavailable
+      }
+    };
+  }
+
+  return {
+    success: true,
+    data: {
+      workOrder: updateRes.data,
+      history: histRes.data
+    }
+  };
+}
+
+/**
+ * Hardened atomic-like reassignment with compensating rollback.
+ * Validates RBAC, contractor scope, minimum reason length, and soft-deleted protected WOs.
+ * Updates the Work Order in Supabase and inserts assignment history.
+ * If history insert fails after WO update, automatically triggers a compensating
+ * rollback to revert the WO to its previous state and returns failure.
+ */
+export async function reassignTicketInSupabase(
+  options: ReassignTicketOptions
+): Promise<SupabaseOpResult<ConsistentAssignmentResult>> {
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.', isUnavailable: true } };
+  }
+
+  const {
+    workOrderIdOrWoNumber,
+    previousInstallerName,
+    newInstallerName,
+    reason,
+    contractorName,
+    performedBy,
+    performedByRole,
+    performedById,
+    userContractor,
+    userRole
+  } = options;
+
+  const effNewInstaller = (newInstallerName || options.installerName || '').trim();
+  if (!effNewInstaller) {
+    return { success: false, error: { code: 'INVALID_INPUT', message: 'Teknisi baru tujuan wajib dipilih.' } };
+  }
+
+  if (!reason || typeof reason !== 'string' || reason.trim().length < 5) {
+    return { success: false, error: { code: 'INVALID_REASON', message: 'Alasan reassign wajib diisi minimal 5 karakter untuk keperluan audit.' } };
+  }
+
+  const cleanKey = (workOrderIdOrWoNumber || options.ticketIdOrWoNumber || '').trim();
+  if (!cleanKey) {
+    return { success: false, error: { code: 'INVALID_ID', message: 'WO Number atau ID Tiket wajib disertakan.' } };
+  }
+
+  if (PROTECTED_PRODUCTION_WO_IDS.has(cleanKey)) {
+    return {
+      success: false,
+      error: {
+        code: 'PROTECTED_PRODUCTION_RECORD',
+        message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang dimutasi.'
+      }
+    };
+  }
+
+  // 1. Fetch current WO from Supabase
+  let targetTicket: any = null;
+  const supaGet = await getWorkOrderByIdFromSupabase(cleanKey);
+  if (supaGet.success && supaGet.data) {
+    targetTicket = supaGet.data;
+  } else {
+    const supaByWo = await getWorkOrderByWoNumberFromSupabase(cleanKey);
+    if (supaByWo.success && supaByWo.data) {
+      targetTicket = supaByWo.data;
+    } else {
+      if (supaGet.error?.isUnavailable || supaByWo.error?.isUnavailable) {
+        return { success: false, error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.', isUnavailable: true } };
+      }
+      return { success: false, error: { code: 'NOT_FOUND', isNotFound: true, message: `Work Order "${cleanKey}" tidak ditemukan di database Supabase.` } };
+    }
+  }
+
+  if (PROTECTED_PRODUCTION_WO_IDS.has(targetTicket.id) || PROTECTED_PRODUCTION_WO_IDS.has(targetTicket.woNumber)) {
+    return {
+      success: false,
+      error: {
+        code: 'PROTECTED_RECORD',
+        message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang dimutasi.'
+      }
+    };
+  }
+
+  // 2. Validate contractor scope if Leader
+  if (userRole === 'leader' && userContractor) {
+    const leaderContr = userContractor.toLowerCase().trim();
+    const woContr = String(targetTicket.contactorName || targetTicket.contractorName || contractorName || '').toLowerCase().trim();
+    if (woContr && !woContr.includes(leaderContr) && !leaderContr.includes(woContr)) {
+      return {
+        success: false,
+        error: {
+          code: 'SCOPE_MISMATCH',
+          message: `Akses Ditolak: Anda hanya dapat mereassign Work Order dalam cakupan mitra kontraktor Anda (${userContractor}).`
+        }
+      };
+    }
+  }
+
+  // 3. Snapshot original state for rollback compensation
+  const originalState: Record<string, any> = {
+    installerName: targetTicket.installerName || null,
+    statusWOInstaller: targetTicket.statusWOInstaller || 'Unassigned',
+    slotTime: targetTicket.slotTime || null,
+    remarksWOInstaller: targetTicket.remarksWOInstaller || null,
+    reassignedAt: targetTicket.reassignedAt || null,
+    reassignedBy: targetTicket.reassignedBy || null,
+    reassignmentReason: targetTicket.reassignmentReason || null,
+    updatedAt: targetTicket.updatedAt || null,
+    updatedBy: targetTicket.updatedBy || null
+  };
+
+  const now = new Date().toISOString();
+  const woUpdates: Record<string, any> = {
+    installerName: newInstallerName.trim(),
+    statusWOInstaller: 'Assigned',
+    reassignedAt: now,
+    reassignedBy: performedBy,
+    reassignmentReason: reason.trim(),
+    updatedAt: now,
+    updatedBy: performedBy
+  };
+
+  // 4. Update Work Order in Supabase
+  const updateRes = await updateWorkOrderInSupabase(targetTicket.id, woUpdates);
+  if (!updateRes.success) {
+    return {
+      success: false,
+      error: updateRes.error || { code: 'WO_UPDATE_FAILED', message: 'Gagal memperbarui Work Order di Supabase saat reassign.' }
+    };
+  }
+
+  // 5. Insert Assignment History
+  const historyEntry = {
+    workOrderId: targetTicket.id,
+    woNumber: targetTicket.woNumber,
+    contractorName: userContractor || targetTicket.contactorName || targetTicket.contractorName || contractorName || 'Mitra Lapangan',
+    leaderName: performedBy,
+    leaderId: performedById || null,
+    previousInstallerName: previousInstallerName?.trim() || targetTicket.installerName || 'Teknisi Sebelumnya',
+    installerName: newInstallerName.trim(),
+    slotTime: targetTicket.slotTime,
+    appointmentDate: targetTicket.appointmentDate,
+    sourceAction: 'reassign',
+    previousStatus: targetTicket.statusWOInstaller || 'Assigned',
+    newStatus: 'Assigned',
+    reason: reason.trim(),
+    notes: reason.trim(),
+    performedBy,
+    performedByRole
+  };
+
+  const histRes = await insertAssignmentHistoryToSupabase(historyEntry);
+  if (!histRes.success) {
+    // COMPENSATING ROLLBACK: Revert the Work Order update immediately
+    const rollbackRes = await updateWorkOrderInSupabase(targetTicket.id, originalState);
+    console.error(`[Compensating Rollback] Reassign update reverted for ${targetTicket.id} due to history failure: ${histRes.error?.message}. Rollback success: ${rollbackRes.success}`);
+    return {
+      success: false,
+      error: {
+        code: 'REASSIGN_HISTORY_FAILED',
+        message: 'Gagal menyimpan riwayat penugasan ke database authoritative Supabase. Perubahan Work Order telah dibatalkan secara kompensatoris.',
+        details: { historyError: histRes.error, rollbackSucceeded: rollbackRes.success },
+        isUnavailable: histRes.error?.isUnavailable
+      }
+    };
+  }
+
+  return {
+    success: true,
+    data: {
+      workOrder: updateRes.data,
+      history: histRes.data
+    }
+  };
+}
