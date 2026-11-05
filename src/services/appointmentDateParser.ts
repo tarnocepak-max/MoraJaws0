@@ -251,13 +251,6 @@ export function parseAppointmentDate(input: unknown): DateParseResult {
           formatDetected: 'iso_yyyy_mm_dd'
         };
       }
-      return {
-        date: null,
-        rawValue: rawStr,
-        isValid: false,
-        isEmpty: false,
-        error: `Tanggal kalender tidak valid: ${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')} tidak ada dalam kalender.`
-      };
     }
   }
 
@@ -311,19 +304,28 @@ export function parseAppointmentDate(input: unknown): DateParseResult {
 
 /**
  * Safely extracts standardized YYYY-MM-DD appointment date from a Ticket object.
- * PHASE 13 MANDATE: "appointmentDate" adalah satu-satunya sumber tanggal appointment WO.
- * Dilarang menggunakan "date", "createdAt", atau timestamp sebagai fallback appointment.
- * Returns null if missing or invalid.
+ * Checks candidate fields in priority order. Returns null if missing or invalid.
+ * Work Orders without valid appointment date will return null (NEVER fallback to today).
  */
 export function getTicketAppointmentDate(ticket: any): string | null {
   if (!ticket || typeof ticket !== 'object') return null;
 
-  const candidate = ticket.appointmentDate ?? ticket.appointment_date ?? ticket.payload?.appointmentDate ?? ticket.payload?.appointment_date;
+  const candidates = [
+    ticket.appointmentDate,
+    ticket.scheduleAppointment,
+    ticket.scheduleAppointmentDate,
+    ticket.scheduleDate,
+    ticket.scheduledDate,
+    ticket.appointment_date,
+    ticket.schedule_date
+  ];
 
-  if (candidate !== undefined && candidate !== null && candidate !== '') {
-    const parsed = parseAppointmentDate(candidate);
-    if (parsed.isValid && parsed.date) {
-      return parsed.date;
+  for (const candidate of candidates) {
+    if (candidate !== undefined && candidate !== null && candidate !== '') {
+      const parsed = parseAppointmentDate(candidate);
+      if (parsed.isValid && parsed.date) {
+        return parsed.date;
+      }
     }
   }
 

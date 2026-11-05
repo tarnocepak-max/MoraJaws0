@@ -7,6 +7,12 @@ import type { ServerUser } from '../server.ts';
 // Strictly adheres to migrations/001_core_morajaws_schema.sql.
 // ==============================================================================
 
+export const PROTECTED_PRODUCTION_WO_IDS = new Set<string>([
+  'wo_1793825457141_u4bnht',
+  'wo_imp_1793825458959_4i4f1h',
+  'wo_imp_1793825458959_262dei'
+]);
+
 export interface SupabaseOpError {
   code: string;
   message: string;
@@ -243,8 +249,8 @@ export function userToPostgresRow(user: ServerUser): Record<string, any> {
 
   const payload = {
     ...existingPayload,
-    sessionVersion: user.sessionVersion || 1,
-    passwordHash: user.passwordHash || null
+    passwordHash: user.passwordHash || null,
+    sessionVersion: typeof user.sessionVersion === 'number' ? user.sessionVersion : 1
   };
 
   return {
@@ -286,7 +292,9 @@ export function userToPostgresRow(user: ServerUser): Record<string, any> {
 export function postgresRowToUser(row: any): ServerUser {
   const payload = row.payload && typeof row.payload === 'object' ? row.payload : {};
   const passwordHash = row.password_hash || payload.passwordHash || '';
-  const sessionVersion = typeof row.session_version === 'number' ? row.session_version : (Number(payload.sessionVersion) || 1);
+  const sessionVersion = typeof payload.sessionVersion === 'number'
+    ? payload.sessionVersion
+    : (typeof row.session_version === 'number' ? row.session_version : 1);
 
   return {
     id: row.id,
@@ -301,13 +309,12 @@ export function postgresRowToUser(row: any): ServerUser {
     area: row.area || undefined,
     active: row.active !== false,
     passwordHash,
-    sessionVersion,
-    payload,
     permissions: Array.isArray(row.permissions) ? row.permissions : [],
     lastLoginAt: row.last_login_at || undefined,
     loginCount: typeof row.login_count === 'number' ? row.login_count : 0,
     firebaseUid: row.firebase_uid || undefined,
     mustChangePassword: Boolean(row.must_change_password),
+    sessionVersion,
     isDeleted: Boolean(row.is_deleted),
     deletedAt: row.deleted_at || undefined,
     deletedBy: row.deleted_by || undefined,
@@ -364,13 +371,11 @@ export function ticketToPostgresRow(ticket: any): Record<string, any> {
 
   const contractorVal = ticket.contractorName ?? ticket.contactorName ?? null;
   const contactorVal = ticket.contactorName ?? ticket.contractorName ?? null;
-  const rawWoCandidate = ticket.woNumber || ticket.workOrderNumber || '';
-  const cleanWoNumber = normalizeWoNumber(rawWoCandidate);
 
   return {
     id: ticket.id,
-    wo_number: cleanWoNumber || rawWoCandidate,
-    work_order_number: cleanWoNumber || rawWoCandidate || null,
+    wo_number: ticket.woNumber || ticket.workOrderNumber,
+    work_order_number: ticket.workOrderNumber || ticket.woNumber || null,
     id_customer: ticket.idCustomer || ticket.customerId || null,
     customer_id: ticket.customerId || ticket.idCustomer || null,
     ticket_number: ticket.ticketNumber || null,
@@ -974,15 +979,26 @@ export async function updateUserInSupabase(id: string, updates: Partial<ServerUs
     if (updates.loginCount !== undefined) updateRow.login_count = updates.loginCount;
     if (updates.firebaseUid !== undefined) updateRow.firebase_uid = updates.firebaseUid || null;
 
-    if (updates.sessionVersion !== undefined || updates.passwordHash !== undefined || (updates as any).payload !== undefined) {
-      const prevPayload = existing.payload && typeof existing.payload === 'object' ? existing.payload : {};
-      updateRow.payload = {
-        ...prevPayload,
-        ...((updates as any).payload || {}),
-        ...(updates.passwordHash !== undefined ? { passwordHash: updates.passwordHash || null } : {}),
-        ...(updates.sessionVersion !== undefined ? { sessionVersion: updates.sessionVersion } : {})
-      };
-    }
+    const prevPayload = existing.payload && typeof existing.payload === 'object' ? existing.payload : {};
+    const currentSessionVersion = typeof prevPayload.sessionVersion === 'number' ? prevPayload.sessionVersion : 1;
+
+    const isSecuritySensitiveChange =
+      (updates.active !== undefined && updates.active !== existing.active) ||
+      (updates.role !== undefined && updates.role !== existing.role) ||
+      (updates.contractor !== undefined && updates.contractor !== existing.contractor) ||
+      (updates.contractorId !== undefined && updates.contractorId !== existing.contractor_id) ||
+      (updates.area !== undefined && updates.area !== existing.area) ||
+      updates.passwordHash !== undefined;
+
+    const nextSessionVersion = updates.sessionVersion !== undefined
+      ? updates.sessionVersion
+      : (isSecuritySensitiveChange ? currentSessionVersion + 1 : currentSessionVersion);
+
+    updateRow.payload = {
+      ...prevPayload,
+      ...(updates.passwordHash !== undefined ? { passwordHash: updates.passwordHash || null } : {}),
+      sessionVersion: nextSessionVersion
+    };
 
     const { data, error } = await client
       .from('users')
@@ -1025,6 +1041,15 @@ export async function deleteUserInSupabase(
   const cleanId = id.trim();
 
   try {
+    const { data: existingUser } = await client
+      .from('users')
+      .select('payload')
+      .eq('id', cleanId)
+      .maybeSingle();
+
+    const existingPayload = existingUser?.payload && typeof existingUser.payload === 'object' ? existingUser.payload : {};
+    const curVersion = typeof existingPayload.sessionVersion === 'number' ? existingPayload.sessionVersion : 1;
+
     const { data, error } = await client
       .from('users')
       .update({
@@ -1032,6 +1057,10 @@ export async function deleteUserInSupabase(
         deleted_at: new Date().toISOString(),
         deleted_by: deletedBy || 'Admin',
         deletion_reason: reason || 'Soft delete via user management',
+        payload: {
+          ...existingPayload,
+          sessionVersion: curVersion + 1
+        },
         updated_at: new Date().toISOString()
       })
       .eq('id', cleanId)
@@ -1069,8 +1098,6 @@ export interface GetWorkOrdersOptions {
   area?: string;
   contractorId?: string;
   installerName?: string;
-  statusWOAgent?: string;
-  statusWOInstaller?: string;
   appointmentDate?: string;
 }
 
@@ -1100,12 +1127,6 @@ export async function getWorkOrdersFromSupabase(options: GetWorkOrdersOptions = 
     }
     if (options.installerName) {
       query = query.eq('installer_name', options.installerName);
-    }
-    if (options.statusWOAgent) {
-      query = query.eq('status_wo_agent', options.statusWOAgent);
-    }
-    if (options.statusWOInstaller) {
-      query = query.eq('status_wo_installer', options.statusWOInstaller);
     }
     if (options.appointmentDate) {
       query = query.eq('appointment_date', options.appointmentDate);
@@ -1267,6 +1288,16 @@ export async function updateWorkOrderInSupabase(id: string, updates: Record<stri
   }
 
   const cleanId = id.trim();
+
+  if (PROTECTED_PRODUCTION_WO_IDS.has(cleanId)) {
+    return {
+      success: false,
+      error: {
+        code: 'PROTECTED_RECORD',
+        message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang diubah atau dihapus.'
+      }
+    };
+  }
 
   try {
     // 1. Fetch current existing row to ensure atomic partial update
@@ -1750,7 +1781,33 @@ export async function deleteWorkOrderFromSupabase(
 
   const cleanId = id.trim();
 
+  if (PROTECTED_PRODUCTION_WO_IDS.has(cleanId)) {
+    return {
+      success: false,
+      error: {
+        code: 'PROTECTED_RECORD',
+        message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang diubah atau dihapus.'
+      }
+    };
+  }
+
   try {
+    const { data: existingCheck } = await client
+      .from('work_orders')
+      .select('id, wo_number')
+      .eq('id', cleanId)
+      .maybeSingle();
+
+    if (existingCheck && (PROTECTED_PRODUCTION_WO_IDS.has(existingCheck.id) || PROTECTED_PRODUCTION_WO_IDS.has(existingCheck.wo_number))) {
+      return {
+        success: false,
+        error: {
+          code: 'PROTECTED_RECORD',
+          message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang diubah atau dihapus.'
+        }
+      };
+    }
+
     const { data, error } = await client
       .from('work_orders')
       .update({
@@ -1799,7 +1856,33 @@ export async function archiveWorkOrderInSupabase(id: string, archivedBy?: string
 
   const cleanId = id.trim();
 
+  if (PROTECTED_PRODUCTION_WO_IDS.has(cleanId)) {
+    return {
+      success: false,
+      error: {
+        code: 'PROTECTED_RECORD',
+        message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang diubah atau dihapus.'
+      }
+    };
+  }
+
   try {
+    const { data: existingCheck } = await client
+      .from('work_orders')
+      .select('id, wo_number')
+      .eq('id', cleanId)
+      .maybeSingle();
+
+    if (existingCheck && (PROTECTED_PRODUCTION_WO_IDS.has(existingCheck.id) || PROTECTED_PRODUCTION_WO_IDS.has(existingCheck.wo_number))) {
+      return {
+        success: false,
+        error: {
+          code: 'PROTECTED_RECORD',
+          message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang diubah atau dihapus.'
+        }
+      };
+    }
+
     const { data, error } = await client
       .from('work_orders')
       .update({
@@ -1846,7 +1929,33 @@ export async function restoreWorkOrderInSupabase(id: string, restoredBy?: string
 
   const cleanId = id.trim();
 
+  if (PROTECTED_PRODUCTION_WO_IDS.has(cleanId)) {
+    return {
+      success: false,
+      error: {
+        code: 'PROTECTED_RECORD',
+        message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang diubah atau dihapus.'
+      }
+    };
+  }
+
   try {
+    const { data: existingCheck } = await client
+      .from('work_orders')
+      .select('id, wo_number')
+      .eq('id', cleanId)
+      .maybeSingle();
+
+    if (existingCheck && (PROTECTED_PRODUCTION_WO_IDS.has(existingCheck.id) || PROTECTED_PRODUCTION_WO_IDS.has(existingCheck.wo_number))) {
+      return {
+        success: false,
+        error: {
+          code: 'PROTECTED_RECORD',
+          message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang diubah atau dihapus.'
+        }
+      };
+    }
+
     const { data, error } = await client
       .from('work_orders')
       .update({
@@ -2382,13 +2491,7 @@ export async function getAppSettingFromSupabase(key: string): Promise<SupabaseOp
       return { success: false, error: classified };
     }
 
-    if (data && data.setting_value !== undefined) {
-      const sv = data.setting_value;
-      const unwrap = (typeof sv === 'object' && sv !== null && 'value' in sv && Object.keys(sv).length === 1) ? sv.value : sv;
-      return { success: true, data: unwrap };
-    }
-
-    return { success: true, data: null };
+    return { success: true, data: data ? data.setting_value : null };
   } catch (err: any) {
     const classified = classifySupabaseError(err);
     return { success: false, error: classified };
@@ -2551,6 +2654,31 @@ export async function getAuditLogsFromSupabase(limit = 100): Promise<SupabaseOpR
  * Inserts an append-only audit log entry in Supabase.
  * Respects PostgreSQL trigger trg_audit_logs_immutable (only INSERT allowed).
  */
+function sanitizeAuditPayload(data: any): any {
+  if (!data || typeof data !== 'object') return data;
+  if (Array.isArray(data)) return data.map(sanitizeAuditPayload);
+  const clean: Record<string, any> = {};
+  for (const [k, v] of Object.entries(data)) {
+    const lk = k.toLowerCase();
+    if (
+      lk.includes('password') ||
+      lk.includes('secret') ||
+      lk.includes('token') ||
+      lk.includes('apikey') ||
+      lk.includes('servicerole') ||
+      lk.includes('authorization') ||
+      lk.includes('credential')
+    ) {
+      clean[k] = '[REDACTED_SENSITIVE_DATA]';
+    } else if (v && typeof v === 'object') {
+      clean[k] = sanitizeAuditPayload(v);
+    } else {
+      clean[k] = v;
+    }
+  }
+  return clean;
+}
+
 export async function insertAuditLogToSupabase(log: {
   id?: string;
   action: string;
@@ -2570,20 +2698,24 @@ export async function insertAuditLogToSupabase(log: {
   if (!client) return false;
 
   try {
+    const sanitizedDetails = typeof log.details === 'string'
+      ? log.details.replace(/password[:=]\s*\S+/gi, 'password:[REDACTED]')
+      : String(log.details || '');
+
     const entry = {
       id: log.id || `log_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       action: log.action,
       entity: log.entity,
       entity_id: log.entity_id,
-      details: log.details,
+      details: sanitizedDetails,
       performed_by: log.performed_by || 'System',
       user_role: log.user_role || 'system',
       performed_by_id: log.performed_by_id || null,
-      previous_state: log.previous_state || null,
-      new_state: log.new_state || null,
+      previous_state: sanitizeAuditPayload(log.previous_state) || null,
+      new_state: sanitizeAuditPayload(log.new_state) || null,
       ip_address: log.ip_address || null,
       user_agent: log.user_agent || null,
-      metadata: log.metadata || {},
+      metadata: sanitizeAuditPayload(log.metadata) || {},
       event_at: new Date().toISOString()
     };
 
@@ -2619,7 +2751,7 @@ export function sanitizeSensitiveData(data: any, depth = 0): any {
   }
 
   if (typeof data === 'object') {
-    const sensitivePattern = /password|secret|token|auth|bearer|cookie|private_?key|service_role|anon_?key|api_?key/i;
+    const sensitivePattern = /password|secret|token|auth|bearer|cookie|private_?key|service_?role|anon_?key|api_?key/i;
     const sanitized: Record<string, any> = {};
 
     for (const [key, value] of Object.entries(data)) {

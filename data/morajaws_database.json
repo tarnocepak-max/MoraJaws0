@@ -10,19 +10,24 @@
       "active": true,
       "passwordHash": "28232849",
       "mustChangePassword": true,
-      "createdAt": "2026-01-01T00:00:00Z"
+      "createdAt": "2026-01-01T00:00:00Z",
+      "lastLoginAt": "2026-11-04T12:47:32.501Z",
+      "loginCount": 4
     },
     {
       "id": "u-1",
       "name": "Alamsyah (Super Admin)",
       "username": "superadmin",
       "email": "tarnocepak@gmail.com",
-      "altEmail": "nurhestafauladhea@gmail.com, admin@morajaws.net, rayjs666@gmail.com",
+      "altEmail": "nurhestafauladhea@gmail.com, admin@morajaws.net",
       "role": "super_admin",
       "active": true,
       "passwordHash": "28232849",
-      "mustChangePassword": true,
-      "createdAt": "2026-01-01T00:00:00Z"
+      "createdAt": "2026-01-01T00:00:00Z",
+      "lastLoginAt": "2026-11-05T15:45:17.866Z",
+      "loginCount": 11,
+      "firebaseUid": "test-uid-123",
+      "mustChangePassword": true
     },
     {
       "id": "u-mgmt",
@@ -32,7 +37,6 @@
       "role": "management_data",
       "active": true,
       "passwordHash": "28232849",
-      "mustChangePassword": true,
       "permissions": [
         "data.view",
         "data.validate",
@@ -42,7 +46,10 @@
         "data.sync.view",
         "data.audit.view"
       ],
-      "createdAt": "2026-01-01T00:00:00Z"
+      "createdAt": "2026-01-01T00:00:00Z",
+      "mustChangePassword": true,
+      "lastLoginAt": "2026-11-04T15:33:52.777Z",
+      "loginCount": 4
     },
     {
       "id": "u-dispatch-1",
@@ -53,8 +60,10 @@
       "phone": "081299001122",
       "active": true,
       "passwordHash": "28232849",
+      "createdAt": "2026-01-01T00:00:00Z",
       "mustChangePassword": true,
-      "createdAt": "2026-01-01T00:00:00Z"
+      "lastLoginAt": "2026-11-04T15:33:52.785Z",
+      "loginCount": 3
     },
     {
       "id": "u-leader-1",
@@ -68,8 +77,10 @@
       "phone": "081288990011",
       "active": true,
       "passwordHash": "28232849",
-      "mustChangePassword": true,
-      "createdAt": "2026-01-01T00:00:00Z"
+      "createdAt": "2026-01-01T00:00:00Z",
+      "lastLoginAt": "2026-11-04T15:33:52.801Z",
+      "loginCount": 4,
+      "mustChangePassword": true
     },
     {
       "id": "u-installer-1",
@@ -83,8 +94,10 @@
       "phone": "081299883344",
       "active": true,
       "passwordHash": "28232849",
+      "createdAt": "2026-01-01T00:00:00Z",
       "mustChangePassword": true,
-      "createdAt": "2026-01-01T00:00:00Z"
+      "lastLoginAt": "2026-11-04T15:33:52.814Z",
+      "loginCount": 3
     },
     {
       "id": "u-leader-2",
@@ -98,8 +111,8 @@
       "phone": "085711223344",
       "active": true,
       "passwordHash": "28232849",
-      "mustChangePassword": true,
-      "createdAt": "2026-01-01T00:00:00Z"
+      "createdAt": "2026-01-01T00:00:00Z",
+      "mustChangePassword": true
     },
     {
       "id": "u-installer-2",
@@ -113,8 +126,8 @@
       "phone": "085711224455",
       "active": true,
       "passwordHash": "28232849",
-      "mustChangePassword": true,
-      "createdAt": "2026-01-01T00:00:00Z"
+      "createdAt": "2026-01-01T00:00:00Z",
+      "mustChangePassword": true
     },
     {
       "id": "u-itsupport-1",
@@ -134,22 +147,9 @@
         "setting_droplist",
         "view_audit_logs"
       ],
-      "createdAt": "2026-01-01T00:00:00Z"
-    },
-    {
-      "id": "u-inactive-1",
-      "name": "Bambang Sudirgo (Akun Nonaktif)",
-      "username": "staf_nonaktif",
-      "email": "bambang.nonaktif@morajaws.net",
-      "role": "installer",
-      "contractor": "PT Kencana Solusindo",
-      "contractorId": "c-kcs",
-      "area": "Jakarta Barat",
-      "phone": "085711229988",
-      "active": false,
-      "passwordHash": "28232849",
-      "mustChangePassword": true,
-      "createdAt": "2026-01-01T00:00:00Z"
+      "createdAt": "2026-01-01T00:00:00Z",
+      "lastLoginAt": "2026-11-04T15:33:52.769Z",
+      "loginCount": 1
     }
   ],
   "tickets": [
@@ -366,78 +366,6 @@
       "createdAt": "2026-10-28T00:00:00Z",
       "updatedAt": "2026-10-28T00:00:00Z",
       "updatedBy": "Alamsyah (Super Admin)"
-    },
-    {
-      "id": "wo-test-trial-1",
-      "woNumber": "WO-TRIAL-TEST-001",
-      "workOrderNumber": "WO-TRIAL-TEST-001",
-      "idCustomer": "7990001",
-      "customerId": "7990001",
-      "customerName": "Trial Test User 1 (Soft Deleted)",
-      "customerPhone": "081299990001",
-      "area": "Jakarta Selatan",
-      "contractorId": "c-mjs",
-      "contractorName": "PT Mitra Jaringan Solusi",
-      "appointmentDate": "2026-10-30",
-      "date": "2026-10-30",
-      "ticketCategory": "Trial Installation Test",
-      "statusWOAgent": "Cancelled",
-      "statusWOInstaller": "Unassigned",
-      "isArchived": false,
-      "isDeleted": true,
-      "deletedAt": "2026-11-04T12:00:00.000Z",
-      "deletedBy": "Staff Management Data",
-      "deletionReason": "WO percobaan tahap pengujian awal (dipertahankan sebagai soft-delete)",
-      "createdAt": "2026-10-28T00:00:00Z",
-      "updatedAt": "2026-11-04T12:00:00Z"
-    },
-    {
-      "id": "wo-test-trial-2",
-      "woNumber": "WO-TRIAL-TEST-002",
-      "workOrderNumber": "WO-TRIAL-TEST-002",
-      "idCustomer": "7990002",
-      "customerId": "7990002",
-      "customerName": "Trial Test User 2 (Soft Deleted)",
-      "customerPhone": "081299990002",
-      "area": "Jakarta Barat",
-      "contractorId": "c-kcs",
-      "contractorName": "PT Kencana Solusindo",
-      "appointmentDate": "2026-10-30",
-      "date": "2026-10-30",
-      "ticketCategory": "Trial Relocation Test",
-      "statusWOAgent": "Cancelled",
-      "statusWOInstaller": "Unassigned",
-      "isArchived": false,
-      "isDeleted": true,
-      "deletedAt": "2026-11-04T12:00:00.000Z",
-      "deletedBy": "Staff Management Data",
-      "deletionReason": "WO percobaan tahap pengujian awal (dipertahankan sebagai soft-delete)",
-      "createdAt": "2026-10-28T00:00:00Z",
-      "updatedAt": "2026-11-04T12:00:00Z"
-    },
-    {
-      "id": "wo-test-trial-3",
-      "woNumber": "WO-TRIAL-TEST-003",
-      "workOrderNumber": "WO-TRIAL-TEST-003",
-      "idCustomer": "7990003",
-      "customerId": "7990003",
-      "customerName": "Trial Test User 3 (Soft Deleted)",
-      "customerPhone": "081299990003",
-      "area": "Tangerang Selatan",
-      "contractorId": "c-cfn",
-      "contractorName": "PT Cipta Fiber Nusantara",
-      "appointmentDate": "2026-10-30",
-      "date": "2026-10-30",
-      "ticketCategory": "Trial Maintenance Test",
-      "statusWOAgent": "Cancelled",
-      "statusWOInstaller": "Unassigned",
-      "isArchived": false,
-      "isDeleted": true,
-      "deletedAt": "2026-11-04T12:00:00.000Z",
-      "deletedBy": "Staff Management Data",
-      "deletionReason": "WO percobaan tahap pengujian awal (dipertahankan sebagai soft-delete)",
-      "createdAt": "2026-10-28T00:00:00Z",
-      "updatedAt": "2026-11-04T12:00:00Z"
     }
   ],
   "contractors": [
@@ -545,68 +473,760 @@
     }
   ],
   "templates": [],
-  "ticketMessages": [],
+  "ticketMessages": [
+    {
+      "id": "msg_1793743503294",
+      "ticketId": "wo_WO20267266790",
+      "woNumber": "wo_WO20267266790",
+      "senderId": "u-mgmt",
+      "senderName": "Staff Management Data",
+      "senderRole": "management_data",
+      "text": "h",
+      "attachments": [],
+      "timestamp": "2026-11-03T22:05:03.294Z"
+    }
+  ],
   "assignmentHistory": [],
   "auditLogs": [
     {
-      "id": "log_1793889453514_bbfz",
-      "action": "Integrity Audit Check",
+      "id": "log_1793806461914_7lzl",
+      "action": "Logout Success",
       "entity": "auth",
-      "entityId": "u-audit-ev-1793889453514",
-      "details": "Audit logging invocation test",
-      "performedBy": "Auditor",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) logout dari sistem",
+      "performedBy": "Alamsyah (Super Admin)",
       "userRole": "super_admin",
-      "timestamp": "2026-11-05T14:37:33.514Z"
+      "timestamp": "2026-11-04T15:34:21.914Z"
     },
     {
-      "id": "log_1793889453497_r3e2",
-      "action": "Access Denied (WO Deletion Restricted to Management Data)",
-      "entity": "rbac",
-      "entityId": "/api/tickets/1",
-      "details": "User User-it_support (it_support) ditolak menghapus WO. Sesuai Konstitusi Keamanan, fitur Hapus WO dibatasi KHUSUS role Management Data.",
-      "performedBy": "User-it_support",
-      "userRole": "it_support",
-      "timestamp": "2026-11-05T14:37:33.497Z"
+      "id": "log_1793806461907_k6tl",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T15:34:21.907Z"
     },
     {
-      "id": "log_1793889453497_ytmh",
+      "id": "log_1793806461903_q0dg",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:34:21.903Z"
+    },
+    {
+      "id": "log_1793806443171_9of6",
+      "action": "Logout Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) logout dari sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:34:03.171Z"
+    },
+    {
+      "id": "log_1793806443164_ex9d",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T15:34:03.164Z"
+    },
+    {
+      "id": "log_1793806443158_pq6p",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:34:03.158Z"
+    },
+    {
+      "id": "log_1793806432925_fqfk",
+      "action": "Bypass Attempt: WO Delete via Update Endpoint",
+      "entity": "ticket",
+      "entityId": "WO20267399330",
+      "details": "User Alamsyah (Super Admin) (super_admin) mencoba memanipulasi status isDeleted tiket via PUT/PATCH endpoint",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:33:52.925Z"
+    },
+    {
+      "id": "log_1793806432885_z8d9",
       "action": "Access Denied (WO Deletion Restricted to Management Data)",
       "entity": "rbac",
-      "entityId": "/api/tickets/1",
-      "details": "User User-installer (installer) ditolak menghapus WO. Sesuai Konstitusi Keamanan, fitur Hapus WO dibatasi KHUSUS role Management Data.",
-      "performedBy": "User-installer",
+      "entityId": "/api/tickets/WO20267399330",
+      "details": "User Alamsyah (Super Admin) (super_admin) ditolak menghapus WO. Sesuai Konstitusi Keamanan, fitur Hapus WO dibatasi KHUSUS role Management Data.",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:33:52.885Z"
+    },
+    {
+      "id": "log_1793806432855_lrcu",
+      "action": "Access Denied (Audit Log Viewer Required)",
+      "entity": "rbac",
+      "entityId": "/api/audit-logs",
+      "details": "User Andi Saputra (installer) ditolak membaca Audit Logs",
+      "performedBy": "Andi Saputra",
       "userRole": "installer",
-      "timestamp": "2026-11-05T14:37:33.497Z"
+      "timestamp": "2026-11-04T15:33:52.855Z"
     },
     {
-      "id": "log_1793889453497_lstq",
-      "action": "Access Denied (WO Deletion Restricted to Management Data)",
+      "id": "log_1793806432849_lumz",
+      "action": "Access Denied (Audit Log Viewer Required)",
       "entity": "rbac",
-      "entityId": "/api/tickets/1",
-      "details": "User User-leader (leader) ditolak menghapus WO. Sesuai Konstitusi Keamanan, fitur Hapus WO dibatasi KHUSUS role Management Data.",
-      "performedBy": "User-leader",
+      "entityId": "/api/audit-logs",
+      "details": "User Hendra Gunawan (Leader MJS) (leader) ditolak membaca Audit Logs",
+      "performedBy": "Hendra Gunawan (Leader MJS)",
       "userRole": "leader",
-      "timestamp": "2026-11-05T14:37:33.497Z"
+      "timestamp": "2026-11-04T15:33:52.849Z"
     },
     {
-      "id": "log_1793889453496_gam1",
-      "action": "Access Denied (WO Deletion Restricted to Management Data)",
+      "id": "log_1793806432843_1qfo",
+      "action": "Access Denied (Audit Log Viewer Required)",
       "entity": "rbac",
-      "entityId": "/api/tickets/1",
-      "details": "User User-super_admin (super_admin) ditolak menghapus WO. Sesuai Konstitusi Keamanan, fitur Hapus WO dibatasi KHUSUS role Management Data.",
-      "performedBy": "User-super_admin",
-      "userRole": "super_admin",
-      "timestamp": "2026-11-05T14:37:33.496Z"
-    },
-    {
-      "id": "log_1793889453496_6y55",
-      "action": "Access Denied (WO Deletion Restricted to Management Data)",
-      "entity": "rbac",
-      "entityId": "/api/tickets/1",
-      "details": "User User-dispatch (dispatch) ditolak menghapus WO. Sesuai Konstitusi Keamanan, fitur Hapus WO dibatasi KHUSUS role Management Data.",
-      "performedBy": "User-dispatch",
+      "entityId": "/api/audit-logs",
+      "details": "User Siti Rahma (Dispatcher) (dispatch) ditolak membaca Audit Logs",
+      "performedBy": "Siti Rahma (Dispatcher)",
       "userRole": "dispatch",
-      "timestamp": "2026-11-05T14:37:33.496Z"
+      "timestamp": "2026-11-04T15:33:52.843Z"
+    },
+    {
+      "id": "log_1793806432839_jijf",
+      "action": "Access Denied (Audit Log Viewer Required)",
+      "entity": "rbac",
+      "entityId": "/api/audit-logs",
+      "details": "User Staff Management Data (management_data) ditolak membaca Audit Logs",
+      "performedBy": "Staff Management Data",
+      "userRole": "management_data",
+      "timestamp": "2026-11-04T15:33:52.839Z"
+    },
+    {
+      "id": "log_1793806432814_kof3",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-installer-1",
+      "details": "User Andi Saputra (installer) berhasil masuk ke sistem",
+      "performedBy": "Andi Saputra",
+      "userRole": "installer",
+      "timestamp": "2026-11-04T15:33:52.814Z"
+    },
+    {
+      "id": "log_1793806432802_x1rj",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-leader-1",
+      "details": "User Hendra Gunawan (Leader MJS) (leader) berhasil masuk ke sistem",
+      "performedBy": "Hendra Gunawan (Leader MJS)",
+      "userRole": "leader",
+      "timestamp": "2026-11-04T15:33:52.802Z"
+    },
+    {
+      "id": "log_1793806432786_egwq",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-dispatch-1",
+      "details": "User Siti Rahma (Dispatcher) (dispatch) berhasil masuk ke sistem",
+      "performedBy": "Siti Rahma (Dispatcher)",
+      "userRole": "dispatch",
+      "timestamp": "2026-11-04T15:33:52.786Z"
+    },
+    {
+      "id": "log_1793806432778_wr39",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-mgmt",
+      "details": "User Staff Management Data (management_data) berhasil masuk ke sistem",
+      "performedBy": "Staff Management Data",
+      "userRole": "management_data",
+      "timestamp": "2026-11-04T15:33:52.778Z"
+    },
+    {
+      "id": "log_1793806432770_gtqa",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-itsupport-1",
+      "details": "User Fajar Pratama (IT Support) (it_support) berhasil masuk ke sistem",
+      "performedBy": "Fajar Pratama (IT Support)",
+      "userRole": "it_support",
+      "timestamp": "2026-11-04T15:33:52.770Z"
+    },
+    {
+      "id": "log_1793806432755_gpjm",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:33:52.755Z"
+    },
+    {
+      "id": "log_1793805848281_09tp",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T15:24:08.281Z"
+    },
+    {
+      "id": "log_1793804218539_j4a4",
+      "action": "Logout Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) logout dari sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T14:56:58.539Z"
+    },
+    {
+      "id": "log_1793804218525_n6xh",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T14:56:58.525Z"
+    },
+    {
+      "id": "log_1793804218513_t2sx",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T14:56:58.513Z"
+    },
+    {
+      "id": "log_1793798617168_mr10",
+      "action": "Logout Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) logout dari sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T13:23:37.168Z"
+    },
+    {
+      "id": "log_1793798617158_kn40",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T13:23:37.158Z"
+    },
+    {
+      "id": "log_1793798617148_403w",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T13:23:37.148Z"
+    },
+    {
+      "id": "log_1793796773188_n9aq",
+      "action": "Logout Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) logout dari sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:52:53.188Z"
+    },
+    {
+      "id": "log_1793796773178_9xd4",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T12:52:53.178Z"
+    },
+    {
+      "id": "log_1793796773169_fbxv",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:52:53.169Z"
+    },
+    {
+      "id": "log_1793796694922_vfll",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (2x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T12:51:34.922Z"
+    },
+    {
+      "id": "log_1793796694909_l5ub",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "superadmin",
+      "details": "Percobaan login gagal untuk: superadmin (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-04T12:51:34.909Z"
+    },
+    {
+      "id": "log_1793796487442_wo71",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:48:07.442Z"
+    },
+    {
+      "id": "log_1793796486572_l5n2",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:48:06.572Z"
+    },
+    {
+      "id": "log_1793796481145_6rht",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:48:01.145Z"
+    },
+    {
+      "id": "log_1793796479876_meu4",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:47:59.876Z"
+    },
+    {
+      "id": "log_1793796466432_tsfe",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:47:46.432Z"
+    },
+    {
+      "id": "log_1793796460764_5h5b",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:47:40.764Z"
+    },
+    {
+      "id": "log_1793796452503_no2q",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-ray",
+      "details": "User Ray (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-04T12:47:32.503Z"
+    },
+    {
+      "id": "log_1793743619575_g1fl",
+      "action": "Access Denied (Backup Download Required Super Admin or Management Data)",
+      "entity": "rbac",
+      "entityId": "/api/admin/backup/download",
+      "details": "User Andi Saputra (installer) ditolak mengunduh file backup database",
+      "performedBy": "Andi Saputra",
+      "userRole": "installer",
+      "timestamp": "2026-11-03T22:06:59.575Z"
+    },
+    {
+      "id": "log_1793743619569_sdy2",
+      "action": "Access Denied (Backup Download Required Super Admin or Management Data)",
+      "entity": "rbac",
+      "entityId": "/api/admin/backup/download",
+      "details": "User Hendra Gunawan (Leader MJS) (leader) ditolak mengunduh file backup database",
+      "performedBy": "Hendra Gunawan (Leader MJS)",
+      "userRole": "leader",
+      "timestamp": "2026-11-03T22:06:59.569Z"
+    },
+    {
+      "id": "log_1793743619564_ct9z",
+      "action": "Access Denied (Backup Download Required Super Admin or Management Data)",
+      "entity": "rbac",
+      "entityId": "/api/admin/backup/download",
+      "details": "User Siti Rahma (Dispatcher) (dispatch) ditolak mengunduh file backup database",
+      "performedBy": "Siti Rahma (Dispatcher)",
+      "userRole": "dispatch",
+      "timestamp": "2026-11-03T22:06:59.564Z"
+    },
+    {
+      "id": "log_1793743619555_uewq",
+      "action": "Download Production Backup",
+      "entity": "backup",
+      "entityId": "morajaws_production_firestore_backup.json",
+      "details": "User Staff Management Data (management_data) mengunduh file backup produksi (1055520 bytes)",
+      "performedBy": "Staff Management Data",
+      "userRole": "management_data",
+      "timestamp": "2026-11-03T22:06:59.555Z"
+    },
+    {
+      "id": "log_1793743619541_ca7e",
+      "action": "Download Production Backup",
+      "entity": "backup",
+      "entityId": "morajaws_production_firestore_backup.json",
+      "details": "User Ray (Super Admin) (super_admin) mengunduh file backup produksi (1055520 bytes)",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-03T22:06:59.541Z"
+    },
+    {
+      "id": "log_1793743619535_7jxt",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-installer-1",
+      "details": "User Andi Saputra (installer) berhasil masuk ke sistem",
+      "performedBy": "Andi Saputra",
+      "userRole": "installer",
+      "timestamp": "2026-11-03T22:06:59.535Z"
+    },
+    {
+      "id": "log_1793743619532_865v",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-leader-1",
+      "details": "User Hendra Gunawan (Leader MJS) (leader) berhasil masuk ke sistem",
+      "performedBy": "Hendra Gunawan (Leader MJS)",
+      "userRole": "leader",
+      "timestamp": "2026-11-03T22:06:59.532Z"
+    },
+    {
+      "id": "log_1793743619528_wwu0",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-dispatch-1",
+      "details": "User Siti Rahma (Dispatcher) (dispatch) berhasil masuk ke sistem",
+      "performedBy": "Siti Rahma (Dispatcher)",
+      "userRole": "dispatch",
+      "timestamp": "2026-11-03T22:06:59.528Z"
+    },
+    {
+      "id": "log_1793743619523_h05i",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-mgmt",
+      "details": "User Staff Management Data (management_data) berhasil masuk ke sistem",
+      "performedBy": "Staff Management Data",
+      "userRole": "management_data",
+      "timestamp": "2026-11-03T22:06:59.523Z"
+    },
+    {
+      "id": "log_1793743619511_ttf3",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-ray",
+      "details": "User Ray (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-03T22:06:59.511Z"
+    },
+    {
+      "id": "log_1793743598631_btb4",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-03T22:06:38.631Z"
+    },
+    {
+      "id": "log_1793743593808_oodt",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-03T22:06:33.808Z"
+    },
+    {
+      "id": "log_1793743587346_rawd",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "admin",
+      "details": "Percobaan login gagal untuk: admin (2x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-03T22:06:27.346Z"
+    },
+    {
+      "id": "log_1793743582539_cv1v",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "installer1",
+      "details": "Percobaan login gagal untuk: installer1 (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-03T22:06:22.539Z"
+    },
+    {
+      "id": "log_1793743582536_h81w",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "leadermjs",
+      "details": "Percobaan login gagal untuk: leadermjs (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-03T22:06:22.536Z"
+    },
+    {
+      "id": "log_1793743582533_x319",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "dispatch",
+      "details": "Percobaan login gagal untuk: dispatch (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-03T22:06:22.533Z"
+    },
+    {
+      "id": "log_1793743582525_upop",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "datamgmt",
+      "details": "Percobaan login gagal untuk: datamgmt (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-03T22:06:22.525Z"
+    },
+    {
+      "id": "log_1793743582515_g7mk",
+      "action": "Login Failed (Wrong Password)",
+      "entity": "auth",
+      "entityId": "admin",
+      "details": "Percobaan login gagal untuk: admin (1x gagal)",
+      "performedBy": "Anonymous / System",
+      "userRole": "system",
+      "timestamp": "2026-11-03T22:06:22.515Z"
+    },
+    {
+      "id": "log_1793743536096_remx",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-03T22:05:36.096Z"
+    },
+    {
+      "id": "log_1793743531551_0x0r",
+      "action": "Global Config Updated",
+      "entity": "ui_config",
+      "entityId": "global",
+      "details": "Super Admin Ray (Super Admin) memperbarui konfigurasi global",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-03T22:05:31.551Z"
+    },
+    {
+      "id": "log_1793743524402_kjbn",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-ray",
+      "details": "User Ray (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-03T22:05:24.402Z"
+    },
+    {
+      "id": "log_1793743468287_2946",
+      "action": "Access Denied (Backup Download Required Super Admin or Management Data)",
+      "entity": "rbac",
+      "entityId": "/api/admin/backup/download",
+      "details": "User Andi Saputra (installer) ditolak mengunduh file backup database",
+      "performedBy": "Andi Saputra",
+      "userRole": "installer",
+      "timestamp": "2026-11-03T22:04:28.287Z"
+    },
+    {
+      "id": "log_1793743468282_66rq",
+      "action": "Access Denied (Backup Download Required Super Admin or Management Data)",
+      "entity": "rbac",
+      "entityId": "/api/admin/backup/download",
+      "details": "User Hendra Gunawan (Leader MJS) (leader) ditolak mengunduh file backup database",
+      "performedBy": "Hendra Gunawan (Leader MJS)",
+      "userRole": "leader",
+      "timestamp": "2026-11-03T22:04:28.282Z"
+    },
+    {
+      "id": "log_1793743468276_b157",
+      "action": "Access Denied (Backup Download Required Super Admin or Management Data)",
+      "entity": "rbac",
+      "entityId": "/api/admin/backup/download",
+      "details": "User Siti Rahma (Dispatcher) (dispatch) ditolak mengunduh file backup database",
+      "performedBy": "Siti Rahma (Dispatcher)",
+      "userRole": "dispatch",
+      "timestamp": "2026-11-03T22:04:28.276Z"
+    },
+    {
+      "id": "log_1793743468261_gugs",
+      "action": "Download Production Backup",
+      "entity": "backup",
+      "entityId": "morajaws_production_firestore_backup.json",
+      "details": "User Staff Management Data (management_data) mengunduh file backup produksi (1055520 bytes)",
+      "performedBy": "Staff Management Data",
+      "userRole": "management_data",
+      "timestamp": "2026-11-03T22:04:28.261Z"
+    },
+    {
+      "id": "log_1793743468234_ryf8",
+      "action": "Download Production Backup",
+      "entity": "backup",
+      "entityId": "morajaws_production_firestore_backup.json",
+      "details": "User Ray (Super Admin) (super_admin) mengunduh file backup produksi (1055520 bytes)",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-03T22:04:28.234Z"
+    },
+    {
+      "id": "log_1793743468227_efxp",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-installer-1",
+      "details": "User Andi Saputra (installer) berhasil masuk ke sistem",
+      "performedBy": "Andi Saputra",
+      "userRole": "installer",
+      "timestamp": "2026-11-03T22:04:28.227Z"
+    },
+    {
+      "id": "log_1793743468223_2jgp",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-leader-1",
+      "details": "User Hendra Gunawan (Leader MJS) (leader) berhasil masuk ke sistem",
+      "performedBy": "Hendra Gunawan (Leader MJS)",
+      "userRole": "leader",
+      "timestamp": "2026-11-03T22:04:28.223Z"
+    },
+    {
+      "id": "log_1793743468218_bpwn",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-dispatch-1",
+      "details": "User Siti Rahma (Dispatcher) (dispatch) berhasil masuk ke sistem",
+      "performedBy": "Siti Rahma (Dispatcher)",
+      "userRole": "dispatch",
+      "timestamp": "2026-11-03T22:04:28.218Z"
+    },
+    {
+      "id": "log_1793743468212_ej4f",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-mgmt",
+      "details": "User Staff Management Data (management_data) berhasil masuk ke sistem",
+      "performedBy": "Staff Management Data",
+      "userRole": "management_data",
+      "timestamp": "2026-11-03T22:04:28.212Z"
+    },
+    {
+      "id": "log_1793743468195_43gn",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-ray",
+      "details": "User Ray (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Ray (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-03T22:04:28.195Z"
+    },
+    {
+      "id": "log_1793743378051_hniv",
+      "action": "Manual Sync Executed",
+      "entity": "sync",
+      "entityId": "sync_1793743378050_91acf543",
+      "details": "Manual sync dijalankan oleh Staff Management Data: Verifikasi data operasional internal selesai: 5 Work Orders aktif, 9 pengguna terverifikasi.",
+      "performedBy": "Staff Management Data",
+      "userRole": "management_data",
+      "timestamp": "2026-11-03T22:02:58.052Z"
+    },
+    {
+      "id": "log_1793742780693_h0b7",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-mgmt",
+      "details": "User Staff Management Data (management_data) berhasil masuk ke sistem",
+      "performedBy": "Staff Management Data",
+      "userRole": "management_data",
+      "timestamp": "2026-11-03T21:53:00.693Z"
+    },
+    {
+      "id": "log_1793205910912_kdp1",
+      "action": "Firebase Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk via Firebase Auth [tarnocepak@gmail.com]",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-10-28T16:45:10.912Z"
+    },
+    {
+      "id": "log_1793183243279_tiy7",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-10-28T10:27:23.279Z"
+    },
+    {
+      "id": "log_1793181958413_cggr",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-leader-1",
+      "details": "User Hendra Gunawan (Leader MJS) (leader) berhasil masuk ke sistem",
+      "performedBy": "Hendra Gunawan (Leader MJS)",
+      "userRole": "leader",
+      "timestamp": "2026-10-28T10:05:58.413Z"
+    },
+    {
+      "id": "log_1793181942974_r8w2",
+      "action": "Login Success",
+      "entity": "auth",
+      "entityId": "u-1",
+      "details": "User Alamsyah (Super Admin) (super_admin) berhasil masuk ke sistem",
+      "performedBy": "Alamsyah (Super Admin)",
+      "userRole": "super_admin",
+      "timestamp": "2026-10-28T10:05:42.974Z"
     },
     {
       "id": "log_init",
@@ -616,10 +1236,27 @@
       "details": "MoraJaws Central Persistent Storage Engine initialized with robust RBAC & synchronization",
       "performedBy": "System",
       "userRole": "super_admin",
-      "timestamp": "2026-11-05T14:37:33.390Z"
+      "timestamp": "2026-10-28T10:05:08.652Z"
     }
   ],
-  "syncHistory": [],
+  "syncHistory": [
+    {
+      "jobId": "sync_1793743378050_91acf543",
+      "syncType": "manual_sync_run",
+      "startedAt": "2026-11-03T22:02:58.050Z",
+      "completedAt": "2026-11-03T22:02:58.051Z",
+      "status": "Success",
+      "processedCount": 5,
+      "successCount": 5,
+      "failedCount": 0,
+      "newRecordsCount": 0,
+      "updatedRecordsCount": 0,
+      "dataSource": "Local Persistent Storage",
+      "initiatedBy": "Staff Management Data",
+      "initiatedByRole": "management_data",
+      "durationMs": 1
+    }
+  ],
   "sheetsConfig": {
     "enabled": false,
     "spreadsheetId": "",
@@ -632,7 +1269,1516 @@
     "lastSyncMessage": "",
     "recordsCount": 0
   },
-  "globalConfig": null,
+  "globalConfig": {
+    "id": "default_config_v1",
+    "version": 1,
+    "updatedAt": "2026-11-04T12:48:07.441Z",
+    "updatedBy": "Ray (Super Admin)",
+    "global": {
+      "appName": "MoraJaws",
+      "logoIcon": "Truck",
+      "primaryColor": "indigo",
+      "themeMode": "light",
+      "fontScale": "medium",
+      "density": "comfortable",
+      "contentWidth": "contained",
+      "borderRadius": "medium",
+      "buttonStyle": "solid",
+      "tableStyle": "bordered",
+      "sidebarState": "closed",
+      "sidebarCollapsed": false,
+      "toolbarPosition": "top",
+      "modalSize": "large"
+    },
+    "ticketsTable": {
+      "showEmptyFields": false,
+      "columns": [
+        {
+          "order": 1,
+          "visible": true,
+          "key": "woNumber",
+          "format": "code",
+          "label": "WO Number",
+          "sticky": "left",
+          "sortable": true,
+          "filterable": true,
+          "width": 140
+        },
+        {
+          "visible": true,
+          "format": "date",
+          "order": 2,
+          "label": "Date",
+          "sortable": true,
+          "width": 110,
+          "key": "date"
+        },
+        {
+          "filterable": true,
+          "order": 3,
+          "visible": true,
+          "width": 130,
+          "key": "idCustomer",
+          "sortable": true,
+          "label": "Customer ID",
+          "format": "code"
+        },
+        {
+          "width": 180,
+          "filterable": true,
+          "sortable": true,
+          "label": "Customer Name",
+          "order": 4,
+          "key": "customerName",
+          "visible": true
+        },
+        {
+          "visible": true,
+          "format": "phone",
+          "order": 5,
+          "label": "Phone",
+          "width": 140,
+          "key": "customerPhone"
+        },
+        {
+          "label": "Area",
+          "key": "area",
+          "width": 120,
+          "filterable": true,
+          "sortable": true,
+          "visible": true,
+          "order": 6
+        },
+        {
+          "order": 7,
+          "width": 140,
+          "sortable": true,
+          "filterable": true,
+          "key": "clusterName",
+          "label": "Cluster",
+          "visible": true
+        },
+        {
+          "width": 130,
+          "label": "Slot Time",
+          "sortable": true,
+          "key": "slotTime",
+          "order": 8,
+          "visible": true
+        },
+        {
+          "label": "Category",
+          "sortable": true,
+          "width": 130,
+          "key": "ticketCategory",
+          "format": "badge",
+          "order": 9,
+          "visible": true,
+          "filterable": true
+        },
+        {
+          "width": 140,
+          "visible": true,
+          "filterable": true,
+          "label": "Contractor",
+          "sortable": true,
+          "order": 10,
+          "key": "contactorName"
+        },
+        {
+          "visible": true,
+          "order": 11,
+          "filterable": true,
+          "width": 140,
+          "key": "installerName",
+          "sortable": true,
+          "label": "Installer"
+        },
+        {
+          "sortable": true,
+          "order": 12,
+          "visible": true,
+          "width": 130,
+          "key": "statusWOAgent",
+          "filterable": true,
+          "format": "status_agent",
+          "label": "Status Agent"
+        },
+        {
+          "visible": true,
+          "sortable": true,
+          "label": "Status Installer",
+          "width": 140,
+          "format": "status_installer",
+          "filterable": true,
+          "key": "statusWOInstaller",
+          "order": 13
+        },
+        {
+          "visible": true,
+          "sortable": true,
+          "order": 14,
+          "format": "status_wa",
+          "width": 160,
+          "filterable": true,
+          "label": "WhatsApp Status",
+          "key": "statusWhatsApp"
+        },
+        {
+          "order": 15,
+          "format": "code",
+          "width": 110,
+          "visible": false,
+          "key": "fdtCode",
+          "label": "FDT Code"
+        },
+        {
+          "label": "FAT Code",
+          "width": 110,
+          "visible": false,
+          "format": "code",
+          "key": "fatCode",
+          "order": 16
+        },
+        {
+          "order": 17,
+          "width": 220,
+          "key": "streetName",
+          "wrapText": true,
+          "visible": false,
+          "label": "Street Address"
+        },
+        {
+          "order": 18,
+          "wrapText": true,
+          "label": "Installer Remarks",
+          "visible": false,
+          "width": 200,
+          "key": "remarksWOInstaller"
+        },
+        {
+          "order": 19,
+          "visible": false,
+          "width": 100,
+          "label": "Agent ID",
+          "key": "agentId"
+        },
+        {
+          "key": "dateUpload",
+          "visible": false,
+          "format": "date",
+          "width": 120,
+          "label": "Date Uploaded",
+          "order": 20
+        },
+        {
+          "label": "Source File",
+          "key": "fileName",
+          "width": 150,
+          "visible": false,
+          "order": 21
+        },
+        {
+          "sortable": true,
+          "label": "Last Updated",
+          "width": 130,
+          "visible": true,
+          "format": "date",
+          "key": "updatedAt",
+          "order": 22
+        },
+        {
+          "key": "actions",
+          "width": 140,
+          "sticky": "right",
+          "label": "Actions",
+          "visible": true,
+          "order": 23,
+          "align": "center"
+        }
+      ],
+      "density": "comfortable",
+      "rowsPerPage": 10,
+      "activePresetId": "preset_default",
+      "presets": [
+        {
+          "columns": [
+            {
+              "order": 1,
+              "visible": true,
+              "label": "WO Number",
+              "key": "woNumber",
+              "format": "code",
+              "sortable": true,
+              "filterable": true,
+              "sticky": "left",
+              "width": 140
+            },
+            {
+              "key": "date",
+              "width": 110,
+              "format": "date",
+              "label": "Date",
+              "sortable": true,
+              "order": 2,
+              "visible": true
+            },
+            {
+              "format": "code",
+              "label": "Customer ID",
+              "visible": true,
+              "key": "idCustomer",
+              "filterable": true,
+              "width": 130,
+              "sortable": true,
+              "order": 3
+            },
+            {
+              "order": 4,
+              "key": "customerName",
+              "visible": true,
+              "filterable": true,
+              "sortable": true,
+              "width": 180,
+              "label": "Customer Name"
+            },
+            {
+              "width": 140,
+              "visible": true,
+              "format": "phone",
+              "label": "Phone",
+              "order": 5,
+              "key": "customerPhone"
+            },
+            {
+              "key": "area",
+              "order": 6,
+              "visible": true,
+              "sortable": true,
+              "width": 120,
+              "label": "Area",
+              "filterable": true
+            },
+            {
+              "filterable": true,
+              "sortable": true,
+              "order": 7,
+              "key": "clusterName",
+              "label": "Cluster",
+              "width": 140,
+              "visible": true
+            },
+            {
+              "order": 8,
+              "sortable": true,
+              "visible": true,
+              "key": "slotTime",
+              "label": "Slot Time",
+              "width": 130
+            },
+            {
+              "sortable": true,
+              "order": 9,
+              "filterable": true,
+              "visible": true,
+              "width": 130,
+              "key": "ticketCategory",
+              "label": "Category",
+              "format": "badge"
+            },
+            {
+              "label": "Contractor",
+              "key": "contactorName",
+              "width": 140,
+              "filterable": true,
+              "visible": true,
+              "order": 10,
+              "sortable": true
+            },
+            {
+              "visible": true,
+              "sortable": true,
+              "order": 11,
+              "key": "installerName",
+              "label": "Installer",
+              "filterable": true,
+              "width": 140
+            },
+            {
+              "order": 12,
+              "filterable": true,
+              "key": "statusWOAgent",
+              "width": 130,
+              "sortable": true,
+              "label": "Status Agent",
+              "format": "status_agent",
+              "visible": true
+            },
+            {
+              "label": "Status Installer",
+              "visible": true,
+              "format": "status_installer",
+              "filterable": true,
+              "key": "statusWOInstaller",
+              "width": 140,
+              "sortable": true,
+              "order": 13
+            },
+            {
+              "format": "status_wa",
+              "sortable": true,
+              "order": 14,
+              "key": "statusWhatsApp",
+              "visible": true,
+              "filterable": true,
+              "label": "WhatsApp Status",
+              "width": 160
+            },
+            {
+              "label": "FDT Code",
+              "visible": false,
+              "key": "fdtCode",
+              "width": 110,
+              "format": "code",
+              "order": 15
+            },
+            {
+              "label": "FAT Code",
+              "width": 110,
+              "visible": false,
+              "format": "code",
+              "order": 16,
+              "key": "fatCode"
+            },
+            {
+              "order": 17,
+              "key": "streetName",
+              "visible": false,
+              "width": 220,
+              "label": "Street Address",
+              "wrapText": true
+            },
+            {
+              "label": "Installer Remarks",
+              "key": "remarksWOInstaller",
+              "wrapText": true,
+              "width": 200,
+              "visible": false,
+              "order": 18
+            },
+            {
+              "visible": false,
+              "order": 19,
+              "key": "agentId",
+              "width": 100,
+              "label": "Agent ID"
+            },
+            {
+              "visible": false,
+              "format": "date",
+              "order": 20,
+              "label": "Date Uploaded",
+              "width": 120,
+              "key": "dateUpload"
+            },
+            {
+              "visible": false,
+              "order": 21,
+              "key": "fileName",
+              "label": "Source File",
+              "width": 150
+            },
+            {
+              "visible": true,
+              "key": "updatedAt",
+              "order": 22,
+              "format": "date",
+              "sortable": true,
+              "width": 130,
+              "label": "Last Updated"
+            },
+            {
+              "width": 140,
+              "label": "Actions",
+              "key": "actions",
+              "align": "center",
+              "order": 23,
+              "sticky": "right",
+              "visible": true
+            }
+          ],
+          "density": "comfortable",
+          "rowsPerPage": 10,
+          "name": "Standard Dispatch View",
+          "description": "Balanced column layout for general ticket monitoring and routing",
+          "id": "preset_default"
+        },
+        {
+          "columns": [
+            {
+              "format": "code",
+              "order": 1,
+              "label": "WO Number",
+              "sticky": "left",
+              "visible": true,
+              "sortable": true,
+              "filterable": true,
+              "key": "woNumber",
+              "width": 120
+            },
+            {
+              "key": "date",
+              "label": "Date",
+              "sortable": true,
+              "visible": false,
+              "width": 110,
+              "format": "date",
+              "order": 2
+            },
+            {
+              "filterable": true,
+              "width": 130,
+              "format": "code",
+              "sortable": true,
+              "label": "Customer ID",
+              "key": "idCustomer",
+              "order": 3,
+              "visible": false
+            },
+            {
+              "key": "customerName",
+              "order": 4,
+              "filterable": true,
+              "width": 180,
+              "visible": true,
+              "label": "Customer Name",
+              "sortable": true
+            },
+            {
+              "order": 5,
+              "key": "customerPhone",
+              "label": "Phone",
+              "format": "phone",
+              "visible": false,
+              "width": 140
+            },
+            {
+              "order": 6,
+              "visible": true,
+              "key": "area",
+              "sortable": true,
+              "width": 120,
+              "label": "Area",
+              "filterable": true
+            },
+            {
+              "visible": false,
+              "sortable": true,
+              "label": "Cluster",
+              "width": 140,
+              "filterable": true,
+              "key": "clusterName",
+              "order": 7
+            },
+            {
+              "key": "slotTime",
+              "sortable": true,
+              "label": "Slot Time",
+              "width": 130,
+              "order": 8,
+              "visible": true
+            },
+            {
+              "sortable": true,
+              "order": 9,
+              "key": "ticketCategory",
+              "format": "badge",
+              "width": 130,
+              "label": "Category",
+              "visible": false,
+              "filterable": true
+            },
+            {
+              "visible": false,
+              "order": 10,
+              "filterable": true,
+              "width": 140,
+              "key": "contactorName",
+              "sortable": true,
+              "label": "Contractor"
+            },
+            {
+              "visible": true,
+              "order": 11,
+              "key": "installerName",
+              "filterable": true,
+              "sortable": true,
+              "label": "Installer",
+              "width": 140
+            },
+            {
+              "sortable": true,
+              "order": 12,
+              "key": "statusWOAgent",
+              "label": "Status Agent",
+              "visible": false,
+              "format": "status_agent",
+              "filterable": true,
+              "width": 130
+            },
+            {
+              "format": "status_installer",
+              "label": "Status Installer",
+              "width": 140,
+              "sortable": true,
+              "key": "statusWOInstaller",
+              "visible": true,
+              "filterable": true,
+              "order": 13
+            },
+            {
+              "order": 14,
+              "key": "statusWhatsApp",
+              "filterable": true,
+              "visible": true,
+              "sortable": true,
+              "width": 160,
+              "label": "WhatsApp Status",
+              "format": "status_wa"
+            },
+            {
+              "width": 110,
+              "visible": false,
+              "label": "FDT Code",
+              "format": "code",
+              "order": 15,
+              "key": "fdtCode"
+            },
+            {
+              "visible": false,
+              "key": "fatCode",
+              "format": "code",
+              "order": 16,
+              "label": "FAT Code",
+              "width": 110
+            },
+            {
+              "label": "Street Address",
+              "width": 220,
+              "visible": false,
+              "wrapText": true,
+              "key": "streetName",
+              "order": 17
+            },
+            {
+              "wrapText": true,
+              "order": 18,
+              "label": "Installer Remarks",
+              "width": 200,
+              "visible": false,
+              "key": "remarksWOInstaller"
+            },
+            {
+              "visible": false,
+              "order": 19,
+              "width": 100,
+              "key": "agentId",
+              "label": "Agent ID"
+            },
+            {
+              "width": 120,
+              "format": "date",
+              "label": "Date Uploaded",
+              "key": "dateUpload",
+              "order": 20,
+              "visible": false
+            },
+            {
+              "key": "fileName",
+              "visible": false,
+              "order": 21,
+              "label": "Source File",
+              "width": 150
+            },
+            {
+              "label": "Last Updated",
+              "width": 130,
+              "format": "date",
+              "sortable": true,
+              "key": "updatedAt",
+              "order": 22,
+              "visible": false
+            },
+            {
+              "label": "Actions",
+              "sticky": "right",
+              "key": "actions",
+              "width": 140,
+              "order": 23,
+              "align": "center",
+              "visible": true
+            }
+          ],
+          "rowsPerPage": 20,
+          "density": "compact",
+          "name": "Compact Operations",
+          "id": "preset_compact_dispatch",
+          "description": "High-density grid focused on installer assignments and work status"
+        },
+        {
+          "name": "Customer & WhatsApp Confirmation",
+          "description": "Prioritizes customer contact, address, slot time and WhatsApp status",
+          "columns": [
+            {
+              "sticky": "left",
+              "format": "code",
+              "width": 140,
+              "filterable": true,
+              "visible": true,
+              "order": 1,
+              "sortable": true,
+              "label": "WO Number",
+              "key": "woNumber"
+            },
+            {
+              "visible": false,
+              "format": "date",
+              "order": 2,
+              "label": "Date",
+              "key": "date",
+              "width": 110,
+              "sortable": true
+            },
+            {
+              "label": "Customer ID",
+              "format": "code",
+              "width": 130,
+              "key": "idCustomer",
+              "sortable": true,
+              "visible": false,
+              "order": 3,
+              "filterable": true
+            },
+            {
+              "order": 4,
+              "key": "customerName",
+              "visible": true,
+              "width": 180,
+              "label": "Customer Name",
+              "sortable": true,
+              "filterable": true
+            },
+            {
+              "key": "customerPhone",
+              "width": 140,
+              "format": "phone",
+              "label": "Phone",
+              "order": 5,
+              "visible": true
+            },
+            {
+              "width": 120,
+              "label": "Area",
+              "filterable": true,
+              "sortable": true,
+              "key": "area",
+              "order": 6,
+              "visible": false
+            },
+            {
+              "visible": true,
+              "sortable": true,
+              "order": 7,
+              "key": "clusterName",
+              "label": "Cluster",
+              "filterable": true,
+              "width": 140
+            },
+            {
+              "sortable": true,
+              "order": 8,
+              "visible": true,
+              "width": 130,
+              "key": "slotTime",
+              "label": "Slot Time"
+            },
+            {
+              "order": 9,
+              "filterable": true,
+              "key": "ticketCategory",
+              "sortable": true,
+              "label": "Category",
+              "visible": false,
+              "format": "badge",
+              "width": 130
+            },
+            {
+              "visible": false,
+              "order": 10,
+              "key": "contactorName",
+              "filterable": true,
+              "width": 140,
+              "sortable": true,
+              "label": "Contractor"
+            },
+            {
+              "sortable": true,
+              "filterable": true,
+              "visible": true,
+              "order": 11,
+              "label": "Installer",
+              "key": "installerName",
+              "width": 140
+            },
+            {
+              "order": 12,
+              "sortable": true,
+              "key": "statusWOAgent",
+              "format": "status_agent",
+              "visible": false,
+              "width": 130,
+              "label": "Status Agent",
+              "filterable": true
+            },
+            {
+              "order": 13,
+              "filterable": true,
+              "key": "statusWOInstaller",
+              "label": "Status Installer",
+              "visible": false,
+              "sortable": true,
+              "format": "status_installer",
+              "width": 140
+            },
+            {
+              "width": 160,
+              "filterable": true,
+              "label": "WhatsApp Status",
+              "order": 14,
+              "format": "status_wa",
+              "key": "statusWhatsApp",
+              "sortable": true,
+              "visible": true
+            },
+            {
+              "width": 110,
+              "label": "FDT Code",
+              "key": "fdtCode",
+              "format": "code",
+              "order": 15,
+              "visible": false
+            },
+            {
+              "label": "FAT Code",
+              "width": 110,
+              "format": "code",
+              "key": "fatCode",
+              "order": 16,
+              "visible": false
+            },
+            {
+              "label": "Street Address",
+              "key": "streetName",
+              "wrapText": true,
+              "width": 220,
+              "visible": false,
+              "order": 17
+            },
+            {
+              "label": "Installer Remarks",
+              "key": "remarksWOInstaller",
+              "visible": false,
+              "width": 200,
+              "wrapText": true,
+              "order": 18
+            },
+            {
+              "label": "Agent ID",
+              "key": "agentId",
+              "visible": false,
+              "width": 100,
+              "order": 19
+            },
+            {
+              "order": 20,
+              "visible": false,
+              "width": 120,
+              "key": "dateUpload",
+              "format": "date",
+              "label": "Date Uploaded"
+            },
+            {
+              "order": 21,
+              "visible": false,
+              "width": 150,
+              "key": "fileName",
+              "label": "Source File"
+            },
+            {
+              "label": "Last Updated",
+              "width": 130,
+              "format": "date",
+              "key": "updatedAt",
+              "sortable": true,
+              "visible": false,
+              "order": 22
+            },
+            {
+              "visible": true,
+              "label": "Actions",
+              "width": 140,
+              "sticky": "right",
+              "align": "center",
+              "key": "actions",
+              "order": 23
+            }
+          ],
+          "id": "preset_customer_contact",
+          "density": "comfortable",
+          "rowsPerPage": 15
+        },
+        {
+          "description": "Focuses on FDT, FAT, category, and technical completion",
+          "name": "Technical & Infrastructure",
+          "id": "preset_technical",
+          "rowsPerPage": 15,
+          "density": "compact",
+          "columns": [
+            {
+              "width": 140,
+              "key": "woNumber",
+              "visible": true,
+              "sticky": "left",
+              "label": "WO Number",
+              "sortable": true,
+              "filterable": true,
+              "order": 1,
+              "format": "code"
+            },
+            {
+              "order": 2,
+              "format": "date",
+              "visible": false,
+              "width": 110,
+              "sortable": true,
+              "key": "date",
+              "label": "Date"
+            },
+            {
+              "format": "code",
+              "filterable": true,
+              "order": 3,
+              "visible": false,
+              "key": "idCustomer",
+              "label": "Customer ID",
+              "width": 130,
+              "sortable": true
+            },
+            {
+              "order": 4,
+              "key": "customerName",
+              "label": "Customer Name",
+              "sortable": true,
+              "visible": false,
+              "filterable": true,
+              "width": 180
+            },
+            {
+              "label": "Phone",
+              "key": "customerPhone",
+              "width": 140,
+              "visible": false,
+              "format": "phone",
+              "order": 5
+            },
+            {
+              "visible": true,
+              "order": 6,
+              "key": "area",
+              "sortable": true,
+              "label": "Area",
+              "filterable": true,
+              "width": 120
+            },
+            {
+              "order": 7,
+              "width": 140,
+              "visible": true,
+              "filterable": true,
+              "key": "clusterName",
+              "label": "Cluster",
+              "sortable": true
+            },
+            {
+              "order": 8,
+              "key": "slotTime",
+              "visible": false,
+              "width": 130,
+              "label": "Slot Time",
+              "sortable": true
+            },
+            {
+              "key": "ticketCategory",
+              "filterable": true,
+              "order": 9,
+              "sortable": true,
+              "label": "Category",
+              "format": "badge",
+              "visible": true,
+              "width": 130
+            },
+            {
+              "filterable": true,
+              "width": 140,
+              "label": "Contractor",
+              "key": "contactorName",
+              "order": 10,
+              "visible": false,
+              "sortable": true
+            },
+            {
+              "filterable": true,
+              "visible": true,
+              "order": 11,
+              "sortable": true,
+              "key": "installerName",
+              "label": "Installer",
+              "width": 140
+            },
+            {
+              "sortable": true,
+              "visible": false,
+              "order": 12,
+              "label": "Status Agent",
+              "format": "status_agent",
+              "key": "statusWOAgent",
+              "width": 130,
+              "filterable": true
+            },
+            {
+              "key": "statusWOInstaller",
+              "format": "status_installer",
+              "order": 13,
+              "sortable": true,
+              "visible": true,
+              "label": "Status Installer",
+              "filterable": true,
+              "width": 140
+            },
+            {
+              "order": 14,
+              "width": 160,
+              "filterable": true,
+              "sortable": true,
+              "visible": false,
+              "key": "statusWhatsApp",
+              "format": "status_wa",
+              "label": "WhatsApp Status"
+            },
+            {
+              "label": "FDT Code",
+              "width": 110,
+              "key": "fdtCode",
+              "format": "code",
+              "visible": true,
+              "order": 15
+            },
+            {
+              "visible": true,
+              "order": 16,
+              "key": "fatCode",
+              "width": 110,
+              "label": "FAT Code",
+              "format": "code"
+            },
+            {
+              "order": 17,
+              "visible": false,
+              "wrapText": true,
+              "label": "Street Address",
+              "key": "streetName",
+              "width": 220
+            },
+            {
+              "visible": false,
+              "label": "Installer Remarks",
+              "width": 200,
+              "wrapText": true,
+              "order": 18,
+              "key": "remarksWOInstaller"
+            },
+            {
+              "order": 19,
+              "visible": false,
+              "label": "Agent ID",
+              "width": 100,
+              "key": "agentId"
+            },
+            {
+              "order": 20,
+              "key": "dateUpload",
+              "label": "Date Uploaded",
+              "visible": false,
+              "format": "date",
+              "width": 120
+            },
+            {
+              "order": 21,
+              "visible": false,
+              "key": "fileName",
+              "width": 150,
+              "label": "Source File"
+            },
+            {
+              "format": "date",
+              "label": "Last Updated",
+              "visible": false,
+              "width": 130,
+              "sortable": true,
+              "key": "updatedAt",
+              "order": 22
+            },
+            {
+              "sticky": "right",
+              "align": "center",
+              "visible": true,
+              "order": 23,
+              "key": "actions",
+              "label": "Actions",
+              "width": 140
+            }
+          ]
+        }
+      ]
+    },
+    "toolbar": {
+      "showExport": true,
+      "showImport": true,
+      "showDensityToggle": true,
+      "showArchiveToggle": true,
+      "showFilters": true,
+      "showSearch": true,
+      "buttons": [
+        {
+          "id": "btn_refresh",
+          "visible": true,
+          "label": "Refresh",
+          "group": "secondary",
+          "icon": "RotateCw",
+          "order": 1
+        },
+        {
+          "id": "btn_import_wo",
+          "roleRequired": [
+            "super_admin",
+            "dispatch"
+          ],
+          "icon": "FileSpreadsheet",
+          "group": "primary",
+          "visible": true,
+          "label": "Import WO",
+          "order": 2
+        },
+        {
+          "order": 3,
+          "id": "btn_export",
+          "icon": "Download",
+          "visible": true,
+          "group": "secondary",
+          "label": "Export Data"
+        },
+        {
+          "id": "btn_view_presets",
+          "order": 4,
+          "icon": "LayoutGrid",
+          "visible": true,
+          "group": "secondary",
+          "label": "View Presets"
+        },
+        {
+          "order": 5,
+          "visible": true,
+          "icon": "SlidersHorizontal",
+          "id": "btn_table_settings",
+          "label": "Customize Table",
+          "group": "secondary"
+        },
+        {
+          "order": 6,
+          "group": "more_menu",
+          "icon": "Archive",
+          "id": "btn_archive_toggle",
+          "label": "Archived Tickets",
+          "visible": true
+        },
+        {
+          "visible": true,
+          "order": 7,
+          "icon": "UserCheck",
+          "label": "Bulk Assign",
+          "id": "btn_bulk_assign",
+          "group": "more_menu",
+          "roleRequired": [
+            "super_admin",
+            "dispatch",
+            "leader"
+          ]
+        }
+      ]
+    },
+    "ticketDetail": {
+      "showEmptyFields": false,
+      "sections": [
+        {
+          "visible": true,
+          "id": "customer_info",
+          "order": 1,
+          "title": "Customer Information",
+          "fields": [
+            {
+              "order": 1,
+              "width": "half",
+              "key": "customerName",
+              "visible": true,
+              "label": "Customer Name"
+            },
+            {
+              "isReadOnly": true,
+              "label": "Customer ID",
+              "width": "half",
+              "key": "idCustomer",
+              "visible": true,
+              "order": 2
+            },
+            {
+              "visible": true,
+              "order": 3,
+              "label": "Phone Number",
+              "key": "customerPhone",
+              "width": "half"
+            },
+            {
+              "order": 4,
+              "key": "area",
+              "visible": true,
+              "width": "half",
+              "label": "Service Area"
+            },
+            {
+              "width": "half",
+              "visible": true,
+              "key": "clusterName",
+              "label": "Cluster / Complex",
+              "order": 5
+            },
+            {
+              "width": "full",
+              "label": "Primary Address",
+              "visible": true,
+              "order": 6,
+              "key": "streetName"
+            },
+            {
+              "key": "streetAlternatif",
+              "order": 7,
+              "visible": true,
+              "width": "full",
+              "label": "Alternative Address / Landmark"
+            }
+          ]
+        },
+        {
+          "fields": [
+            {
+              "label": "WO Number",
+              "key": "woNumber",
+              "visible": true,
+              "width": "half",
+              "order": 1,
+              "isReadOnly": true
+            },
+            {
+              "width": "half",
+              "key": "ticketCategory",
+              "label": "Category / Service",
+              "order": 2,
+              "visible": true
+            },
+            {
+              "key": "slotTime",
+              "order": 3,
+              "label": "Scheduled Slot Time",
+              "visible": true,
+              "width": "half"
+            },
+            {
+              "label": "Appointment Date",
+              "key": "date",
+              "width": "half",
+              "visible": true,
+              "order": 4
+            },
+            {
+              "order": 5,
+              "label": "Ticket Reference",
+              "key": "ticketNumber",
+              "visible": true,
+              "width": "half"
+            },
+            {
+              "width": "half",
+              "label": "Import Source File",
+              "key": "fileName",
+              "order": 6,
+              "visible": true
+            }
+          ],
+          "visible": true,
+          "id": "work_order_info",
+          "order": 2,
+          "title": "Work Order Information"
+        },
+        {
+          "id": "location_technical",
+          "fields": [
+            {
+              "visible": true,
+              "order": 1,
+              "label": "FDT Code",
+              "width": "half",
+              "key": "fdtCode"
+            },
+            {
+              "visible": true,
+              "order": 2,
+              "key": "fatCode",
+              "label": "FAT Code",
+              "width": "half"
+            },
+            {
+              "key": "agentId",
+              "width": "half",
+              "visible": true,
+              "label": "Originating Agent ID",
+              "order": 3
+            },
+            {
+              "order": 4,
+              "key": "dateUpload",
+              "visible": true,
+              "width": "half",
+              "label": "Upload Date"
+            }
+          ],
+          "order": 3,
+          "title": "Location & Technical Information",
+          "visible": true
+        },
+        {
+          "fields": [
+            {
+              "order": 1,
+              "key": "contactorName",
+              "label": "Contractor Vendor",
+              "visible": true,
+              "width": "third"
+            },
+            {
+              "order": 2,
+              "key": "leaderName",
+              "visible": true,
+              "width": "third",
+              "label": "Assigned Leader / Korlap"
+            },
+            {
+              "visible": true,
+              "order": 3,
+              "label": "Assigned Installer / Teknisi",
+              "key": "installerName",
+              "width": "third"
+            }
+          ],
+          "visible": true,
+          "order": 4,
+          "title": "Dispatch & Personnel Assignment",
+          "id": "dispatch_assignment"
+        },
+        {
+          "fields": [
+            {
+              "visible": true,
+              "order": 1,
+              "key": "statusWOAgent",
+              "label": "Agent Status",
+              "width": "half"
+            },
+            {
+              "width": "half",
+              "visible": true,
+              "label": "Installer Field Status",
+              "order": 2,
+              "key": "statusWOInstaller"
+            },
+            {
+              "order": 3,
+              "key": "remarksAgent",
+              "width": "full",
+              "visible": true,
+              "label": "Agent Dispatch Notes"
+            },
+            {
+              "visible": true,
+              "order": 4,
+              "key": "remarksWOInstaller",
+              "label": "Installer Field Remarks",
+              "width": "full"
+            }
+          ],
+          "id": "status_reports",
+          "title": "Status & Execution Reports",
+          "visible": true,
+          "order": 5
+        },
+        {
+          "fields": [
+            {
+              "label": "Confirmation Status",
+              "width": "half",
+              "key": "statusWhatsApp",
+              "isReadOnly": true,
+              "visible": true,
+              "order": 1
+            },
+            {
+              "width": "half",
+              "isReadOnly": true,
+              "label": "Last Opened in WhatsApp",
+              "visible": true,
+              "key": "waLastOpenedAt",
+              "order": 2
+            },
+            {
+              "order": 3,
+              "width": "half",
+              "isReadOnly": true,
+              "visible": true,
+              "key": "waConfirmedAt",
+              "label": "Confirmed At"
+            },
+            {
+              "order": 4,
+              "key": "waConfirmedBy",
+              "visible": true,
+              "width": "half",
+              "label": "Confirmed By Officer",
+              "isReadOnly": true
+            },
+            {
+              "order": 5,
+              "key": "waConfirmationNotes",
+              "visible": true,
+              "label": "Customer Confirmation Notes",
+              "width": "full"
+            }
+          ],
+          "visible": true,
+          "id": "whatsapp_confirmation",
+          "title": "WhatsApp Customer Confirmation",
+          "order": 6
+        }
+      ]
+    },
+    "pageLayouts": {
+      "importWO": {
+        "showInstructions": true
+      },
+      "dashboard": {
+        "sectionOrder": [
+          "kpi_cards",
+          "quick_actions",
+          "contractor_distribution",
+          "recent_wos"
+        ],
+        "columns": 4
+      },
+      "detail": {
+        "layout": "two_column"
+      },
+      "tickets": {
+        "filterPosition": "top",
+        "layout": "table"
+      }
+    },
+    "device": {
+      "mode": "auto",
+      "android": {
+        "layoutType": "cards",
+        "touchTargetSize": "comfortable",
+        "showBottomNavigation": true,
+        "cardDensity": "comfortable",
+        "showQuickCall": true,
+        "showQuickWhatsApp": true,
+        "showQuickDetail": true,
+        "highContrastBadges": true,
+        "autoCloseSidebarOnNavigate": true
+      },
+      "pc": {
+        "tableDensity": "compact",
+        "stickyColumns": true,
+        "wideScreenFullWidth": true,
+        "showInlineFilters": true,
+        "showBulkToolbar": true,
+        "actionButtonsLayout": "inline_icons",
+        "multiColumnDetail": true
+      }
+    },
+    "navigationSettings": {
+      "categoryModes": {},
+      "defaultMode": "static",
+      "allowMultipleOpenGroups": true,
+      "roleModes": {
+        "it_support": "accordion",
+        "dispatch": "accordion",
+        "installer": "static",
+        "leader": "static",
+        "super_admin": "static",
+        "management_data": "accordion"
+      },
+      "categories": {
+        "contractor&area": {
+          "accordionEnabled": true
+        },
+        "menutambahan": {
+          "accordionEnabled": true
+        },
+        "taskInstaller": {
+          "accordionEnabled": true
+        },
+        "task_installer": {
+          "accordionEnabled": true
+        },
+        "pelanggan": {
+          "accordionEnabled": true
+        },
+        "operasional": {
+          "accordionEnabled": true
+        },
+        "setup": {
+          "accordionEnabled": false
+        },
+        "laporan": {
+          "accordionEnabled": true
+        },
+        "dashboard": {
+          "accordionEnabled": false
+        },
+        "woContractor": {
+          "accordionEnabled": false
+        }
+      }
+    },
+    "updatedByRole": "super_admin"
+  },
   "sessionConfig": {
     "sessionMaxDurationHours": 8,
     "idleTimeoutMinutes": 60,
@@ -643,18 +2789,420 @@
     "revokeOnPasswordChange": true
   },
   "operationalDateOverride": "2026-10-28",
+  "attachments": [],
   "sessions": [
     {
-      "sessionId": "sess-test-1793889453513",
-      "userId": "u-test-deact-1793889453513",
-      "username": "test_tech",
-      "name": "Test Technician",
-      "token": "tok-test-deact",
+      "sessionId": "sess_1793893517866_c4df6a9b495d",
+      "token": "7574572d4e23cc8b717902a221d0c0ef374033d2ff38718107c21d880c41a3d6",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "sessionVersion": 1,
+      "loginAt": "2026-11-05T15:45:17.866Z",
+      "lastActivityAt": "2026-11-05T15:45:17.866Z",
+      "expiresAt": "2026-11-05T23:45:17.866Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806461902_baacac610a35",
+      "token": "897501a60db4fb67827c559f7c673d03f3aa65e7213e59e4b4b643dc1d751bbb",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T15:34:21.902Z",
+      "lastActivityAt": "2026-11-04T15:34:21.914Z",
+      "expiresAt": "2026-11-04T23:34:21.902Z",
+      "status": "revoked",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806443157_85eadd71b035",
+      "token": "d0655cd71debf6208a3031c08384508328f485c9f637aab14c08fa96ba4919cf",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T15:34:03.157Z",
+      "lastActivityAt": "2026-11-04T15:34:03.171Z",
+      "expiresAt": "2026-11-04T23:34:03.157Z",
+      "status": "revoked",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806432814_4ce3b3108b10",
+      "token": "5b458ec30fb2fd1e49ff937a46aea957fefacfbbb7c61a0292ac67028bc2c363",
+      "userId": "u-installer-1",
+      "username": "installer1",
+      "name": "Andi Saputra",
       "role": "installer",
-      "loginAt": "2026-11-05T14:37:33.513Z",
-      "lastActivityAt": "2026-11-05T14:37:33.513Z",
-      "expiresAt": "2026-11-05T15:37:33.513Z",
-      "status": "revoked"
+      "contractor": "PT Mitra Jaringan Solusi",
+      "loginAt": "2026-11-04T15:33:52.814Z",
+      "lastActivityAt": "2026-11-04T15:33:52.855Z",
+      "expiresAt": "2026-11-04T23:33:52.813Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806432801_d3bb9fe6656d",
+      "token": "2e1745fe9b596d52d4023479714da5f2bf1d544712d4568eb8598fbb6c0015a9",
+      "userId": "u-leader-1",
+      "username": "leadermjs",
+      "name": "Hendra Gunawan (Leader MJS)",
+      "role": "leader",
+      "contractor": "PT Mitra Jaringan Solusi",
+      "loginAt": "2026-11-04T15:33:52.801Z",
+      "lastActivityAt": "2026-11-04T15:33:52.849Z",
+      "expiresAt": "2026-11-04T23:33:52.801Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806432786_fed08c661aaa",
+      "token": "e8267996e876c0dd0741490ad276e506f5977cced7fa763c7979c6d74ebd2d7e",
+      "userId": "u-dispatch-1",
+      "username": "dispatch",
+      "name": "Siti Rahma (Dispatcher)",
+      "role": "dispatch",
+      "loginAt": "2026-11-04T15:33:52.785Z",
+      "lastActivityAt": "2026-11-04T15:33:52.843Z",
+      "expiresAt": "2026-11-04T23:33:52.785Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806432777_5ad46bce82e1",
+      "token": "d2d9a0674e7e6ab0d373dd2037a124771457ed7c201a31249aaa3939450d0625",
+      "userId": "u-mgmt",
+      "username": "datamgmt",
+      "name": "Staff Management Data",
+      "role": "management_data",
+      "loginAt": "2026-11-04T15:33:52.777Z",
+      "lastActivityAt": "2026-11-04T15:33:52.920Z",
+      "expiresAt": "2026-11-04T23:33:52.777Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806432769_03069b39964a",
+      "token": "2bb22d379ddd48fc0b47bae2744271cbd27508fc5ccc5c42ec1ed360bb53b641",
+      "userId": "u-itsupport-1",
+      "username": "itsupport",
+      "name": "Fajar Pratama (IT Support)",
+      "role": "it_support",
+      "loginAt": "2026-11-04T15:33:52.769Z",
+      "lastActivityAt": "2026-11-04T15:33:52.864Z",
+      "expiresAt": "2026-11-04T23:33:52.769Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793806432754_5912e20d4b38",
+      "token": "2c22e79acbb7b3efcdc5addd04c5c24c99344229f96efe51db639d1159b4c673",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T15:33:52.754Z",
+      "lastActivityAt": "2026-11-04T15:33:52.924Z",
+      "expiresAt": "2026-11-04T23:33:52.753Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793805848280_38e644c711f6",
+      "token": "5f7127b2149e039ea7c474666bc319dac526aba2e0ae9eddc30b014736ed7aa7",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T15:24:08.279Z",
+      "lastActivityAt": "2026-11-04T15:24:08.279Z",
+      "expiresAt": "2026-11-04T23:24:08.279Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
+      "deviceType": "mobile"
+    },
+    {
+      "sessionId": "sess_1793804218512_51e27b22fa40",
+      "token": "9a6b491d4909685e949f0c303337d9196cbe04c980d15e6da736d87784189586",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T14:56:58.512Z",
+      "lastActivityAt": "2026-11-04T14:56:58.538Z",
+      "expiresAt": "2026-11-04T22:56:58.512Z",
+      "status": "revoked",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793798617147_4fbc14b0e365",
+      "token": "1762efd8d47ad29e33019a4b62095b47d8cc9ba1595c313b151d1574157ed872",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T13:23:37.147Z",
+      "lastActivityAt": "2026-11-04T13:23:37.168Z",
+      "expiresAt": "2026-11-04T21:23:37.147Z",
+      "status": "revoked",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793796773168_fb9e9a2af82c",
+      "token": "5c93cfd2699966c1e62263022e19059dfcf45aaee7ad6ae72d1c945034421905",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T12:52:53.168Z",
+      "lastActivityAt": "2026-11-04T12:52:53.187Z",
+      "expiresAt": "2026-11-04T20:52:53.168Z",
+      "status": "revoked",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793796452501_c63a5ba8f4ec",
+      "token": "f2d1c9dbb41fe22bc815d980daaef56c8e7fd64301257e78d4aad816319d38f9",
+      "userId": "u-ray",
+      "username": "ray",
+      "name": "Ray (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-04T12:47:32.501Z",
+      "lastActivityAt": "2026-11-04T12:48:07.441Z",
+      "expiresAt": "2026-11-04T20:47:32.501Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
+      "deviceType": "mobile"
+    },
+    {
+      "sessionId": "sess_1793743619534_2873c9b61f44",
+      "token": "ed17471181887ba452d4ff01bbd46bc5b7cd27d8f12c70fef81976f6264aebd5",
+      "userId": "u-installer-1",
+      "username": "installer1",
+      "name": "Andi Saputra",
+      "role": "installer",
+      "contractor": "PT Mitra Jaringan Solusi",
+      "loginAt": "2026-11-03T22:06:59.534Z",
+      "lastActivityAt": "2026-11-03T22:06:59.574Z",
+      "expiresAt": "2026-11-04T06:06:59.534Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Web Browser",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793743619531_3ae484365f23",
+      "token": "55a23927de8aaa5198547203f502e3cd59471e66f5da9c11193a110fd06b82fa",
+      "userId": "u-leader-1",
+      "username": "leadermjs",
+      "name": "Hendra Gunawan (Leader MJS)",
+      "role": "leader",
+      "contractor": "PT Mitra Jaringan Solusi",
+      "loginAt": "2026-11-03T22:06:59.531Z",
+      "lastActivityAt": "2026-11-03T22:06:59.569Z",
+      "expiresAt": "2026-11-04T06:06:59.531Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Web Browser",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793743619527_95ad26a0ce02",
+      "token": "09477f37f542219295c8218277bd95e368c984b3860a1565733081a67edb460a",
+      "userId": "u-dispatch-1",
+      "username": "dispatch",
+      "name": "Siti Rahma (Dispatcher)",
+      "role": "dispatch",
+      "loginAt": "2026-11-03T22:06:59.527Z",
+      "lastActivityAt": "2026-11-03T22:06:59.564Z",
+      "expiresAt": "2026-11-04T06:06:59.527Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Web Browser",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793743619521_025fa6bd23e8",
+      "token": "b7a7aff0b09748da3462fd13acc1b421d4073ee73c83cabe3d3040ca5ad29077",
+      "userId": "u-mgmt",
+      "username": "datamgmt",
+      "name": "Staff Management Data",
+      "role": "management_data",
+      "loginAt": "2026-11-03T22:06:59.521Z",
+      "lastActivityAt": "2026-11-03T22:06:59.554Z",
+      "expiresAt": "2026-11-04T06:06:59.521Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Web Browser",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793743619510_5a8275849b66",
+      "token": "0a97285ae4e27e1bdfebe5b938cc88f4d0c2fd3798ab384df90b4b1e47121e71",
+      "userId": "u-ray",
+      "username": "ray",
+      "name": "Ray (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-03T22:06:59.510Z",
+      "lastActivityAt": "2026-11-03T22:06:59.539Z",
+      "expiresAt": "2026-11-04T06:06:59.510Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Web Browser",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793743524401_8a3bcdfbf0fa",
+      "token": "619c81603556b8079301a47fc6b0ef3c9a8b4e6fdaeb62e5ec7a3c9a76bbf5ce",
+      "userId": "u-ray",
+      "username": "ray",
+      "name": "Ray (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-03T22:05:24.401Z",
+      "lastActivityAt": "2026-11-03T22:06:38.630Z",
+      "expiresAt": "2026-11-04T06:05:24.401Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
+      "deviceType": "mobile"
+    },
+    {
+      "sessionId": "sess_1793743468226_ab34711f045c",
+      "token": "b6c62488be27a203657ef75ba7390ad5f0b43fe89f35bfdc49cadf439849e4ce",
+      "userId": "u-installer-1",
+      "username": "installer1",
+      "name": "Andi Saputra",
+      "role": "installer",
+      "contractor": "PT Mitra Jaringan Solusi",
+      "loginAt": "2026-11-03T22:04:28.226Z",
+      "lastActivityAt": "2026-11-03T22:04:28.287Z",
+      "expiresAt": "2026-11-04T06:04:28.226Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793743468222_0677b725d907",
+      "token": "2756862efb9a9626dc5b3d9fe3f7fd7dd45d5de1cfd14ed4476ae017d6703372",
+      "userId": "u-leader-1",
+      "username": "leadermjs",
+      "name": "Hendra Gunawan (Leader MJS)",
+      "role": "leader",
+      "contractor": "PT Mitra Jaringan Solusi",
+      "loginAt": "2026-11-03T22:04:28.222Z",
+      "lastActivityAt": "2026-11-03T22:04:28.282Z",
+      "expiresAt": "2026-11-04T06:04:28.222Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793743468218_fa7943a3f708",
+      "token": "19e3a83bf5f42d1a19730d8aea01771887b2246a90c3eb89ac95b501c08041aa",
+      "userId": "u-dispatch-1",
+      "username": "dispatch",
+      "name": "Siti Rahma (Dispatcher)",
+      "role": "dispatch",
+      "loginAt": "2026-11-03T22:04:28.218Z",
+      "lastActivityAt": "2026-11-03T22:04:28.276Z",
+      "expiresAt": "2026-11-04T06:04:28.218Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793743468212_f2421017cfcf",
+      "token": "264f6edae407c4bbe59b4cb5ebf999469b6765888d83e7730c237f995e589de9",
+      "userId": "u-mgmt",
+      "username": "datamgmt",
+      "name": "Staff Management Data",
+      "role": "management_data",
+      "loginAt": "2026-11-03T22:04:28.212Z",
+      "lastActivityAt": "2026-11-03T22:04:28.257Z",
+      "expiresAt": "2026-11-04T06:04:28.212Z",
+      "status": "active",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793743468195_2e39ddfb64c5",
+      "token": "e983268d8f3fcc626be2ace25a5f88f9a6a7c7216fece6fe73326d22a7c286c4",
+      "userId": "u-ray",
+      "username": "ray",
+      "name": "Ray (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-11-03T22:04:28.195Z",
+      "lastActivityAt": "2026-11-03T22:04:28.295Z",
+      "expiresAt": "2026-11-04T06:04:28.195Z",
+      "status": "revoked",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "node",
+      "deviceType": "desktop"
+    },
+    {
+      "sessionId": "sess_1793742780692_bdeb4c1c8a4a",
+      "token": "c2fb2f5bec52c5921b8ebc727a911c8676fb3d04875c8db5d4e2c75facd3a2cb",
+      "userId": "u-mgmt",
+      "username": "datamgmt",
+      "name": "Staff Management Data",
+      "role": "management_data",
+      "loginAt": "2026-11-03T21:53:00.692Z",
+      "lastActivityAt": "2026-11-03T22:05:03.294Z",
+      "expiresAt": "2026-11-04T05:53:00.692Z",
+      "status": "revoked",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
+      "deviceType": "mobile"
+    },
+    {
+      "sessionId": "sess_1793205910911_1205qj",
+      "token": "mora_u-1_1793205910911_cicjpr",
+      "userId": "u-1",
+      "username": "superadmin",
+      "name": "Alamsyah (Super Admin)",
+      "role": "super_admin",
+      "loginAt": "2026-10-28T16:45:10.911Z",
+      "lastActivityAt": "2026-10-28T16:45:10.911Z",
+      "expiresAt": "2026-10-29T00:45:10.911Z",
+      "status": "revoked",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "deviceType": "desktop"
     }
-  ]
+  ],
+  "storageMetadata": []
 }

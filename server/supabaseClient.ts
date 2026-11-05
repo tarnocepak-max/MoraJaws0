@@ -61,32 +61,6 @@ let lastCheckStatus: SupabaseHealthResult = {
 };
 
 /**
- * Checks whether Supabase credentials are configured and validated for server backend.
- */
-export function isSupabaseConfigured(): boolean {
-  const url = process.env.SUPABASE_URL?.trim();
-  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)?.trim();
-  return Boolean(url && key && isValidSupabaseUrl(url) && isValidSupabaseSecretKey(key));
-}
-
-/**
- * Checks whether local JSON mode is explicitly permitted as development/testing fallback.
- * Strictly prohibited in production.
- * Strictly prohibited if Supabase credentials are configured (Fail-Closed).
- * In development/testing, ONLY permitted if ALLOW_LOCAL_JSON_MODE === 'true'.
- * Default is strictly false (no automatic fallback).
- */
-export function isLocalJsonModeAllowed(): boolean {
-  if (process.env.NODE_ENV === 'production') {
-    return false;
-  }
-  if (isSupabaseConfigured()) {
-    return false;
-  }
-  return process.env.ALLOW_LOCAL_JSON_MODE === 'true';
-}
-
-/**
  * Safely decodes a JWT payload without external libraries.
  * Does not expose or leak token contents.
  */
@@ -440,33 +414,3 @@ export async function checkSupabaseConnection(): Promise<SupabaseHealthResult> {
 export function getLastSupabaseHealthStatus(): SupabaseHealthResult {
   return lastCheckStatus;
 }
-
-export type NormalizedConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'CHECKING';
-
-export function getNormalizedSupabaseStatus(): NormalizedConnectionStatus {
-  if (lastCheckStatus.status === 'connected') {
-    return 'CONNECTED';
-  }
-  if (lastCheckStatus.status === 'disconnected') {
-    return 'DISCONNECTED';
-  }
-  if (lastCheckStatus.status === 'not_configured' || lastCheckStatus.status === 'error' || lastCheckStatus.status === 'schema_not_initialized') {
-    return 'ERROR';
-  }
-  return 'CHECKING';
-}
-
-/**
- * Reset client instance for testing only.
- */
-export function resetSupabaseClientInstanceForTesting(): void {
-  supabaseInstance = null;
-  lastCheckStatus = {
-    status: 'not_configured',
-    urlConfigured: false,
-    serviceRoleConfigured: false,
-    anonKeyConfigured: false,
-    message: 'Reset for testing.'
-  };
-}
-

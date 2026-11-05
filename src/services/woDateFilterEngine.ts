@@ -127,7 +127,7 @@ export function getTicketWODate(ticket: unknown): string | null {
 
   const t = ticket as Record<string, unknown>;
 
-  // Strict priority order of legitimate Appointment Date candidates (strictly excludes generic date)
+  // Strict priority order of legitimate Appointment Date candidates
   const candidates = [
     t.appointmentDate,
     t.scheduleAppointment,
@@ -135,7 +135,8 @@ export function getTicketWODate(ticket: unknown): string | null {
     t.scheduleDate,
     t.scheduledDate,
     t.appointment_date,
-    t.schedule_date
+    t.schedule_date,
+    t.date
   ];
 
   for (const candidate of candidates) {
