@@ -549,24 +549,64 @@
   "assignmentHistory": [],
   "auditLogs": [
     {
-      "id": "log_1793885854939_5294",
-      "action": "Unit Test Verification Audit",
+      "id": "log_1793889453514_bbfz",
+      "action": "Integrity Audit Check",
       "entity": "auth",
-      "entityId": "u-audit-test",
-      "details": "Audit log verification entry",
+      "entityId": "u-audit-ev-1793889453514",
+      "details": "Audit logging invocation test",
       "performedBy": "Auditor",
       "userRole": "super_admin",
-      "timestamp": "2026-11-05T13:37:34.939Z"
+      "timestamp": "2026-11-05T14:37:33.514Z"
     },
     {
-      "id": "log_1793885854938_damc",
+      "id": "log_1793889453497_r3e2",
       "action": "Access Denied (WO Deletion Restricted to Management Data)",
       "entity": "rbac",
       "entityId": "/api/tickets/1",
-      "details": "User Dispatcher (dispatch) ditolak menghapus WO. Sesuai Konstitusi Keamanan, fitur Hapus WO dibatasi KHUSUS role Management Data.",
-      "performedBy": "Dispatcher",
+      "details": "User User-it_support (it_support) ditolak menghapus WO. Sesuai Konstitusi Keamanan, fitur Hapus WO dibatasi KHUSUS role Management Data.",
+      "performedBy": "User-it_support",
+      "userRole": "it_support",
+      "timestamp": "2026-11-05T14:37:33.497Z"
+    },
+    {
+      "id": "log_1793889453497_ytmh",
+      "action": "Access Denied (WO Deletion Restricted to Management Data)",
+      "entity": "rbac",
+      "entityId": "/api/tickets/1",
+      "details": "User User-installer (installer) ditolak menghapus WO. Sesuai Konstitusi Keamanan, fitur Hapus WO dibatasi KHUSUS role Management Data.",
+      "performedBy": "User-installer",
+      "userRole": "installer",
+      "timestamp": "2026-11-05T14:37:33.497Z"
+    },
+    {
+      "id": "log_1793889453497_lstq",
+      "action": "Access Denied (WO Deletion Restricted to Management Data)",
+      "entity": "rbac",
+      "entityId": "/api/tickets/1",
+      "details": "User User-leader (leader) ditolak menghapus WO. Sesuai Konstitusi Keamanan, fitur Hapus WO dibatasi KHUSUS role Management Data.",
+      "performedBy": "User-leader",
+      "userRole": "leader",
+      "timestamp": "2026-11-05T14:37:33.497Z"
+    },
+    {
+      "id": "log_1793889453496_gam1",
+      "action": "Access Denied (WO Deletion Restricted to Management Data)",
+      "entity": "rbac",
+      "entityId": "/api/tickets/1",
+      "details": "User User-super_admin (super_admin) ditolak menghapus WO. Sesuai Konstitusi Keamanan, fitur Hapus WO dibatasi KHUSUS role Management Data.",
+      "performedBy": "User-super_admin",
+      "userRole": "super_admin",
+      "timestamp": "2026-11-05T14:37:33.496Z"
+    },
+    {
+      "id": "log_1793889453496_6y55",
+      "action": "Access Denied (WO Deletion Restricted to Management Data)",
+      "entity": "rbac",
+      "entityId": "/api/tickets/1",
+      "details": "User User-dispatch (dispatch) ditolak menghapus WO. Sesuai Konstitusi Keamanan, fitur Hapus WO dibatasi KHUSUS role Management Data.",
+      "performedBy": "User-dispatch",
       "userRole": "dispatch",
-      "timestamp": "2026-11-05T13:37:34.938Z"
+      "timestamp": "2026-11-05T14:37:33.496Z"
     },
     {
       "id": "log_init",
@@ -576,7 +616,7 @@
       "details": "MoraJaws Central Persistent Storage Engine initialized with robust RBAC & synchronization",
       "performedBy": "System",
       "userRole": "super_admin",
-      "timestamp": "2026-11-05T13:37:34.641Z"
+      "timestamp": "2026-11-05T14:37:33.390Z"
     }
   ],
   "syncHistory": [],
@@ -605,15 +645,15 @@
   "operationalDateOverride": "2026-10-28",
   "sessions": [
     {
-      "sessionId": "sess-test-revoke",
-      "userId": "u-target-test",
-      "username": "target_installer",
-      "name": "Target Installer",
-      "token": "tok-test",
+      "sessionId": "sess-test-1793889453513",
+      "userId": "u-test-deact-1793889453513",
+      "username": "test_tech",
+      "name": "Test Technician",
+      "token": "tok-test-deact",
       "role": "installer",
-      "loginAt": "2026-11-05T13:37:34.939Z",
-      "lastActivityAt": "2026-11-05T13:37:34.939Z",
-      "expiresAt": "2026-11-05T14:37:34.939Z",
+      "loginAt": "2026-11-05T14:37:33.513Z",
+      "lastActivityAt": "2026-11-05T14:37:33.513Z",
+      "expiresAt": "2026-11-05T15:37:33.513Z",
       "status": "revoked"
     }
   ]

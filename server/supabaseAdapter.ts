@@ -243,6 +243,7 @@ export function userToPostgresRow(user: ServerUser): Record<string, any> {
 
   const payload = {
     ...existingPayload,
+    sessionVersion: user.sessionVersion || 1,
     passwordHash: user.passwordHash || null
   };
 
@@ -285,6 +286,7 @@ export function userToPostgresRow(user: ServerUser): Record<string, any> {
 export function postgresRowToUser(row: any): ServerUser {
   const payload = row.payload && typeof row.payload === 'object' ? row.payload : {};
   const passwordHash = row.password_hash || payload.passwordHash || '';
+  const sessionVersion = typeof row.session_version === 'number' ? row.session_version : (Number(payload.sessionVersion) || 1);
 
   return {
     id: row.id,
@@ -299,6 +301,8 @@ export function postgresRowToUser(row: any): ServerUser {
     area: row.area || undefined,
     active: row.active !== false,
     passwordHash,
+    sessionVersion,
+    payload,
     permissions: Array.isArray(row.permissions) ? row.permissions : [],
     lastLoginAt: row.last_login_at || undefined,
     loginCount: typeof row.login_count === 'number' ? row.login_count : 0,
@@ -970,11 +974,13 @@ export async function updateUserInSupabase(id: string, updates: Partial<ServerUs
     if (updates.loginCount !== undefined) updateRow.login_count = updates.loginCount;
     if (updates.firebaseUid !== undefined) updateRow.firebase_uid = updates.firebaseUid || null;
 
-    if (updates.passwordHash !== undefined) {
+    if (updates.sessionVersion !== undefined || updates.passwordHash !== undefined || (updates as any).payload !== undefined) {
       const prevPayload = existing.payload && typeof existing.payload === 'object' ? existing.payload : {};
       updateRow.payload = {
         ...prevPayload,
-        passwordHash: updates.passwordHash || null
+        ...((updates as any).payload || {}),
+        ...(updates.passwordHash !== undefined ? { passwordHash: updates.passwordHash || null } : {}),
+        ...(updates.sessionVersion !== undefined ? { sessionVersion: updates.sessionVersion } : {})
       };
     }
 
