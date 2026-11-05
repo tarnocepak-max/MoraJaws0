@@ -1227,6 +1227,21 @@ export async function getWorkOrderByWoNumberFromSupabase(woNumber: string): Prom
 }
 
 /**
+ * Fetches a single Work Order by ID or WO Number from Supabase.
+ */
+export async function getWorkOrderByIdOrWoNumberFromSupabase(identifier: string): Promise<SupabaseOpResult<any | null>> {
+  if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
+    return { success: false, error: { code: 'INVALID_ID', message: 'ID atau Nomor WO wajib diisi.' } };
+  }
+  const clean = identifier.trim();
+  const byId = await getWorkOrderByIdFromSupabase(clean);
+  if (byId.success && byId.data) {
+    return byId;
+  }
+  return await getWorkOrderByWoNumberFromSupabase(clean);
+}
+
+/**
  * Inserts a single Work Order into Supabase.
  */
 export async function insertWorkOrderToSupabase(ticket: any): Promise<SupabaseOpResult<any>> {
@@ -1278,11 +1293,6 @@ export async function insertWorkOrderToSupabase(ticket: any): Promise<SupabaseOp
  * - Safely merges payload and additional_fields without overwriting untouched data.
  */
 export async function updateWorkOrderInSupabase(id: string, updates: Record<string, any>): Promise<SupabaseOpResult<any>> {
-  const client = getSupabaseBackendClient();
-  if (!client) {
-    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
-  }
-
   if (!id || typeof id !== 'string' || !id.trim()) {
     return { success: false, error: { code: 'INVALID_ID', message: 'ID Work Order wajib diisi.' } };
   }
@@ -1301,6 +1311,11 @@ export async function updateWorkOrderInSupabase(id: string, updates: Record<stri
         message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang diubah atau dihapus.'
       }
     };
+  }
+
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
   }
 
   try {
@@ -3292,6 +3307,8 @@ export interface ReassignTicketOptions {
   previousInstallerName?: string | null;
   newInstallerName?: string;
   installerName?: string;
+  installerId?: string;
+  newInstallerId?: string;
   reason: string;
   contractorName?: string | null;
   performedBy: string;
@@ -3316,11 +3333,6 @@ export interface ConsistentAssignmentResult {
 export async function assignTicketInSupabase(
   options: AssignTicketOptions
 ): Promise<SupabaseOpResult<ConsistentAssignmentResult>> {
-  const client = getSupabaseBackendClient();
-  if (!client) {
-    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.', isUnavailable: true } };
-  }
-
   const {
     workOrderIdOrWoNumber,
     ticketIdOrWoNumber,
@@ -3354,6 +3366,11 @@ export async function assignTicketInSupabase(
         message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang dimutasi.'
       }
     };
+  }
+
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.', isUnavailable: true } };
   }
 
   // 1. Fetch current WO from Supabase
@@ -3455,13 +3472,39 @@ export async function assignTicketInSupabase(
   if (!histRes.success) {
     // COMPENSATING ROLLBACK: Revert the Work Order update immediately
     const rollbackRes = await updateWorkOrderInSupabase(targetWO.id, originalState);
-    console.error(`[Compensating Rollback] WO update reverted for ${targetWO.id} due to history insert failure: ${histRes.error?.message}. Rollback success: ${rollbackRes.success}`);
+    if (!rollbackRes.success) {
+      console.error(`[CRITICAL PARTIAL FAILURE] WO ${targetWO.id} (${targetWO.woNumber}) assignment update succeeded, but assignment history failed AND compensating rollback failed! Rollback error: ${rollbackRes.error?.message}`);
+      return {
+        success: false,
+        error: {
+          code: 'ASSIGNMENT_PARTIAL_FAILURE_INCONSISTENT',
+          message: `Gagal menyimpan riwayat penugasan ke database Supabase dan pembatalan (rollback) juga gagal. Work Order ${targetWO.woNumber} berada dalam status inkonsisten (partial failure) dan memerlukan investigasi administrator.`,
+          details: {
+            historyError: histRes.error,
+            rollbackSucceeded: false,
+            rollbackError: rollbackRes.error,
+            partialFailure: true,
+            workOrderId: targetWO.id,
+            woNumber: targetWO.woNumber
+          },
+          isUnavailable: histRes.error?.isUnavailable || rollbackRes.error?.isUnavailable
+        }
+      };
+    }
+
+    console.warn(`[Compensating Rollback] WO update reverted for ${targetWO.id} due to history insert failure: ${histRes.error?.message}. Rollback succeeded.`);
     return {
       success: false,
       error: {
         code: 'ASSIGNMENT_HISTORY_FAILED',
-        message: 'Gagal menyimpan riwayat penugasan ke database Supabase. Perubahan Work Order telah dibatalkan secara kompensatoris.',
-        details: { historyError: histRes.error, rollbackSucceeded: rollbackRes.success },
+        message: 'Gagal menyimpan riwayat penugasan ke database Supabase. Perubahan Work Order telah berhasil dibatalkan secara kompensatoris.',
+        details: {
+          historyError: histRes.error,
+          rollbackSucceeded: true,
+          partialFailure: false,
+          workOrderId: targetWO.id,
+          woNumber: targetWO.woNumber
+        },
         isUnavailable: histRes.error?.isUnavailable
       }
     };
@@ -3486,11 +3529,6 @@ export async function assignTicketInSupabase(
 export async function reassignTicketInSupabase(
   options: ReassignTicketOptions
 ): Promise<SupabaseOpResult<ConsistentAssignmentResult>> {
-  const client = getSupabaseBackendClient();
-  if (!client) {
-    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.', isUnavailable: true } };
-  }
-
   const {
     workOrderIdOrWoNumber,
     previousInstallerName,
@@ -3526,6 +3564,11 @@ export async function reassignTicketInSupabase(
         message: 'Tiga WO produksi yang telah di-soft-delete dilindungi secara mutlak dan dilarang dimutasi.'
       }
     };
+  }
+
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.', isUnavailable: true } };
   }
 
   // 1. Fetch current WO from Supabase
@@ -3627,13 +3670,39 @@ export async function reassignTicketInSupabase(
   if (!histRes.success) {
     // COMPENSATING ROLLBACK: Revert the Work Order update immediately
     const rollbackRes = await updateWorkOrderInSupabase(targetTicket.id, originalState);
-    console.error(`[Compensating Rollback] Reassign update reverted for ${targetTicket.id} due to history failure: ${histRes.error?.message}. Rollback success: ${rollbackRes.success}`);
+    if (!rollbackRes.success) {
+      console.error(`[CRITICAL PARTIAL FAILURE] WO ${targetTicket.id} (${targetTicket.woNumber}) reassign update succeeded, but assignment history failed AND compensating rollback failed! Rollback error: ${rollbackRes.error?.message}`);
+      return {
+        success: false,
+        error: {
+          code: 'REASSIGN_PARTIAL_FAILURE_INCONSISTENT',
+          message: `Gagal menyimpan riwayat penugasan ke database Supabase dan pembatalan (rollback) juga gagal. Work Order ${targetTicket.woNumber} berada dalam status inkonsisten (partial failure) dan memerlukan rekonsiliasi manual.`,
+          details: {
+            historyError: histRes.error,
+            rollbackSucceeded: false,
+            rollbackError: rollbackRes.error,
+            partialFailure: true,
+            workOrderId: targetTicket.id,
+            woNumber: targetTicket.woNumber
+          },
+          isUnavailable: histRes.error?.isUnavailable || rollbackRes.error?.isUnavailable
+        }
+      };
+    }
+
+    console.warn(`[Compensating Rollback] Reassign update reverted for ${targetTicket.id} due to history failure: ${histRes.error?.message}. Rollback succeeded.`);
     return {
       success: false,
       error: {
         code: 'REASSIGN_HISTORY_FAILED',
-        message: 'Gagal menyimpan riwayat penugasan ke database authoritative Supabase. Perubahan Work Order telah dibatalkan secara kompensatoris.',
-        details: { historyError: histRes.error, rollbackSucceeded: rollbackRes.success },
+        message: 'Gagal menyimpan riwayat penugasan ke database authoritative Supabase. Perubahan Work Order telah berhasil dibatalkan secara kompensatoris.',
+        details: {
+          historyError: histRes.error,
+          rollbackSucceeded: true,
+          partialFailure: false,
+          workOrderId: targetTicket.id,
+          woNumber: targetTicket.woNumber
+        },
         isUnavailable: histRes.error?.isUnavailable
       }
     };

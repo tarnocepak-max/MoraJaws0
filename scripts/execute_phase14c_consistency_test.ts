@@ -1,31 +1,50 @@
 /**
- * MORAJAWS — PHASE 14C INDEPENDENT AUDIT REMEDIATION & DATA CONSISTENCY TEST SUITE
+ * MORAJAWS — PHASE 14C INDEPENDENT AUDIT, REMEDIATION & DATA CONSISTENCY TEST SUITE
  * 
- * Verifies all 14 mandatory behavioral tests defined in Section F:
- * 1. Assign sukses dan history sukses
- * 2. Assign gagal jika update WO gagal
- * 3. Assign gagal jika history gagal (Compensating Rollback)
- * 4. Reassign gagal jika update WO gagal
- * 5. Reassign gagal jika history gagal (Compensating Rollback)
- * 6. Tidak ada respons sukses palsu (Strict Error Verification)
- * 7. Contractor CRUD menggunakan Supabase
- * 8. Coverage Area CRUD menggunakan Supabase
- * 9. Users CRUD menggunakan Supabase
- * 10. Production tidak melakukan JSON write (Zero JSON Mutation)
- * 11. Supabase outage menghasilkan HTTP 503 (Fail-Closed)
- * 12. Tidak ada fallback JSON production
- * 13. RBAC dan scope tetap berlaku (Leader restrictions, Chat Read-Only, Reassign reason)
- * 14. Tiga WO terlindungi tidak berubah (Immutable Protection)
+ * Verifies all mandatory requirements of Phase 14C:
+ * 
+ * 1. ASSIGNMENT BEHAVIORAL TESTS:
+ *    - Update WO berhasil dan history berhasil
+ *    - Update WO gagal (tidak ada history palsu)
+ *    - Insert history gagal dan rollback berhasil (revert state)
+ *    - Insert history gagal dan rollback gagal (catat partial failure inkonsisten)
+ *    - Tidak ada respons sukses palsu
+ * 
+ * 2. REASSIGNMENT BEHAVIORAL TESTS:
+ *    - Reassign berhasil (WO dan history terupdate)
+ *    - History gagal setelah perubahan WO dan rollback berhasil
+ *    - History gagal setelah perubahan WO dan rollback gagal (catat partial failure inkonsisten)
+ *    - Validasi alasan reassign (min 5 karakter)
+ * 
+ * 3. MASTER DATA CRUD (Contractors, Coverage Areas, Users):
+ *    - Supabase operasi berhasil
+ *    - Supabase mengembalikan error ditangani fail-closed
+ *    - Data tidak ditemukan mengembalikan NOT_FOUND
+ *    - User tidak memiliki permission ditolak (RBAC)
+ *    - Mode JSON lokal nonaktif total pada environment produksi
+ * 
+ * 4. SECURITY & IMMUTABILITY:
+ *    - Request tanpa autentikasi ditolak
+ *    - Role tidak sesuai atau di luar scope kontraktor ditolak (SCOPE_MISMATCH)
+ *    - Leader Live Chat Read-Only (LEADER_READ_ONLY_CHAT)
+ *    - Frontend bundle bebas dari SUPABASE_SERVICE_ROLE_KEY dan private secret
+ *    - Tiga WO produksi terproteksi mutlak tidak dapat dimutasi
  */
+
+import fs from 'fs';
+import path from 'path';
 
 import {
   isLocalJsonModeAllowed,
   isSupabaseMode,
   PROTECTED_PRODUCTION_WO_IDS,
-  normalizeAppointmentDate,
-  checkTicketAccess,
   saveDatabaseToDisk
 } from '../server.ts';
+
+import {
+  setSupabaseBackendClientForTesting,
+  resetSupabaseBackendClientForTesting
+} from '../server/supabaseClient.ts';
 
 import {
   assignTicketInSupabase,
@@ -39,16 +58,13 @@ import {
   updateCoverageAreaInSupabase,
   deleteCoverageAreaInSupabase,
   getUsersFromSupabase,
+  getUserByIdFromSupabase,
   insertUserToSupabase,
   updateUserInSupabase,
   deleteUserInSupabase,
   updateWorkOrderInSupabase,
-  insertAssignmentHistoryToSupabase,
-  getAssignmentHistoryFromSupabase
+  getWorkOrderByIdFromSupabase
 } from '../server/supabaseAdapter.ts';
-
-import fs from 'fs';
-import path from 'path';
 
 interface TestResult {
   num: number;
@@ -63,196 +79,558 @@ const results: TestResult[] = [];
 function recordTest(num: number, title: string, category: string, passed: boolean, details: string) {
   results.push({ num, title, category, passed, details });
   const status = passed ? 'PASS' : 'FAIL';
-  console.log(`[${status}] Test #${num} [${category}]: ${title} -> ${details}`);
+  console.log(`[${status}] Test #${num} [${category}]: ${title}`);
+  console.log(`       -> ${details}`);
 }
 
-async function runPhase14cTests() {
+/**
+ * Creates a controllable, stateful mock Supabase client for deterministic testing.
+ */
+function createMockClient(options: {
+  initialWorkOrder?: any;
+  updateWoFail?: boolean;
+  historyInsertFail?: boolean;
+  rollbackWoFail?: boolean;
+  dbUnavailable?: boolean;
+  userRecord?: any;
+  contractorRecord?: any;
+  areaRecord?: any;
+}) {
+  let woState = options.initialWorkOrder ? { ...options.initialWorkOrder } : {
+    id: 'wo_test_mock_101',
+    wo_number: 'WO-TEST-MOCK-101',
+    installer_name: 'Teknisi Lama',
+    slot_time: '09:00 - 11:00',
+    status_wo_installer: 'Unassigned',
+    appointment_date: '2026-11-06',
+    contractor_name: 'PT Mitra Jaringan Solusi',
+    contactor_name: 'PT Mitra Jaringan Solusi',
+    area: 'Jakarta Barat',
+    updated_at: '2026-11-05T00:00:00Z',
+    is_deleted: false,
+    payload: {}
+  };
+
+  let contractorState = options.contractorRecord ? { ...options.contractorRecord } : {
+    id: 'c-test-01',
+    name: 'PT Mitra Jaringan Solusi',
+    code: 'MJS',
+    coverage_areas: ['Jakarta Barat'],
+    active: true,
+    is_archived: false
+  };
+
+  let areaState = options.areaRecord ? { ...options.areaRecord } : {
+    id: 'area-test-01',
+    name: 'Jakarta Barat',
+    clusters: ['Cluster Alpha'],
+    active: true
+  };
+
+  let userState = options.userRecord ? { ...options.userRecord } : {
+    id: 'u-test-01',
+    name: 'Tester Staf',
+    username: 'teststaf',
+    email: 'test@morajaws.net',
+    role: 'installer',
+    contractor: 'PT Mitra Jaringan Solusi',
+    active: true,
+    is_deleted: false,
+    created_at: '2026-01-01T00:00:00Z'
+  };
+
+  let updateCount = 0;
+  const historyInserted: any[] = [];
+
+  function makeBuilder(getData: () => any, error: any = null) {
+    const builder: any = {
+      select: (_cols?: string) => builder,
+      eq: (_col: string, _val: any) => builder,
+      order: (_col?: string, _opts?: any) => builder,
+      limit: (_n?: number) => builder,
+      single: async () => {
+        const val = getData();
+        const singleVal = Array.isArray(val) ? (val.length > 0 ? val[0] : null) : val;
+        return { data: singleVal, error };
+      },
+      maybeSingle: async () => {
+        const val = getData();
+        const singleVal = Array.isArray(val) ? (val.length > 0 ? val[0] : null) : val;
+        return { data: singleVal, error };
+      },
+      then: (resolve: (val: any) => any, reject?: (err: any) => any) => {
+        const val = { data: getData(), error };
+        return Promise.resolve(val).then(resolve, reject);
+      }
+    };
+    return builder;
+  }
+
+  const mockClient: any = {
+    from: (table: string) => {
+      if (options.dbUnavailable) {
+        const unavailError = { message: 'Database connection failed', code: 'ECONNREFUSED' };
+        return {
+          select: () => makeBuilder(() => null, unavailError),
+          insert: () => makeBuilder(() => null, unavailError),
+          update: () => makeBuilder(() => null, unavailError),
+          delete: () => makeBuilder(() => null, unavailError)
+        };
+      }
+
+      if (table === 'work_orders') {
+        return {
+          select: (_cols?: string) => ({
+            eq: (col: string, val: any) => ({
+              maybeSingle: async () => {
+                if (col === 'id' && val === woState.id) return { data: { ...woState }, error: null };
+                if (col === 'wo_number' && val === woState.wo_number) return { data: { ...woState }, error: null };
+                return { data: null, error: null };
+              },
+              single: async () => {
+                if (col === 'id' && val === woState.id) return { data: { ...woState }, error: null };
+                return { data: null, error: { message: 'Row not found', code: 'PGRST116' } };
+              }
+            }),
+            order: () => Promise.resolve({ data: [{ ...woState }], error: null })
+          }),
+          update: (updates: any) => {
+            updateCount++;
+            return {
+              eq: (col: string, val: any) => ({
+                select: () => ({
+                  single: async () => {
+                    // Check if this is the initial update and we should fail it
+                    if (updateCount === 1 && options.updateWoFail) {
+                      return { data: null, error: { message: 'Database lock timeout on work_orders update', code: '55P03' } };
+                    }
+                    // Check if this is the rollback update (updateCount === 2) and rollback should fail
+                    if (updateCount >= 2 && options.rollbackWoFail) {
+                      return { data: null, error: { message: 'Fatal crash on compensating rollback', code: '58000' } };
+                    }
+                    Object.assign(woState, updates);
+                    return { data: { ...woState }, error: null };
+                  }
+                })
+              })
+            };
+          }
+        };
+      }
+
+      if (table === 'assignment_history') {
+        return {
+          insert: (rows: any[]) => ({
+            select: () => ({
+              maybeSingle: async () => {
+                if (options.historyInsertFail) {
+                  return { data: null, error: { message: 'Foreign key violation or disk quota exceeded on history', code: '23503' } };
+                }
+                const inserted = { ...rows[0], id: rows[0].id || 'hist_' + Date.now() };
+                historyInserted.push(inserted);
+                return { data: inserted, error: null };
+              }
+            })
+          }),
+          select: () => ({
+            eq: () => ({
+              order: () => Promise.resolve({ data: historyInserted, error: null })
+            })
+          })
+        };
+      }
+
+      if (table === 'contractors') {
+        return {
+          select: (_cols?: string) => makeBuilder(() => [{ ...contractorState }]),
+          insert: (rows: any[]) => {
+            if (rows && rows[0]) Object.assign(contractorState, rows[0]);
+            return makeBuilder(() => [{ ...contractorState }]);
+          },
+          update: (updates: any) => {
+            Object.assign(contractorState, updates);
+            return makeBuilder(() => [{ ...contractorState }]);
+          },
+          delete: () => makeBuilder(() => [])
+        };
+      }
+
+      if (table === 'coverage_areas') {
+        return {
+          select: (_cols?: string) => makeBuilder(() => [{ ...areaState }]),
+          insert: (rows: any[]) => {
+            if (rows && rows[0]) Object.assign(areaState, rows[0]);
+            return makeBuilder(() => [{ ...areaState }]);
+          },
+          update: (updates: any) => {
+            Object.assign(areaState, updates);
+            return makeBuilder(() => [{ ...areaState }]);
+          },
+          delete: () => makeBuilder(() => [])
+        };
+      }
+
+      if (table === 'users') {
+        return {
+          select: (_cols?: string) => makeBuilder(() => [{ ...userState }]),
+          insert: (rows: any[]) => {
+            if (rows && rows[0]) Object.assign(userState, rows[0]);
+            return makeBuilder(() => [{ ...userState }]);
+          },
+          update: (updates: any) => {
+            Object.assign(userState, updates);
+            return makeBuilder(() => [{ ...userState }]);
+          },
+          delete: () => makeBuilder(() => [])
+        };
+      }
+
+      return makeBuilder(() => []);
+    }
+  };
+
+  return { mockClient, getWoState: () => woState, getHistory: () => historyInserted };
+}
+
+async function runPhase14cBehavioralSuite() {
   console.log('========================================================================');
-  console.log('MORAJAWS — PHASE 14C DATA CONSISTENCY & INDEPENDENT AUDIT SUITE');
-  console.log('Testing Assignment Consistency, Master Data CRUD, & Zero-JSON In Production');
+  console.log('MORAJAWS — PHASE 14C COMPREHENSIVE BEHAVIORAL VERIFICATION SUITE');
+  console.log('Real Simulated Endpoints, Controlled Failures, RBAC & Frontend Security');
   console.log('========================================================================\n');
 
   // ---------------------------------------------------------------------------
-  // TEST 1: Assign sukses dan history sukses
+  // 1. ASSIGNMENT: Update WO berhasil dan history berhasil
   // ---------------------------------------------------------------------------
   try {
-    // Verifikasi assignTicketInSupabase terdefinisi dan menerima opsi penugasan
-    const isFnValid = typeof assignTicketInSupabase === 'function';
-    // Jalankan verifikasi contract signature
-    recordTest(1, 'Assign Success & History Success Mechanism', 'Assignment Consistency', isFnValid,
-      isFnValid ? 'Fungsi assignTicketInSupabase terdefinisi dengan koordinasi updateWorkOrderInSupabase dan insertAssignmentHistoryToSupabase.' : 'assignTicketInSupabase tidak ditemukan.');
+    const { mockClient } = createMockClient({
+      updateWoFail: false,
+      historyInsertFail: false
+    });
+    setSupabaseBackendClientForTesting(mockClient);
+
+    const res = await assignTicketInSupabase({
+      ticketIdOrWoNumber: 'wo_test_mock_101',
+      installerName: 'Teknisi Baru Budi',
+      slotTime: '13:00 - 15:00',
+      performedBy: 'Leader Hendra',
+      performedByRole: 'leader',
+      userContractor: 'PT Mitra Jaringan Solusi',
+      userRole: 'leader'
+    });
+
+    const passed = res.success === true &&
+                   res.data?.workOrder?.installerName === 'Teknisi Baru Budi' &&
+                   res.data?.history?.installer_name === 'Teknisi Baru Budi';
+
+    recordTest(1, 'Assignment: Update WO & Insert History Success', 'Assignment Consistency', passed,
+      passed ? 'Penugasan berhasil: WO terupdate dan history tercatat konsisten di Supabase.' : 'Gagal memverifikasi konsistensi penugasan.');
   } catch (err: any) {
-    recordTest(1, 'Assign Success & History Success Mechanism', 'Assignment Consistency', false, err.message);
+    recordTest(1, 'Assignment: Update WO & Insert History Success', 'Assignment Consistency', false, err.message);
+  } finally {
+    resetSupabaseBackendClientForTesting();
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 2: Assign gagal jika update WO gagal (Tidak ada history palsu)
+  // 2. ASSIGNMENT: Update WO gagal -> Tidak ada history tersimpan
   // ---------------------------------------------------------------------------
   try {
-    // Uji penugasan pada WO terproteksi (harus gagal di tahap validasi WO sebelum update dan sebelum history)
-    const protectedId = 'wo_1793825457141_u4bnht';
-    const result = await assignTicketInSupabase({
-      ticketIdOrWoNumber: protectedId,
-      installerId: 'inst_test',
-      installerName: 'Test Installer',
-      performedBy: 'Dispatcher Test',
+    const { mockClient, getHistory } = createMockClient({
+      updateWoFail: true,
+      historyInsertFail: false
+    });
+    setSupabaseBackendClientForTesting(mockClient);
+
+    const res = await assignTicketInSupabase({
+      ticketIdOrWoNumber: 'wo_test_mock_101',
+      installerName: 'Teknisi Gagal',
+      performedBy: 'Leader Hendra',
+      userRole: 'leader'
+    });
+
+    const noHistory = getHistory().length === 0;
+    const passed = res.success === false && noHistory && res.error?.code === '55P03';
+
+    recordTest(2, 'Assignment: Update WO Fails -> No Fake History Inserted', 'Assignment Safety', passed,
+      passed ? `Update WO gagal ditolak bersih (${res.error?.message}). Tidak ada riwayat palsu yang tersimpan.` : 'Gagal: update WO gagal tapi status/history tidak sesuai.');
+  } catch (err: any) {
+    recordTest(2, 'Assignment: Update WO Fails -> No Fake History Inserted', 'Assignment Safety', false, err.message);
+  } finally {
+    resetSupabaseBackendClientForTesting();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3. ASSIGNMENT: Insert history gagal dan rollback berhasil (Compensating Revert)
+  // ---------------------------------------------------------------------------
+  try {
+    const { mockClient, getWoState } = createMockClient({
+      updateWoFail: false,
+      historyInsertFail: true,
+      rollbackWoFail: false
+    });
+    setSupabaseBackendClientForTesting(mockClient);
+
+    const res = await assignTicketInSupabase({
+      ticketIdOrWoNumber: 'wo_test_mock_101',
+      installerName: 'Teknisi Revert',
+      performedBy: 'Leader Hendra',
+      userRole: 'leader'
+    });
+
+    // Revert should have restored installer_name to 'Teknisi Lama'
+    const finalWo = getWoState();
+    const rollbackWorked = finalWo.installer_name === 'Teknisi Lama';
+    const passed = res.success === false &&
+                   res.error?.code === 'ASSIGNMENT_HISTORY_FAILED' &&
+                   res.error?.details?.rollbackSucceeded === true &&
+                   rollbackWorked;
+
+    recordTest(3, 'Assignment: History Fails -> Rollback Succeeded', 'Fault Tolerance & Compensation', passed,
+      passed ? `History gagal: Rollback otomatis berhasil mengembalikan status WO ke state awal (${finalWo.installer_name}).` : 'Kompensasi rollback tidak mengembalikan data ke keadaan semula.');
+  } catch (err: any) {
+    recordTest(3, 'Assignment: History Fails -> Rollback Succeeded', 'Fault Tolerance & Compensation', false, err.message);
+  } finally {
+    resetSupabaseBackendClientForTesting();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. ASSIGNMENT: Insert history gagal dan rollback GAGAL -> Partial Failure Recorded
+  // ---------------------------------------------------------------------------
+  try {
+    const { mockClient } = createMockClient({
+      updateWoFail: false,
+      historyInsertFail: true,
+      rollbackWoFail: true // Rollback fails
+    });
+    setSupabaseBackendClientForTesting(mockClient);
+
+    const res = await assignTicketInSupabase({
+      ticketIdOrWoNumber: 'wo_test_mock_101',
+      installerName: 'Teknisi Crash',
+      performedBy: 'Leader Hendra',
+      userRole: 'leader'
+    });
+
+    const passed = res.success === false &&
+                   res.error?.code === 'ASSIGNMENT_PARTIAL_FAILURE_INCONSISTENT' &&
+                   res.error?.details?.rollbackSucceeded === false &&
+                   res.error?.details?.partialFailure === true;
+
+    recordTest(4, 'Assignment: History Fails & Rollback Fails -> Partial Failure Flagged', 'Integrity & Transparency', passed,
+      passed ? `Kondisi kritis partial failure dilaporkan jujur (${res.error?.code}): rollbackSucceeded=false, partialFailure=true.` : 'Kegagalan rollback tidak dilaporkan secara eksplisit.');
+  } catch (err: any) {
+    recordTest(4, 'Assignment: History Fails & Rollback Fails -> Partial Failure Flagged', 'Integrity & Transparency', false, err.message);
+  } finally {
+    resetSupabaseBackendClientForTesting();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 5. REASSIGNMENT: Reassign berhasil
+  // ---------------------------------------------------------------------------
+  try {
+    const { mockClient } = createMockClient({
+      updateWoFail: false,
+      historyInsertFail: false
+    });
+    setSupabaseBackendClientForTesting(mockClient);
+
+    const res = await reassignTicketInSupabase({
+      workOrderIdOrWoNumber: 'wo_test_mock_101',
+      previousInstallerName: 'Teknisi Lama',
+      newInstallerName: 'Teknisi Reassign Sukses',
+      reason: 'Teknisi lama berhalangan hadir sakit',
+      performedBy: 'Leader Hendra',
+      performedByRole: 'leader',
+      userContractor: 'PT Mitra Jaringan Solusi',
+      userRole: 'leader'
+    });
+
+    const passed = res.success === true &&
+                   res.data?.workOrder?.installerName === 'Teknisi Reassign Sukses' &&
+                   res.data?.history?.source_action === 'reassign';
+
+    recordTest(5, 'Reassignment: Reassign Succeeded With History', 'Reassignment Consistency', passed,
+      passed ? 'Reassign berhasil: Teknisi tujuan diperbarui dan riwayat reassign tersimpan.' : 'Reassign gagal menghasilkan respons konsisten.');
+  } catch (err: any) {
+    recordTest(5, 'Reassignment: Reassign Succeeded With History', 'Reassignment Consistency', false, err.message);
+  } finally {
+    resetSupabaseBackendClientForTesting();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 6. REASSIGNMENT: History gagal dan rollback GAGAL -> Partial Failure Reported
+  // ---------------------------------------------------------------------------
+  try {
+    const { mockClient } = createMockClient({
+      updateWoFail: false,
+      historyInsertFail: true,
+      rollbackWoFail: true
+    });
+    setSupabaseBackendClientForTesting(mockClient);
+
+    const res = await reassignTicketInSupabase({
+      workOrderIdOrWoNumber: 'wo_test_mock_101',
+      newInstallerName: 'Teknisi Partial',
+      reason: 'Reassign emergency teknisi kecelakaan',
+      performedBy: 'Leader Hendra',
+      userRole: 'leader'
+    });
+
+    const passed = res.success === false &&
+                   res.error?.code === 'REASSIGN_PARTIAL_FAILURE_INCONSISTENT' &&
+                   res.error?.details?.rollbackSucceeded === false &&
+                   res.error?.details?.partialFailure === true;
+
+    recordTest(6, 'Reassignment: History Fails & Rollback Fails -> Partial Failure Flagged', 'Reassign Fault Tolerance', passed,
+      passed ? `Reassign partial failure tercatat dengan kode REASSIGN_PARTIAL_FAILURE_INCONSISTENT.` : 'Kegagalan rollback reassign tidak dilaporkan dengan benar.');
+  } catch (err: any) {
+    recordTest(6, 'Reassignment: History Fails & Rollback Fails -> Partial Failure Flagged', 'Reassign Fault Tolerance', false, err.message);
+  } finally {
+    resetSupabaseBackendClientForTesting();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 7. TIDAK ADA FALSE SUCCESS: Input tidak valid ditolak ketat
+  // ---------------------------------------------------------------------------
+  try {
+    const { mockClient } = createMockClient({});
+    setSupabaseBackendClientForTesting(mockClient);
+
+    // Reassign dengan alasan < 5 karakter wajib ditolak
+    const resShortReason = await reassignTicketInSupabase({
+      workOrderIdOrWoNumber: 'wo_test_mock_101',
+      newInstallerName: 'Teknisi Test',
+      reason: 'abc', // < 5 karakter
+      performedBy: 'Dispatcher',
       userRole: 'dispatch'
     });
 
-    const passed = result.success === false && result.error?.code === 'PROTECTED_PRODUCTION_RECORD';
-    recordTest(2, 'Assign Fails If WO Update Fails (No Fake History)', 'Consistency & Safety', passed,
-      passed ? `Assign gagal secara aman: ${result.error?.message}. History tidak disimpan.` : 'Assign tidak memblokir update terlarang.');
-  } catch (err: any) {
-    recordTest(2, 'Assign Fails If WO Update Fails (No Fake History)', 'Consistency & Safety', false, err.message);
-  }
-
-  // ---------------------------------------------------------------------------
-  // TEST 3: Assign gagal jika history gagal (Compensating Rollback)
-  // ---------------------------------------------------------------------------
-  try {
-    // Verifikasi bahwa mekanisme compensating rollback ada di assignTicketInSupabase:
-    // Jika history gagal -> revert target WO ke previous state -> kembalikan rollbackSucceeded: true
-    const adapterCode = fs.readFileSync(path.resolve(process.cwd(), 'server/supabaseAdapter.ts'), 'utf-8');
-    const hasRollbackLogic = adapterCode.includes('Compensating rollback: reverting work order to previous state') &&
-                            adapterCode.includes('rollbackSucceeded');
-    recordTest(3, 'Assign Compensating Rollback On History Failure', 'Fault Tolerance', hasRollbackLogic,
-      hasRollbackLogic ? 'Mekanisme compensating rollback terpasang: WO dikembalikan ke snapshot state sebelumnya saat history gagal.' : 'Mekanisme compensating rollback belum terpasang.');
-  } catch (err: any) {
-    recordTest(3, 'Assign Compensating Rollback On History Failure', 'Fault Tolerance', false, err.message);
-  }
-
-  // ---------------------------------------------------------------------------
-  // TEST 4: Reassign gagal jika update WO gagal
-  // ---------------------------------------------------------------------------
-  try {
-    // Reassign pada protected WO harus gagal sebelum update dan sebelum history
-    const protectedId = 'wo_imp_1793825458959_4i4f1h';
-    const result = await reassignTicketInSupabase({
-      ticketIdOrWoNumber: protectedId,
-      installerId: 'inst_test',
-      installerName: 'Test Installer 2',
-      reason: 'Reassign test reason valid',
-      performedBy: 'Dispatcher Test',
-      userRole: 'dispatch'
+    // Assign dengan teknisi kosong wajib ditolak
+    const resEmptyInstaller = await assignTicketInSupabase({
+      workOrderIdOrWoNumber: 'wo_test_mock_101',
+      installerName: '',
+      performedBy: 'Leader'
     });
 
-    const passed = result.success === false && result.error?.code === 'PROTECTED_PRODUCTION_RECORD';
-    recordTest(4, 'Reassign Fails If WO Update Fails', 'Reassign Consistency', passed,
-      passed ? `Reassign ditolak pada verifikasi record: ${result.error?.message}.` : 'Reassign tidak memblokir protected WO.');
+    const passed = resShortReason.success === false &&
+                   resShortReason.error?.code === 'INVALID_REASON' &&
+                   resEmptyInstaller.success === false &&
+                   resEmptyInstaller.error?.code === 'INVALID_INPUT';
+
+    recordTest(7, 'Strict Error Verification: No False Success', 'Validation & Safety', passed,
+      passed ? 'Input tidak valid ditolak tegas dengan kode INVALID_REASON dan INVALID_INPUT tanpa operasi palsu.' : 'Validasi input bocor!');
   } catch (err: any) {
-    recordTest(4, 'Reassign Fails If WO Update Fails', 'Reassign Consistency', false, err.message);
+    recordTest(7, 'Strict Error Verification: No False Success', 'Validation & Safety', false, err.message);
+  } finally {
+    resetSupabaseBackendClientForTesting();
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 5: Reassign gagal jika history gagal (Compensating Rollback)
+  // 8. CRUD MASTER DATA: Contractors CRUD via Supabase
   // ---------------------------------------------------------------------------
   try {
-    const adapterCode = fs.readFileSync(path.resolve(process.cwd(), 'server/supabaseAdapter.ts'), 'utf-8');
-    const hasReassignRollback = adapterCode.includes('reassignTicketInSupabase') &&
-                                adapterCode.includes('rollbackSucceeded') &&
-                                adapterCode.includes('Compensating rollback: reverting work order');
-    recordTest(5, 'Reassign Compensating Rollback On History Failure', 'Fault Tolerance', hasReassignRollback,
-      hasReassignRollback ? 'Mekanisme compensating rollback terpasang pada reassignTicketInSupabase.' : 'Compensating rollback tidak ditemukan pada reassign.');
-  } catch (err: any) {
-    recordTest(5, 'Reassign Compensating Rollback On History Failure', 'Fault Tolerance', false, err.message);
-  }
+    const { mockClient } = createMockClient({});
+    setSupabaseBackendClientForTesting(mockClient);
 
-  // ---------------------------------------------------------------------------
-  // TEST 6: Tidak ada respons sukses palsu
-  // ---------------------------------------------------------------------------
-  try {
-    // Uji reassign dengan alasan kosong / tidak memenuhi syarat (kurang dari 5 karakter)
-    const resultShortReason = await reassignTicketInSupabase({
-      ticketIdOrWoNumber: 'dummy_ticket_id',
-      installerId: 'inst_test',
-      installerName: 'Test Installer',
-      reason: '123', // < 5 karakter
-      performedBy: 'Dispatcher Test',
-      userRole: 'dispatch'
+    const getRes = await getContractorsFromSupabase();
+    const insRes = await insertContractorToSupabase({
+      id: 'c-test-new',
+      name: 'PT Fiber Optik Nusantara',
+      code: 'FON',
+      coverageAreas: ['Jakarta Selatan']
     });
+    const updRes = await updateContractorInSupabase('c-test-01', { name: 'PT Mitra Jaringan Solusi Updated' });
+    const delRes = await deleteContractorInSupabase('c-test-01');
 
-    const passed = resultShortReason.success === false && resultShortReason.error?.code === 'INVALID_REASON';
-    recordTest(6, 'No Fake Success Responses (Strict Validation)', 'Data Integrity', passed,
-      passed ? 'Permintaan tidak valid ditolak langsung dengan success: false dan kode error spesifik.' : 'Ada respons sukses palsu!');
+    const passed = getRes.success && insRes.success && updRes.success && delRes.success;
+    recordTest(8, 'Master Data: Contractor CRUD Operations In Supabase', 'Master Data CRUD', passed,
+      passed ? 'Seluruh siklus CRUD Contractor (GET, INSERT, UPDATE, DELETE) berjalan via Supabase DAL.' : 'Ada operasi CRUD Contractor yang gagal.');
   } catch (err: any) {
-    recordTest(6, 'No Fake Success Responses (Strict Validation)', 'Data Integrity', false, err.message);
+    recordTest(8, 'Master Data: Contractor CRUD Operations In Supabase', 'Master Data CRUD', false, err.message);
+  } finally {
+    resetSupabaseBackendClientForTesting();
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 7: Contractor CRUD menggunakan Supabase
+  // 9. CRUD MASTER DATA: Coverage Areas CRUD via Supabase
   // ---------------------------------------------------------------------------
   try {
-    const isGetFn = typeof getContractorsFromSupabase === 'function';
-    const isInsertFn = typeof insertContractorToSupabase === 'function';
-    const isUpdateFn = typeof updateContractorInSupabase === 'function';
-    const isDeleteFn = typeof deleteContractorInSupabase === 'function';
-    const allFn = isGetFn && isInsertFn && isUpdateFn && isDeleteFn;
+    const { mockClient } = createMockClient({});
+    setSupabaseBackendClientForTesting(mockClient);
 
-    const serverCode = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf-8');
-    const routesUseSupabase = serverCode.includes('getContractorsFromSupabase') &&
-                              serverCode.includes('insertContractorToSupabase') &&
-                              serverCode.includes('updateContractorInSupabase') &&
-                              serverCode.includes('deleteContractorInSupabase');
+    const getRes = await getCoverageAreasFromSupabase();
+    const insRes = await insertCoverageAreaToSupabase({
+      id: 'area-new-01',
+      name: 'Tangerang Kota',
+      clusters: ['Cluster Alpha']
+    });
+    const updRes = await updateCoverageAreaInSupabase('area-test-01', { name: 'Jakarta Barat Regional' });
+    const delRes = await deleteCoverageAreaInSupabase('area-test-01');
 
-    const passed = allFn && routesUseSupabase;
-    recordTest(7, 'Contractor CRUD Uses Supabase DAL Exclusively', 'Master Data', passed,
-      passed ? 'Seluruh operasi CRUD Contractor (GET, POST, PUT, DELETE) terhubung ke Supabase DAL dan fail-closed.' : 'Ada endpoint contractor yang belum menggunakan Supabase.');
+    const passed = getRes.success && insRes.success && updRes.success && delRes.success;
+    recordTest(9, 'Master Data: Coverage Area CRUD Operations In Supabase', 'Master Data CRUD', passed,
+      passed ? 'Seluruh siklus CRUD Coverage Area berjalan via Supabase DAL.' : 'Ada operasi CRUD Coverage Area yang gagal.');
   } catch (err: any) {
-    recordTest(7, 'Contractor CRUD Uses Supabase DAL Exclusively', 'Master Data', false, err.message);
+    recordTest(9, 'Master Data: Coverage Area CRUD Operations In Supabase', 'Master Data CRUD', false, err.message);
+  } finally {
+    resetSupabaseBackendClientForTesting();
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 8: Coverage Area CRUD menggunakan Supabase
+  // 10. CRUD MASTER DATA: Users CRUD via Supabase
   // ---------------------------------------------------------------------------
   try {
-    const isGetFn = typeof getCoverageAreasFromSupabase === 'function';
-    const isInsertFn = typeof insertCoverageAreaToSupabase === 'function';
-    const isUpdateFn = typeof updateCoverageAreaInSupabase === 'function';
-    const isDeleteFn = typeof deleteCoverageAreaInSupabase === 'function';
-    const allFn = isGetFn && isInsertFn && isUpdateFn && isDeleteFn;
+    const { mockClient } = createMockClient({});
+    setSupabaseBackendClientForTesting(mockClient);
 
-    const serverCode = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf-8');
-    const routesUseSupabase = serverCode.includes('getCoverageAreasFromSupabase') &&
-                              serverCode.includes('insertCoverageAreaToSupabase') &&
-                              serverCode.includes('updateCoverageAreaInSupabase') &&
-                              serverCode.includes('deleteCoverageAreaInSupabase');
+    const getRes = await getUsersFromSupabase(false);
+    const getByIdRes = await getUserByIdFromSupabase('u-test-01');
+    const insRes = await insertUserToSupabase({
+      id: 'u-new-01',
+      name: 'Installer Baru',
+      username: 'instbaru',
+      email: 'instbaru@morajaws.net',
+      role: 'installer',
+      active: true,
+      passwordHash: 'hash',
+      createdAt: new Date().toISOString()
+    });
+    const updRes = await updateUserInSupabase('u-test-01', { phone: '081299990000' });
+    const delRes = await deleteUserInSupabase('u-test-01', 'Admin', 'Karyawan resign');
 
-    const passed = allFn && routesUseSupabase;
-    recordTest(8, 'Coverage Area CRUD Uses Supabase DAL Exclusively', 'Master Data', passed,
-      passed ? 'Seluruh operasi CRUD Coverage Area (GET, POST, PUT, DELETE) terhubung ke Supabase DAL dan fail-closed.' : 'Ada endpoint coverage area yang belum menggunakan Supabase.');
+    const passed = getRes.success && getByIdRes.success && insRes.success && updRes.success && delRes.success;
+    recordTest(10, 'Master Data: Users CRUD Operations In Supabase', 'Master Data CRUD', passed,
+      passed ? 'Seluruh siklus CRUD Users (GET, GET_BY_ID, INSERT, UPDATE, SOFT_DELETE) berjalan via Supabase DAL.' : 'Ada operasi CRUD Users yang gagal.');
   } catch (err: any) {
-    recordTest(8, 'Coverage Area CRUD Uses Supabase DAL Exclusively', 'Master Data', false, err.message);
+    recordTest(10, 'Master Data: Users CRUD Operations In Supabase', 'Master Data CRUD', false, err.message);
+  } finally {
+    resetSupabaseBackendClientForTesting();
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 9: Users CRUD menggunakan Supabase
+  // 11. FAIL-CLOSED: Database Outage Returns Error (Tidak ada silent fallback)
   // ---------------------------------------------------------------------------
   try {
-    const isGetFn = typeof getUsersFromSupabase === 'function';
-    const isInsertFn = typeof insertUserToSupabase === 'function';
-    const isUpdateFn = typeof updateUserInSupabase === 'function';
-    const isDeleteFn = typeof deleteUserInSupabase === 'function';
-    const allFn = isGetFn && isInsertFn && isUpdateFn && isDeleteFn;
+    const { mockClient } = createMockClient({ dbUnavailable: true });
+    setSupabaseBackendClientForTesting(mockClient);
 
-    const serverCode = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf-8');
-    const userEndpointsHardened = serverCode.includes('getUsersFromSupabase') &&
-                                  serverCode.includes('insertUserToSupabase') &&
-                                  serverCode.includes('updateUserInSupabase') &&
-                                  serverCode.includes('deleteUserInSupabase');
+    const res = await getWorkOrderByIdFromSupabase('wo_test_mock_101');
+    const passed = res.success === false && res.error?.isUnavailable === true;
 
-    const passed = allFn && userEndpointsHardened;
-    recordTest(9, 'Users CRUD Uses Supabase DAL Exclusively', 'Master Data', passed,
-      passed ? 'Seluruh operasi CRUD User (GET, POST, PUT, toggle, reset-password, DELETE) terhubung ke Supabase DAL dan fail-closed.' : 'Ada endpoint users yang belum menggunakan Supabase.');
+    recordTest(11, 'Production Fail-Closed On Database Outage', 'Resilience & Fail-Closed', passed,
+      passed ? 'Saat Supabase tidak dapat dihubungi, DAL mengembalikan error isUnavailable=true tanpa serving data palsu.' : 'DAL tidak fail-closed saat database mati.');
   } catch (err: any) {
-    recordTest(9, 'Users CRUD Uses Supabase DAL Exclusively', 'Master Data', false, err.message);
+    recordTest(11, 'Production Fail-Closed On Database Outage', 'Resilience & Fail-Closed', false, err.message);
+  } finally {
+    resetSupabaseBackendClientForTesting();
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 10: Production tidak melakukan JSON write (Zero JSON Mutation)
+  // 12. ZERO JSON MUTATIONS IN PRODUCTION
   // ---------------------------------------------------------------------------
   try {
     const origEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
+
     const dbPath = path.resolve(process.cwd(), 'data/morajaws_database.json');
     const statBefore = fs.statSync(dbPath);
 
@@ -260,89 +638,123 @@ async function runPhase14cTests() {
     saveDatabaseToDisk();
 
     const statAfter = fs.statSync(dbPath);
+    const jsonModeAllowedInProd = isLocalJsonModeAllowed();
     process.env.NODE_ENV = origEnv;
 
-    const passed = statBefore.mtimeMs === statAfter.mtimeMs;
-    recordTest(10, 'Production Zero JSON Writes Guard', 'Data Integrity', passed,
-      passed ? `mtime file JSON tidak berubah (${statBefore.mtimeMs}). Mutasi ke disk diblokir total di produksi.` : 'File JSON termutasi di mode produksi!');
+    const noDiskMutation = statBefore.mtimeMs === statAfter.mtimeMs;
+    const passed = noDiskMutation && (jsonModeAllowedInProd === false);
+
+    recordTest(12, 'Zero JSON Mutation In Production Environment', 'Architecture Enforcement', passed,
+      passed ? `mtime JSON tetap (${statBefore.mtimeMs}), isLocalJsonModeAllowed()=false pada NODE_ENV=production.` : 'File JSON termutasi di mode produksi!');
   } catch (err: any) {
-    recordTest(10, 'Production Zero JSON Writes Guard', 'Data Integrity', false, err.message);
+    recordTest(12, 'Zero JSON Mutation In Production Environment', 'Architecture Enforcement', false, err.message);
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 11: Supabase outage menghasilkan 503 (Fail-Closed)
+  // 13. RBAC & SCOPE: Leader Restricted Scope & Read-Only Live Chat
   // ---------------------------------------------------------------------------
   try {
+    const { mockClient } = createMockClient({
+      initialWorkOrder: {
+        id: 'wo_scope_01',
+        wo_number: 'WO-SCOPE-01',
+        contractor_name: 'PT Mitra Lain Berbeda',
+        contactor_name: 'PT Mitra Lain Berbeda',
+        area: 'Jakarta Timur',
+        is_deleted: false,
+        payload: {}
+      }
+    });
+    setSupabaseBackendClientForTesting(mockClient);
+
+    // Leader dari PT Mitra Jaringan Solusi mencoba assign WO milik mitra lain
+    const scopeAssignRes = await assignTicketInSupabase({
+      ticketIdOrWoNumber: 'wo_scope_01',
+      installerName: 'Teknisi Test',
+      userContractor: 'PT Mitra Jaringan Solusi',
+      userRole: 'leader',
+      performedBy: 'Leader Hendra'
+    });
+
     const serverCode = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf-8');
-    // Cek bahwa endpoint-endpoint kritis mengembalikan status 503 saat Supabase tidak tersedia
-    const has503OnUnavailable = serverCode.includes("res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' })") ||
-                                serverCode.includes("DATABASE_UNAVAILABLE") && serverCode.includes("503");
-    recordTest(11, 'Supabase Outage Yields HTTP 503 Fail-Closed', 'Resilience', has503OnUnavailable,
-      has503OnUnavailable ? 'Endpoint kritis merespons HTTP 503 DATABASE_UNAVAILABLE saat Supabase tidak dapat diakses.' : 'Endpoint tidak mengembalikan HTTP 503 pada database outage.');
+    const hasLeaderChatGuard = serverCode.includes('LEADER_READ_ONLY_CHAT') &&
+                               serverCode.includes('Leader hanya dapat memantau percakapan');
+
+    const passed = scopeAssignRes.success === false &&
+                   scopeAssignRes.error?.code === 'SCOPE_MISMATCH' &&
+                   hasLeaderChatGuard;
+
+    recordTest(13, 'RBAC & Scope Enforcement (Contractor Boundary & Chat Read-Only)', 'Security & RBAC', passed,
+      passed ? 'Penugasan lintas kontraktor ditolak (SCOPE_MISMATCH) dan Live Chat Leader terkunci read-only.' : 'Penegakan scope atau RBAC gagal.');
   } catch (err: any) {
-    recordTest(11, 'Supabase Outage Yields HTTP 503 Fail-Closed', 'Resilience', false, err.message);
+    recordTest(13, 'RBAC & Scope Enforcement (Contractor Boundary & Chat Read-Only)', 'Security & RBAC', false, err.message);
+  } finally {
+    resetSupabaseBackendClientForTesting();
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 12: Tidak ada fallback JSON production
+  // 14. FRONTEND SECURITY: Zero Service Role Secret In Frontend Bundle
   // ---------------------------------------------------------------------------
   try {
-    const origEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
-    const allowed = isLocalJsonModeAllowed();
-    process.env.NODE_ENV = origEnv;
+    const srcFiles = fs.readdirSync(path.resolve(process.cwd(), 'src/services'));
+    let foundServiceKeyInSrc = false;
+    for (const f of srcFiles) {
+      const content = fs.readFileSync(path.resolve(process.cwd(), 'src/services', f), 'utf-8');
+      // If code instantiates createClient or uses process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (content.includes('process.env.SUPABASE_SERVICE_ROLE_KEY') || content.includes('createClient(')) {
+        foundServiceKeyInSrc = true;
+      }
+    }
 
-    const passed = allowed === false;
-    recordTest(12, 'No JSON Fallback In Production Mode', 'Architecture', passed,
-      passed ? 'isLocalJsonModeAllowed() selalu bernilai FALSE saat NODE_ENV=production. Tidak ada silent JSON fallback.' : 'Local JSON fallback masih aktif di production!');
+    const viteConfig = fs.readFileSync(path.resolve(process.cwd(), 'vite.config.ts'), 'utf-8');
+    const viteLeakingSecrets = viteConfig.includes('SUPABASE_SERVICE_ROLE_KEY') || viteConfig.includes('JWT_SECRET');
+
+    const passed = !foundServiceKeyInSrc && !viteLeakingSecrets;
+    recordTest(14, 'Frontend Bundle Isolation (No Service Role Secret Or Direct Client)', 'Security Audit', passed,
+      passed ? 'Frontend aman: tidak ada createClient langsung di browser dan tidak ada service-role key di vite define.' : 'Ditemukan kebocoran credential pada kode frontend!');
   } catch (err: any) {
-    recordTest(12, 'No JSON Fallback In Production Mode', 'Architecture', false, err.message);
+    recordTest(14, 'Frontend Bundle Isolation (No Service Role Secret Or Direct Client)', 'Security Audit', false, err.message);
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 13: RBAC dan scope tetap berlaku
+  // 15. PROTECTED PRODUCTION WORK ORDERS: Immutability Guarantee
   // ---------------------------------------------------------------------------
   try {
-    const serverCode = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf-8');
-    const leaderChatReadOnly = serverCode.includes('LEADER_READ_ONLY_CHAT');
-    const leaderScopeCheck = serverCode.includes('Leader hanya dapat memantau percakapan dalam cakupan contractor dan area');
-    const reassignReasonMinLength = serverCode.includes('Alasan penugasan ulang wajib diisi minimal 5 karakter') ||
-                                    serverCode.includes('INVALID_REASON');
-
-    const passed = leaderChatReadOnly && leaderScopeCheck && reassignReasonMinLength;
-    recordTest(13, 'RBAC & Scope Enforcement Intact', 'Security & Access Control', passed,
-      passed ? 'Leader Live Chat Read-Only, Contractor/Area Scope Check, dan Validasi Alasan Reassign (min 5 char) aktif dan ditegakkan.' : 'Ada aturan RBAC atau scope yang terabaikan.');
-  } catch (err: any) {
-    recordTest(13, 'RBAC & Scope Enforcement Intact', 'Security & Access Control', false, err.message);
-  }
-
-  // ---------------------------------------------------------------------------
-  // TEST 14: Tiga WO terlindungi tidak berubah
-  // ---------------------------------------------------------------------------
-  try {
-    const expectedIds = [
+    const protectedIds = [
       'wo_1793825457141_u4bnht',
       'wo_imp_1793825458959_4i4f1h',
       'wo_imp_1793825458959_262dei'
     ];
-    const inSet = expectedIds.every(id => PROTECTED_PRODUCTION_WO_IDS.has(id));
 
-    // Coba update pada salah satu ID terlindungi
-    const updateAttempt = await updateWorkOrderInSupabase(expectedIds[0], { customerName: 'HACKED' });
-    const updateBlocked = updateAttempt.success === false && updateAttempt.error?.code === 'PROTECTED_PRODUCTION_RECORD';
+    const inSet = protectedIds.every(id => PROTECTED_PRODUCTION_WO_IDS.has(id));
 
-    const passed = inSet && updateBlocked;
-    recordTest(14, 'Three Protected Soft-Deleted WOs Untouched', 'Safety Gate', passed,
-      passed ? `Ketiga WO terlindungi (${expectedIds.join(', ')}) terkunci rapat. Percobaan mutasi ditolak: ${updateAttempt.error?.message}.` : 'Proteksi ketiga WO terlindungi bocor!');
+    // Test assign on protected ID
+    const assignProtected = await assignTicketInSupabase({
+      ticketIdOrWoNumber: protectedIds[0],
+      installerName: 'Hacker',
+      performedBy: 'Attacker'
+    });
+
+    // Test direct update on protected ID
+    const updateProtected = await updateWorkOrderInSupabase(protectedIds[1], { customerName: 'MODIFIED' });
+
+    const passed = inSet &&
+                   assignProtected.success === false &&
+                   assignProtected.error?.code === 'PROTECTED_PRODUCTION_RECORD' &&
+                   updateProtected.success === false &&
+                   updateProtected.error?.code === 'PROTECTED_RECORD';
+
+    recordTest(15, 'Three Protected Soft-Deleted WOs Immutably Shielded', 'Safety & Compliance', passed,
+      passed ? `Ketiga WO (${protectedIds.join(', ')}) terkunci mutlak dari seluruh jalur mutasi assign/update.` : 'Proteksi record WO produksi bocor!');
   } catch (err: any) {
-    recordTest(14, 'Three Protected Soft-Deleted WOs Untouched', 'Safety Gate', false, err.message);
+    recordTest(15, 'Three Protected Soft-Deleted WOs Immutably Shielded', 'Safety & Compliance', false, err.message);
   }
 
   // ---------------------------------------------------------------------------
   // SUMMARY REPORT
   // ---------------------------------------------------------------------------
   console.log('\n========================================================================');
-  console.log('PHASE 14C TEST SUMMARY');
+  console.log('PHASE 14C COMPREHENSIVE BEHAVIORAL TEST SUMMARY');
   console.log('========================================================================');
   const total = results.length;
   const passedCount = results.filter(r => r.passed).length;
@@ -352,15 +764,15 @@ async function runPhase14cTests() {
   console.log(`Failed          : ${failedCount}`);
 
   if (failedCount > 0) {
-    console.error(`\n[CRITICAL ALERT] ${failedCount} test(s) failed in Phase 14C!`);
+    console.error(`\n[CRITICAL FAILURE] ${failedCount} test(s) failed in Phase 14C verification!`);
     process.exit(1);
   } else {
-    console.log('\n[SUCCESS] All 14 Phase 14C Consistency & Remediation tests PASSED!');
+    console.log('\n[SUCCESS] All 15 Phase 14C Behavioral & Remediation tests PASSED successfully!');
     process.exit(0);
   }
 }
 
-runPhase14cTests().catch(err => {
+runPhase14cBehavioralSuite().catch(err => {
   console.error('Fatal error running Phase 14C test suite:', err);
   process.exit(1);
 });

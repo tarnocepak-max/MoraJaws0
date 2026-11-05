@@ -229,6 +229,20 @@ export function getSupabaseBackendClient(): SupabaseClient | null {
 }
 
 /**
+ * Test helper: Sets mock or stub client for deterministic testing.
+ */
+export function setSupabaseBackendClientForTesting(client: any): void {
+  supabaseInstance = client;
+}
+
+/**
+ * Test helper: Resets backend client instance.
+ */
+export function resetSupabaseBackendClientForTesting(): void {
+  supabaseInstance = null;
+}
+
+/**
  * Actively checks Supabase connection using the backend administrative client (Secret Key).
  * Differentiates states accurately:
  * - 'connected': connection and query succeeded.
