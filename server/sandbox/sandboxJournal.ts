@@ -1,10 +1,12 @@
 import crypto from 'crypto';
 
 // ==============================================================================
+// [SANDBOX SIMULATION ONLY - IN-MEMORY LOCAL SIMULATION]
 // MORAJAWS PHASE 9F: ISOLATED SANDBOX DURABLE JOURNAL MODULE
 // Namespace: _outbox_journal_sandbox
 // Enforces prefix 'WO-SANDBOX-' on all records.
 // Zero contact with production collections or tickets.
+// Strictly an isolated in-memory test double / simulation harness.
 // ==============================================================================
 
 export const SANDBOX_COLLECTION_JOURNAL = '_outbox_journal_sandbox';

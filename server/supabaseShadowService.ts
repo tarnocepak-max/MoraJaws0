@@ -8,9 +8,11 @@ import {
 } from './supabaseAdapter.ts';
 
 // ==============================================================================
+// [SANDBOX SIMULATION ONLY - IN-MEMORY LOCAL SIMULATION]
 // MORAJAWS FASE 8: ISOLATED SUPABASE SHADOW WRITE DRY RUN SERVICE
 // Strictly isolated to work orders prefixed with 'WO-SANDBOX-'.
 // Production dual-write is completely prohibited and blocked at this layer.
+// Strictly an isolated test bed / simulation harness.
 // ==============================================================================
 
 export const SANDBOX_WO_PREFIX = 'WO-SANDBOX-';

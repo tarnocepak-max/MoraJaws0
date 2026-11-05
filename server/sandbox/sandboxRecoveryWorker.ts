@@ -2,9 +2,10 @@ import { sandboxJournalEngine, type SandboxJournalDocument } from './sandboxJour
 import { sandboxOutboxStore, type SandboxOutboxRow } from './sandboxOutbox.ts';
 
 // ==============================================================================
+// [SANDBOX SIMULATION ONLY - IN-MEMORY LOCAL SIMULATION]
 // MORAJAWS PHASE 9F: ISOLATED RECOVERY WORKER MODULE
-// Coordinates durable synchronization between Firestore Journal and Supabase Outbox.
-// Implements Atomic Lease & Claim pattern with crash recovery and zero event loss.
+// Coordinates durable synchronization between Firestore Journal and Supabase Outbox in sandbox.
+// Strictly an isolated in-memory test double / simulation harness.
 // ==============================================================================
 
 export interface WorkerRunResult {
