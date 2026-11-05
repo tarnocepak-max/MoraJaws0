@@ -373,7 +373,7 @@ export function ticketToPostgresRow(ticket: any): Record<string, any> {
   const contactorVal = ticket.contactorName ?? ticket.contractorName ?? null;
 
   return {
-    id: ticket.id,
+    id: ticket.id || ('wo_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8)),
     wo_number: ticket.woNumber || ticket.workOrderNumber,
     work_order_number: ticket.workOrderNumber || ticket.woNumber || null,
     id_customer: ticket.idCustomer || ticket.customerId || null,
@@ -2491,7 +2491,11 @@ export async function getAppSettingFromSupabase(key: string): Promise<SupabaseOp
       return { success: false, error: classified };
     }
 
-    return { success: true, data: data ? data.setting_value : null };
+    let val = data ? data.setting_value : null;
+    if (val && typeof val === 'object' && 'value' in val && Object.keys(val).length === 1) {
+      val = val.value;
+    }
+    return { success: true, data: val };
   } catch (err: any) {
     const classified = classifySupabaseError(err);
     return { success: false, error: classified };

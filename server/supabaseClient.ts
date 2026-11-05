@@ -414,3 +414,12 @@ export async function checkSupabaseConnection(): Promise<SupabaseHealthResult> {
 export function getLastSupabaseHealthStatus(): SupabaseHealthResult {
   return lastCheckStatus;
 }
+
+/**
+ * Returns true if both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured with valid formats.
+ */
+export function isSupabaseConfigured(): boolean {
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)?.trim();
+  return Boolean(supabaseUrl && serviceRoleKey && isValidSupabaseUrl(supabaseUrl) && isValidSupabaseSecretKey(serviceRoleKey));
+}
