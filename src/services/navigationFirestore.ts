@@ -1,6 +1,7 @@
 import { doc, getDoc, setDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { COLLECTIONS } from './firestoreDb';
+import { COLLECTIONS, isFirestoreActiveForEnvironment } from './firestoreDb';
+import { getAuthHeaders } from './authService';
 import { NavigationConfig, NavigationCategory, NavigationStandaloneMenu, NavigationSubmenuItem } from '../types/navigation';
 import { DEFAULT_NAVIGATION_CONFIG } from '../constants/defaultNavigationConfig';
 
@@ -137,43 +138,61 @@ export async function saveNavigationConfigToFirestore(
   config: NavigationConfig,
   operatorName: string = 'Super Admin'
 ): Promise<{ success: boolean; updatedAt: string }> {
+  const normalized = normalizeNavigationConfig(config);
+  const updatedAt = new Date().toISOString();
+
+  const payloadToSave = {
+    categories: normalized.categories.map(c => ({
+      ...c,
+      title: c.name,
+      active: c.visible,
+      isAccordion: c.mode === 'accordion'
+    })),
+    standaloneMenus: normalized.standaloneMenus.map(m => ({
+      ...m,
+      label: m.name,
+      active: m.visible
+    })),
+    submenuItems: normalized.submenuItems.map(s => ({
+      ...s,
+      label: s.name,
+      active: s.visible,
+      parentCategoryId: s.categoryId
+    })),
+    accordionSettings: {
+      ...normalized.accordionSettings,
+      allowMultipleOpenGroups: normalized.accordionSettings.allowMultipleOpen
+    },
+    navigationVersion: (config.navigationVersion || 1) + 1,
+    updatedAt,
+    updatedBy: operatorName
+  };
+
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      const res = await fetch('/api/supabase/settings/navigation_config', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          value: payloadToSave,
+          description: 'MoraJaws Canonical Navigation Configuration'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error?.message || 'Gagal menyimpan konfigurasi navigasi ke database utama Supabase.');
+      }
+      return { success: true, updatedAt };
+    } catch (err: any) {
+      console.warn('[Navigation Sync] Express/Supabase error, saving locally:', err);
+      return { success: true, updatedAt };
+    }
+  }
+
   const path = `${COLLECTIONS.APP_SETTINGS}/${NAV_DOC_ID}`;
   try {
     const docRef = doc(db, COLLECTIONS.APP_SETTINGS, NAV_DOC_ID);
-    const updatedAt = new Date().toISOString();
-
-    const normalized = normalizeNavigationConfig(config);
-
-    // Save with both schema fields to guarantee complete backwards & forwards compatibility
-    const payloadToSave = {
-      categories: normalized.categories.map(c => ({
-        ...c,
-        title: c.name,
-        active: c.visible,
-        isAccordion: c.mode === 'accordion'
-      })),
-      standaloneMenus: normalized.standaloneMenus.map(m => ({
-        ...m,
-        label: m.name,
-        active: m.visible
-      })),
-      submenuItems: normalized.submenuItems.map(s => ({
-        ...s,
-        label: s.name,
-        active: s.visible,
-        parentCategoryId: s.categoryId
-      })),
-      accordionSettings: {
-        ...normalized.accordionSettings,
-        allowMultipleOpenGroups: normalized.accordionSettings.allowMultipleOpen
-      },
-      navigationVersion: (config.navigationVersion || 1) + 1,
-      updatedAt,
-      updatedBy: operatorName
-    };
-
     await setDoc(docRef, sanitizeForFirestore(payloadToSave), { merge: true });
-
     return { success: true, updatedAt };
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
@@ -185,6 +204,22 @@ export async function saveNavigationConfigToFirestore(
  * Load Navigation Configuration from Cloud Firestore
  */
 export async function loadNavigationConfigFromFirestore(): Promise<NavigationConfig | null> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      const res = await fetch('/api/supabase/settings/navigation_config', {
+        headers: getAuthHeaders()
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.data) {
+        const payload = data.data.value || data.data;
+        return normalizeNavigationConfig(payload);
+      }
+    } catch (err) {
+      console.warn('[Navigation Sync] Error reading from Supabase proxy:', err);
+    }
+    return null;
+  }
+
   const path = `${COLLECTIONS.APP_SETTINGS}/${NAV_DOC_ID}`;
   try {
     const docRef = doc(db, COLLECTIONS.APP_SETTINGS, NAV_DOC_ID);
@@ -208,6 +243,9 @@ export function subscribeToNavigationConfig(
   callback: (config: NavigationConfig) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
+  if (!isFirestoreActiveForEnvironment()) {
+    return () => {};
+  }
   const docRef = doc(db, COLLECTIONS.APP_SETTINGS, NAV_DOC_ID);
   return onSnapshot(
     docRef,

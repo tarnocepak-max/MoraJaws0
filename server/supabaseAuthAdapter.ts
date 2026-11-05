@@ -69,53 +69,35 @@ export async function signInWithSupabaseAuth(
 
     // Look up authoritative user in Supabase users table
     const userRes = await findUserInSupabaseDetailed(cleanIdent);
-    if (userRes.success && userRes.data) {
+    if (!userRes.success) {
+      return {
+        success: false,
+        error: {
+          code: 'DATABASE_UNAVAILABLE',
+          message: userRes.error?.message || 'Database authoritative tidak tersedia saat validasi identitas.'
+        }
+      };
+    }
+
+    if (userRes.data) {
       authoritativeUser = userRes.data;
       if (authoritativeUser.email) {
         targetEmail = authoritativeUser.email.trim().toLowerCase();
       }
-    }
-
-    // 2. Perform Supabase Auth Sign In with password
-    const { data: authData, error: authError } = await client.auth.signInWithPassword({
-      email: targetEmail,
-      password
-    });
-
-    if (authError || !authData?.session || !authData?.user) {
+    } else {
+      // User not found in authoritative users table
       return {
         success: false,
         error: {
-          code: authError?.status ? `AUTH_${authError.status}` : 'AUTH_INVALID_CREDENTIALS',
-          message: authError?.message || 'Autentikasi Supabase Auth gagal. Periksa kembali kredensial Anda.'
+          code: 'auth/user-not-found',
+          message: cleanIdent.includes('@')
+            ? `Alamat email "${identifier}" tidak terdaftar dalam direktori staf MoraJaws.`
+            : `Nama pengguna "${identifier}" tidak terdaftar dalam direktori staf MoraJaws.`
         }
       };
     }
 
-    // 3. Retrieve or re-verify authoritative MoraJaws profile
-    if (!authoritativeUser) {
-      const profileLookup = await findUserInSupabaseDetailed(authData.user.id);
-      if (profileLookup.success && profileLookup.data) {
-        authoritativeUser = profileLookup.data;
-      } else if (authData.user.email) {
-        const emailLookup = await findUserInSupabaseDetailed(authData.user.email);
-        if (emailLookup.success && emailLookup.data) {
-          authoritativeUser = emailLookup.data;
-        }
-      }
-    }
-
-    if (!authoritativeUser) {
-      return {
-        success: false,
-        error: {
-          code: 'PROFILE_NOT_FOUND',
-          message: 'Akun Supabase Auth terverifikasi, namun profil staf MoraJaws tidak ditemukan dalam direktori authoritative.'
-        }
-      };
-    }
-
-    // 4. Strict RBAC & Account Integrity Verification
+    // Strict account status checks before calling Supabase Auth
     if (authoritativeUser.isDeleted) {
       return {
         success: false,
@@ -131,7 +113,23 @@ export async function signInWithSupabaseAuth(
         success: false,
         error: {
           code: 'ACCOUNT_DISABLED',
-          message: 'Akun Anda dinonaktifkan oleh Administrator. Hubungi Super Admin.'
+          message: 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.'
+        }
+      };
+    }
+
+    // 2. Perform Supabase Auth Sign In with password
+    const { data: authData, error: authError } = await client.auth.signInWithPassword({
+      email: targetEmail,
+      password
+    });
+
+    if (authError || !authData?.session || !authData?.user) {
+      return {
+        success: false,
+        error: {
+          code: authError?.status === 400 ? 'auth/wrong-password' : (authError?.status ? `AUTH_${authError.status}` : 'AUTH_INVALID_CREDENTIALS'),
+          message: 'Autentikasi gagal. Kredensial kata sandi salah. Pastikan kata sandi yang Anda masukkan benar.'
         }
       };
     }

@@ -67,8 +67,9 @@ import { useToast } from './ToastContext';
 import { saveTicketsOffline, cacheMasterData, getOfflineTickets, removeSyncQueueItem } from '../services/offlineDb';
 import { useOfflineSync } from './OfflineSyncContext';
 import { auth, testFirestoreConnection, pingFirestore, isQuotaExceededError } from '../lib/firebase';
-import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { signOut } from 'firebase/auth';
 import {
+  isFirestoreActiveForEnvironment,
   subscribeToMoraJawsFirestore,
   subscribeToAuditLogs,
   saveTicketToFirestore,
@@ -105,6 +106,7 @@ import {
   saveHierarchicalDroplistsToFirestore,
   reconcileDroplistData
 } from '../services/firestoreDb';
+import { SupabaseRepository } from '../services/supabaseDb';
 import { auditAndCleanDuplicates, DuplicateAuditReport } from '../services/woDeduplicationService';
 
 import { getJakartaDateString, getJakartaDateParts, getTicketAppointmentDate } from '../services/appointmentDateParser';
@@ -123,6 +125,7 @@ interface AppContextType {
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string; user?: User; errorCode?: string }>;
   loginWithFirebase: (firebaseData: { email: string; uid: string; displayName?: string; idToken?: string }) => Promise<{ success: boolean; error?: string; user?: User }>;
   logout: () => void;
+  refreshAuthSession: () => Promise<boolean>;
   users: User[];
   hasPermission: (permission: Permission) => boolean;
   canDelete: boolean;
@@ -689,6 +692,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.addEventListener('offline', handleOffline);
 
     async function initFirestore() {
+      // In production, Firestore is fully deactivated as an inactive transition archive.
+      // All production real-time updates and persistence route via Express + Supabase.
+      if (!isFirestoreActiveForEnvironment()) {
+        setFirestoreStatus('offline');
+        setFirestoreLoading(false);
+        setIsFirestoreReady(false);
+        setSyncStatus('SAVED');
+        try {
+          const unsubSSE = SupabaseRepository.getInstance().subscribeToChanges({
+            table: 'work_orders',
+            onPayload: (payload) => {
+              if (isCancelled) return;
+              if (payload && payload.new) {
+                setTickets(prev => {
+                  const idx = prev.findIndex(t => t.id === payload.new.id);
+                  if (idx >= 0) {
+                    const copy = [...prev];
+                    copy[idx] = payload.new;
+                    return copy;
+                  }
+                  return [payload.new, ...prev];
+                });
+              }
+            }
+          });
+          unsubscribeFirestore = unsubSSE;
+        } catch (sseErr) {
+          console.warn('[Realtime SSE] Non-fatal notice attaching Supabase SSE:', sseErr);
+        }
+        return;
+      }
+
       setFirestoreLoading(true);
       setFirestoreStatus('connecting');
       setSyncStatus(navigator.onLine ? 'LOADING' : 'OFFLINE');
@@ -704,7 +739,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return;
         }
 
-        // Seed Firestore if empty so cloud database has initial data
+        // Seed Firestore if empty so cloud database has initial data (dev only)
         await seedFirestoreIfEmpty({
           tickets: INITIAL_SAMPLE_TICKETS,
           contractors: DEFAULT_CONTRACTORS,
@@ -719,7 +754,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         unsubscribeFirestore = subscribeToMoraJawsFirestore({
           onTicketsChange: (liveTickets) => {
             if (isCancelled) return;
-            // Always update state with latest Firestore snapshot
             setTickets(liveTickets || []);
             setFirestoreStatus('connected');
             setFirestoreLoading(false);
@@ -807,9 +841,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         });
 
-        // Seed report dropdown categories if empty
         seedReportDropdownCategoriesIfEmpty().catch(e => console.warn('[Firestore] Notice seeding report categories:', e));
-
         setFirestoreStatus('connected');
       } catch (err: any) {
         if (isQuotaExceededError(err)) {
@@ -842,7 +874,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Remediation 4: Dedicated Audit Logs Listener strictly restricted to verified super_admin and it_support
+  // Dedicated Audit Logs Listener (Dev only with Firestore, Production uses Express Supabase API)
   useEffect(() => {
     let unsubAudit: (() => void) | null = null;
     const canViewAudit = Boolean(
@@ -851,7 +883,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (currentUser.role === 'super_admin' || currentUser.role === 'it_support')
     );
 
-    if (canViewAudit && firestoreStatus !== 'offline') {
+    if (canViewAudit && isFirestoreActiveForEnvironment() && firestoreStatus !== 'offline') {
       try {
         unsubAudit = subscribeToAuditLogs(
           (liveLogs) => {
@@ -875,13 +907,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       if (unsubAudit) {
         unsubAudit();
-        unsubAudit = null;
       }
     };
   }, [currentUser.id, currentUser.role, currentUser.active, firestoreStatus]);
 
-  // Explicit Firestore data refresh (re-queries Cloud Firestore without reloading the browser page)
+  // Explicit Firestore data refresh (re-queries Cloud Firestore only when active in dev)
   const refreshFirestoreData = async () => {
+    if (!isFirestoreActiveForEnvironment()) {
+      return;
+    }
     if (!navigator.onLine) {
       setSyncStatus('OFFLINE');
       toast.warning('Koneksi internet terputus. Menggunakan data offline lokal.', 'Mode Offline');
@@ -947,11 +981,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
       }
-      // Re-trigger Firestore direct sync to make sure everything is up-to-date, with graceful fallback
-      try {
-        await refreshFirestoreData();
-      } catch (fErr) {
-        console.warn('[CentralData] Firestore sync fallback to backend server database:', fErr);
+
+      // Load audit logs via Supabase Express API for authorized roles
+      const canViewAudit = Boolean(
+        currentUser.id &&
+        currentUser.active &&
+        (currentUser.role === 'super_admin' || currentUser.role === 'it_support')
+      );
+      if (canViewAudit && headers['Authorization']) {
+        try {
+          const auditRes = await fetch('/api/supabase/audit-logs?limit=100', { headers });
+          if (auditRes.ok) {
+            const auditData = await auditRes.json();
+            if (auditData && auditData.success && Array.isArray(auditData.data)) {
+              setAuditLogs(auditData.data);
+            }
+          }
+        } catch {}
+      }
+
+      // In dev with Firestore active, query Firestore refresh
+      if (isFirestoreActiveForEnvironment()) {
+        try {
+          await refreshFirestoreData();
+        } catch (fErr) {
+          console.warn('[CentralData] Firestore sync fallback to backend server database:', fErr);
+        }
       }
     } catch (err: any) {
       console.warn('[CentralData] Sync error:', err);
@@ -1154,7 +1209,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .catch(() => {});
   }, []);
 
-  // Authentication & Session
+  // Authentication & Session (Phase 13E: Supabase Auth as Sole Production Mechanism)
   const login = async (username: string, password: string): Promise<{ success: boolean; error?: string; user?: User; errorCode?: string }> => {
     const cleanUser = username.trim();
     if (!cleanUser) {
@@ -1164,7 +1219,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Kata sandi wajib diisi.', errorCode: 'INVALID_INPUT' };
     }
 
-    // 1. Connectivity Check: Never blame wrong credentials when connection is down
     if (!navigator.onLine) {
       return {
         success: false,
@@ -1174,120 +1228,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      // 2. Identity Resolution: Map username/email to canonical Auth account via secure backend
-      let resolveData: any = null;
-      try {
-        const resolveRes = await fetch('/api/auth/resolve-identity', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: cleanUser })
-        });
-        if (resolveRes.ok) {
-          resolveData = await resolveRes.json();
-        } else {
-          resolveData = await resolveRes.json().catch(() => ({}));
-        }
-      } catch (netErr: any) {
-        console.warn('[Auth] Primary resolve-identity network issue:', netErr);
-        return {
-          success: false,
-          error: 'Gagal terhubung ke server autentikasi MoraJaws. Periksa koneksi jaringan Anda.',
-          errorCode: 'auth/network-request-failed'
-        };
-      }
-
-      if (!resolveData || !resolveData.found) {
-        addAuditLog('Login Attempt Failed', 'auth', cleanUser, `Percobaan login gagal: Identitas "${cleanUser}" tidak terdaftar`);
-        return {
-          success: false,
-          error: resolveData?.error || `Nama pengguna atau email "${cleanUser}" tidak ditemukan dalam direktori staf MoraJaws.`,
-          errorCode: 'auth/user-not-found'
-        };
-      }
-
-      if (resolveData.active === false) {
-        addAuditLog('Login Blocked Inactive', 'auth', cleanUser, `Akun dinonaktifkan mencoba login: ${cleanUser}`);
-        return {
-          success: false,
-          error: 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.',
-          errorCode: 'auth/user-disabled'
-        };
-      }
-
-      const targetEmail = resolveData.user.email;
-      let firebaseUid: string | undefined = resolveData.user.firebaseUid;
-
-      // 3. Primary Authentication Mechanism: Firebase Authentication signInWithEmailAndPassword
-      let firebaseErrorEncountered = false;
-      try {
-        const userCred = await signInWithEmailAndPassword(auth, targetEmail, password);
-        if (userCred && userCred.user) {
-          firebaseUid = userCred.user.uid;
-        }
-      } catch (fbErr: any) {
-        firebaseErrorEncountered = true;
-        const code = fbErr?.code || '';
-        
-        // Accurate Firebase Auth error handling per Section 4 of prompt
-        if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-          addAuditLog('Login Failed', 'auth', cleanUser, `Kredensial kata sandi salah untuk ${cleanUser}`);
-          return {
-            success: false,
-            error: 'Autentikasi gagal. Kredensial tidak cocok. Pastikan kata sandi yang Anda masukkan benar.',
-            errorCode: 'MJ-AUTH-001'
-          };
-        } else if (code === 'auth/too-many-requests') {
-          return {
-            success: false,
-            error: 'Terlalu banyak percobaan login yang gagal. Akses akun ditangguhkan sementara demi keamanan. Coba lagi dalam beberapa menit.',
-            errorCode: 'auth/too-many-requests'
-          };
-        } else if (code === 'auth/user-disabled') {
-          return {
-            success: false,
-            error: 'Akun staf ini telah dinonaktifkan di Firebase Authentication. Hubungi Administrator.',
-            errorCode: 'auth/user-disabled'
-          };
-        } else if (code === 'auth/network-request-failed') {
-          return {
-            success: false,
-            error: 'Gagal terhubung ke server autentikasi Firebase. Periksa koneksi internet Anda.',
-            errorCode: 'auth/network-request-failed'
-          };
-        } else if (code === 'auth/operation-not-allowed') {
-          // Log specific configuration note per Section 4
-          console.warn('[Firebase Auth] Password provider is disabled in Firebase Console. Verifying via MoraJaws secure backend provider...');
-        } else if (code === 'auth/user-not-found') {
-          console.warn('[Firebase Auth] User not found in Firebase Auth tenant. Verifying via MoraJaws secure backend provider...');
-        }
-      }
-
-      // 4. Secure Backend Session Authorization & Role Verification
-      const serverRes = await fetch('/api/auth/login', {
+      // Primary Production Authentication Gateway: /api/auth/supabase-login
+      const serverRes = await fetch('/api/auth/supabase-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: cleanUser,
-          password,
-          firebaseUid: firebaseUid || undefined
+          identifier: cleanUser,
+          password
         })
       });
 
-      const data = await serverRes.json();
+      const data = await serverRes.json().catch(() => ({}));
+
       if (!serverRes.ok || !data.success) {
         const errCode = data.code || 'MJ-AUTH-001';
-        addAuditLog('Login Attempt Failed', 'auth', cleanUser, data.error || 'Login gagal');
+        let errorMsg = data.error || 'Autentikasi gagal. Kredensial tidak cocok.';
+
+        if (serverRes.status === 503 || errCode === 'DATABASE_UNAVAILABLE') {
+          errorMsg = 'Database authoritative Supabase tidak dapat diakses saat login.';
+        } else if (serverRes.status === 404 || errCode === 'auth/user-not-found') {
+          errorMsg = `Nama pengguna atau email "${cleanUser}" tidak ditemukan dalam direktori staf MoraJaws.`;
+        } else if (serverRes.status === 403 || errCode === 'auth/user-disabled' || errCode === 'ACCOUNT_DISABLED' || errCode === 'ACCOUNT_DELETED') {
+          errorMsg = data.error || 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.';
+        } else if (serverRes.status === 429 || errCode === 'auth/too-many-requests') {
+          errorMsg = data.error || 'Terlalu banyak percobaan login yang gagal. Akses akun ditangguhkan sementara demi keamanan.';
+        }
+
+        addAuditLog('Login Attempt Failed', 'auth', cleanUser, errorMsg);
         return {
           success: false,
-          error: data.error || 'Autentikasi gagal. Kredensial tidak cocok.',
+          error: errorMsg,
           errorCode: errCode
         };
       }
 
-      // 5. Establish authenticated session
+      const rawUser = data.user;
       const authedUser: User = {
-        ...data.user,
-        firebaseUid: firebaseUid || data.user?.firebaseUid,
+        ...rawUser,
         lastLoginAt: new Date().toISOString()
       };
 
@@ -1301,6 +1278,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentUser(authedUser);
       setIsLoggedIn(true);
 
+      const accessToken = data.tokens?.accessToken || data.token;
+      const refreshToken = data.tokens?.refreshToken;
+      const expiresIn = data.tokens?.expiresIn;
+      const expiresAt = data.tokens?.expiresAt || (expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : undefined);
+
       try {
         localStorage.setItem('morajaws_logged_in', 'true');
         localStorage.setItem('morajaws_auth_session', JSON.stringify({
@@ -1308,14 +1290,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           username: authedUser.username,
           role: authedUser.role,
           name: authedUser.name,
+          contractor: authedUser.contractor,
+          area: authedUser.area,
           loginAt: authedUser.lastLoginAt,
-          token: data.token,
+          token: accessToken,
+          accessToken,
+          refreshToken,
           sessionId: data.sessionId,
-          expiresAt: data.expiresAt
+          sessionVersion: data.sessionVersion || (authedUser as any).sessionVersion || 1,
+          expiresAt
         }));
       } catch (e) {}
 
-      addAuditLog('Login Success', 'auth', authedUser.id, `Pengguna ${authedUser.name} (${authedUser.role}) berhasil login ke sistem`);
+      addAuditLog('Login Success', 'auth', authedUser.id, `Pengguna ${authedUser.name} (${authedUser.role}) berhasil login ke sistem via Supabase Auth`);
       await loadCentralData();
       return { success: true, user: authedUser };
 
@@ -1329,61 +1316,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const loginWithFirebase = async (firebaseData: { email: string; uid: string; displayName?: string; idToken?: string }): Promise<{ success: boolean; error?: string; user?: User }> => {
+  const refreshAuthSession = async (): Promise<boolean> => {
     try {
-      const serverRes = await fetch('/api/auth/firebase-login', {
+      const sessionStr = localStorage.getItem('morajaws_auth_session');
+      if (!sessionStr) return false;
+      const sess = JSON.parse(sessionStr);
+      if (!sess?.refreshToken) return false;
+
+      const res = await fetch('/api/auth/supabase-refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(firebaseData)
+        body: JSON.stringify({ refreshToken: sess.refreshToken })
       });
-      const data = await serverRes.json();
-      if (!data.success) {
-        addAuditLog('Firebase Login Failed', 'auth', firebaseData.email, data.error || 'Login Firebase gagal');
-        return { success: false, error: data.error || 'Akun Google Anda belum terdaftar di MoraJaws.' };
-      }
-
-      if (data.user) {
-        const authedUser: User = {
-          ...data.user,
-          lastLoginAt: new Date().toISOString()
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (data.success && data.tokens) {
+        const updatedSess = {
+          ...sess,
+          token: data.tokens.accessToken,
+          accessToken: data.tokens.accessToken,
+          refreshToken: data.tokens.refreshToken || sess.refreshToken,
+          expiresAt: data.tokens.expiresAt
         };
-        setUsers(prev => {
-          const exists = prev.find(u => u.id === authedUser.id);
-          if (exists) {
-            return prev.map(u => u.id === authedUser.id ? { ...u, ...authedUser } : u);
-          }
-          return [...prev, authedUser];
-        });
-        setCurrentUser(authedUser);
-        setIsLoggedIn(true);
-
-        try {
-          localStorage.setItem('morajaws_logged_in', 'true');
-          localStorage.setItem('morajaws_auth_session', JSON.stringify({
-            userId: authedUser.id,
-            username: authedUser.username,
-            role: authedUser.role,
-            name: authedUser.name,
-            loginAt: authedUser.lastLoginAt,
-            token: data.token,
-            sessionId: data.sessionId,
-            expiresAt: data.expiresAt
-          }));
-        } catch (e) {}
-
-        addAuditLog('Login Success (Firebase)', 'auth', authedUser.id, `Pengguna ${authedUser.name} (${authedUser.role}) berhasil login via Firebase Auth`);
-        await loadCentralData();
-        return { success: true, user: authedUser };
+        localStorage.setItem('morajaws_auth_session', JSON.stringify(updatedSess));
+        return true;
       }
-      return { success: false, error: 'Respon server tidak valid' };
-    } catch (err: any) {
-      addAuditLog('Firebase Login Error', 'auth', firebaseData.email, err?.message || 'Gagal menghubungi server autentikasi.');
-      return { success: false, error: 'Gagal menghubungi server autentikasi MoraJaws. Pastikan koneksi server tersedia.' };
+      return false;
+    } catch {
+      return false;
     }
+  };
+
+  const loginWithFirebase = async (_firebaseData: { email: string; uid: string; displayName?: string; idToken?: string }): Promise<{ success: boolean; error?: string; user?: User }> => {
+    return {
+      success: false,
+      error: 'Firebase Authentication telah dinonaktifkan pada lingkungan produksi MoraJaws. Gunakan login resmi dengan Supabase Auth.'
+    };
   };
 
   const logout = () => {
     addAuditLog('User Logout', 'auth', currentUser.id, `Pengguna ${currentUser.name} (${currentUser.role}) logout dari sistem`);
+    const authHeaders = getAuthHeaders();
     setIsLoggedIn(false);
     setCurrentUser(UNAUTHENTICATED_USER);
     try {
@@ -1391,16 +1364,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('morajaws_auth_session');
     } catch (e) {}
 
-    // Sign out from Firebase Authentication
-    try {
-      signOut(auth).catch(() => {});
-    } catch (e) {}
-
-    fetch('/api/auth/logout', {
+    // Invoke Supabase Auth logout on Express backend
+    fetch('/api/auth/supabase-logout', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...getAuthHeaders()
+        ...authHeaders
       }
     }).catch(() => {});
 
@@ -5146,6 +5115,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         login,
         loginWithFirebase,
         logout,
+        refreshAuthSession,
         users,
         hasPermission,
         canDelete,

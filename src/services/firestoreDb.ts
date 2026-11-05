@@ -37,6 +37,7 @@ import {
   HierarchicalDroplistData
 } from '../types/index.ts';
 import { deduplicateTicketsInMemory, getDeterministicTicketId, normalizeWoNumber } from './woDeduplicationService';
+import { getAuthHeaders } from './authService';
 
 // Collection path constants
 export const COLLECTIONS = {
@@ -52,6 +53,21 @@ export const COLLECTIONS = {
   HEALTH: 'system_health'
 } as const;
 
+/**
+ * Evaluates whether Firestore is active for the current runtime environment.
+ * Per Phase 13E directives:
+ * - Production: Firestore is STRICTLY deactivated as an active database and preserved solely as an archive/backup.
+ * - Development: Inactive by default; only active if explicitly enabled via VITE_ENABLE_FIRESTORE_DEV === 'true'.
+ */
+export function isFirestoreActiveForEnvironment(): boolean {
+  if (typeof window !== 'undefined') {
+    if (import.meta.env.PROD || process.env.NODE_ENV === 'production') {
+      return false;
+    }
+    return import.meta.env.VITE_ENABLE_FIRESTORE_DEV === 'true';
+  }
+  return false;
+}
 
 // -------------------------------------------------------------
 // Data Sanitizer (Removes undefined fields which Firestore rejects)
@@ -118,6 +134,12 @@ export interface FirestoreSubscriptionCallbacks {
 }
 
 export function subscribeToMoraJawsFirestore(callbacks: FirestoreSubscriptionCallbacks): () => void {
+  // Phase 13E: Hentikan seluruh listener Firestore aktif pada mode production
+  if (!isFirestoreActiveForEnvironment()) {
+    console.info('[MoraJaws Phase 13E] Listener Firestore dinonaktifkan di lingkungan produksi. Seluruh data dipasok oleh Express API & Supabase PostgreSQL.');
+    return () => {};
+  }
+
   const unsubs: Unsubscribe[] = [];
 
   // 1. Tickets Real-Time Listener
@@ -475,6 +497,18 @@ export function subscribeToAuditLogs(
 // -------------------------------------------------------------
 export async function saveTicketToFirestore(ticket: Ticket): Promise<void> {
   const targetId = ticket.id || getDeterministicTicketId(ticket.woNumber);
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      await fetch(`/api/supabase/work-orders/${encodeURIComponent(targetId)}`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(ticket)
+      });
+    } catch (err) {
+      console.warn('[Supabase Direct Sync] Update WO error:', err);
+    }
+    return;
+  }
   const path = `${COLLECTIONS.TICKETS}/${targetId}`;
   try {
     const docRef = doc(db, COLLECTIONS.TICKETS, targetId);
@@ -487,6 +521,19 @@ export async function saveTicketToFirestore(ticket: Ticket): Promise<void> {
 
 export async function batchSaveTicketsToFirestore(tickets: Ticket[]): Promise<{ saved: number; failed: number }> {
   if (tickets.length === 0) return { saved: 0, failed: 0 };
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      const res = await fetch('/api/supabase/work-orders/bulk-import', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ tickets })
+      });
+      const data = await res.json();
+      return { saved: data.importedCount || tickets.length, failed: 0 };
+    } catch {
+      return { saved: 0, failed: tickets.length };
+    }
+  }
   let saved = 0;
   let failed = 0;
 
@@ -1006,6 +1053,18 @@ export function subscribeToUIConfiguration(callback: (data: CloudUIConfiguration
 }
 
 export async function deleteTicketFromFirestore(ticketId: string, woNumber?: string): Promise<void> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      await fetch(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ reason: 'Penghapusan via aplikasi' })
+      });
+    } catch (err) {
+      console.warn('[Supabase Direct Sync] Delete WO error:', err);
+    }
+    return;
+  }
   const path = `${COLLECTIONS.TICKETS}/${ticketId}`;
   try {
     const docRef = doc(db, COLLECTIONS.TICKETS, ticketId);
@@ -1027,6 +1086,18 @@ export async function deleteTicketFromFirestore(ticketId: string, woNumber?: str
 }
 
 export async function softDeleteTicketInFirestore(ticketId: string, deletedBy: string, reason: string): Promise<void> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      await fetch(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ reason: reason || 'Soft delete via aplikasi' })
+      });
+    } catch (err) {
+      console.warn('[Supabase Direct Sync] Soft delete WO error:', err);
+    }
+    return;
+  }
   const path = `${COLLECTIONS.TICKETS}/${ticketId}`;
   try {
     const docRef = doc(db, COLLECTIONS.TICKETS, ticketId);
@@ -1043,6 +1114,17 @@ export async function softDeleteTicketInFirestore(ticketId: string, deletedBy: s
 }
 
 export async function archiveTicketInFirestore(ticketId: string, archivedBy: string): Promise<void> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      await fetch(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}/archive`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+    } catch (err) {
+      console.warn('[Supabase Direct Sync] Archive WO error:', err);
+    }
+    return;
+  }
   const path = `${COLLECTIONS.TICKETS}/${ticketId}`;
   try {
     const docRef = doc(db, COLLECTIONS.TICKETS, ticketId);
@@ -1059,6 +1141,17 @@ export async function archiveTicketInFirestore(ticketId: string, archivedBy: str
 }
 
 export async function restoreTicketInFirestore(ticketId: string, restoredBy: string): Promise<void> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      await fetch(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}/restore`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+    } catch (err) {
+      console.warn('[Supabase Direct Sync] Restore WO error:', err);
+    }
+    return;
+  }
   const path = `${COLLECTIONS.TICKETS}/${ticketId}`;
   try {
     const docRef = doc(db, COLLECTIONS.TICKETS, ticketId);
@@ -1125,6 +1218,18 @@ export async function deleteCoverageAreaFromFirestore(areaId: string): Promise<v
 // Live Chat Message Mutations
 // -------------------------------------------------------------
 export async function sendChatMessageToFirestore(msg: TicketMessage): Promise<void> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      await fetch(`/api/tickets/${encodeURIComponent(msg.ticketId || msg.woNumber)}/messages`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(msg)
+      });
+    } catch (err) {
+      console.warn('[Supabase Sync] Chat message error:', err);
+    }
+    return;
+  }
   const path = `${COLLECTIONS.MESSAGES}/${msg.id}`;
   try {
     const docRef = doc(db, COLLECTIONS.MESSAGES, msg.id);
@@ -1138,6 +1243,9 @@ export async function sendChatMessageToFirestore(msg: TicketMessage): Promise<vo
 // Audit Log Mutations (Immutable Append)
 // -------------------------------------------------------------
 export async function addAuditLogToFirestore(log: AuditLog): Promise<void> {
+  if (!isFirestoreActiveForEnvironment()) {
+    return;
+  }
   const path = `${COLLECTIONS.AUDIT_LOGS}/${log.id}`;
   try {
     const docRef = doc(db, COLLECTIONS.AUDIT_LOGS, log.id);
@@ -1151,6 +1259,18 @@ export async function addAuditLogToFirestore(log: AuditLog): Promise<void> {
 // WhatsApp Template Mutations
 // -------------------------------------------------------------
 export async function saveTemplateToFirestore(template: WhatsAppTemplate): Promise<void> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      await fetch('/api/supabase/settings/whatsapp_templates', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ value: template, description: `WA Template: ${template.name}` })
+      });
+    } catch (err) {
+      console.warn('[Supabase Sync] saveTemplate error:', err);
+    }
+    return;
+  }
   const path = `${COLLECTIONS.WA_TEMPLATES}/${template.id}`;
   try {
     const docRef = doc(db, COLLECTIONS.WA_TEMPLATES, template.id);
@@ -1161,6 +1281,9 @@ export async function saveTemplateToFirestore(template: WhatsAppTemplate): Promi
 }
 
 export async function deleteTemplateFromFirestore(templateId: string): Promise<void> {
+  if (!isFirestoreActiveForEnvironment()) {
+    return;
+  }
   const path = `${COLLECTIONS.WA_TEMPLATES}/${templateId}`;
   try {
     const docRef = doc(db, COLLECTIONS.WA_TEMPLATES, templateId);
@@ -1174,6 +1297,18 @@ export async function deleteTemplateFromFirestore(templateId: string): Promise<v
 // User Profile Mutations (Passwords are NEVER stored in Firestore)
 // -------------------------------------------------------------
 export async function saveUserToFirestore(user: User): Promise<void> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      await fetch('/api/supabase/users', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(user)
+      });
+    } catch (err) {
+      console.warn('[Supabase Sync] saveUser error:', err);
+    }
+    return;
+  }
   const path = `${COLLECTIONS.USERS}/${user.id}`;
   try {
     // Strip sensitive authentication secrets per MoraJaws Security Policy
@@ -1189,6 +1324,18 @@ export async function saveUserToFirestore(user: User): Promise<void> {
 }
 
 export async function deleteUserFromFirestore(userId: string): Promise<void> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      await fetch(`/api/supabase/users/${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ reason: 'Dihapus via antarmuka staf' })
+      });
+    } catch (err) {
+      console.warn('[Supabase Sync] deleteUser error:', err);
+    }
+    return;
+  }
   const path = `${COLLECTIONS.USERS}/${userId}`;
   try {
     const docRef = doc(db, COLLECTIONS.USERS, userId);
@@ -1199,6 +1346,18 @@ export async function deleteUserFromFirestore(userId: string): Promise<void> {
 }
 
 export async function softDeleteUserInFirestore(userId: string, deletedBy: string, reason: string): Promise<void> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      await fetch(`/api/supabase/users/${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ reason })
+      });
+    } catch (err) {
+      console.warn('[Supabase Sync] softDeleteUser error:', err);
+    }
+    return;
+  }
   const path = `${COLLECTIONS.USERS}/${userId}`;
   try {
     const docRef = doc(db, COLLECTIONS.USERS, userId);
@@ -1219,6 +1378,18 @@ export async function softDeleteUserInFirestore(userId: string, deletedBy: strin
 // General Droplists Mutations (Status Agent, Status Installer, Slot Time, Ticket Category)
 // -------------------------------------------------------------
 export async function saveGeneralDroplistsToFirestore(items: DroplistItem[]): Promise<void> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      await fetch('/api/supabase/settings/general_droplists', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ value: items, description: 'General Droplists Configuration' })
+      });
+    } catch (err) {
+      console.warn('[Supabase Sync] saveGeneralDroplists error:', err);
+    }
+    return;
+  }
   const path = `${COLLECTIONS.APP_SETTINGS}/general_droplists`;
   try {
     const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'general_droplists');
@@ -1233,6 +1404,18 @@ export async function saveGeneralDroplistsToFirestore(items: DroplistItem[]): Pr
 }
 
 export async function loadGeneralDroplistsFromFirestore(): Promise<DroplistItem[] | null> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      const res = await fetch('/api/supabase/settings/general_droplists', {
+        headers: getAuthHeaders()
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        return (json.data.value || json.data) as DroplistItem[];
+      }
+    } catch {}
+    return null;
+  }
   const path = `${COLLECTIONS.APP_SETTINGS}/general_droplists`;
   try {
     const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'general_droplists');
@@ -1251,6 +1434,9 @@ export function subscribeToGeneralDroplists(
   callback: (items: DroplistItem[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
+  if (!isFirestoreActiveForEnvironment()) {
+    return () => {};
+  }
   const path = `${COLLECTIONS.APP_SETTINGS}/general_droplists`;
   const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'general_droplists');
   return onSnapshot(
@@ -1399,6 +1585,9 @@ export async function softDeleteReportDropdownCategoryInFirestore(categoryId: st
 }
 
 export async function seedReportDropdownCategoriesIfEmpty(): Promise<number> {
+  if (!isFirestoreActiveForEnvironment()) {
+    return 0;
+  }
   try {
     const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'report_dropdown_categories');
     const snap = await getDoc(docRef);
@@ -1430,6 +1619,10 @@ export async function seedFirestoreIfEmpty(initialData: {
   templates: WhatsAppTemplate[];
   users: User[];
 }): Promise<{ seeded: boolean; counts: Record<string, number> }> {
+  if (!isFirestoreActiveForEnvironment()) {
+    console.info('[MoraJaws Phase 13E] Seeding Firestore dinonaktifkan di lingkungan produksi. Supabase PostgreSQL adalah satu-satunya database produksi aktif.');
+    return { seeded: false, counts: {} };
+  }
   try {
     // Check if system has already completed initial seed in the past
     // CRITICAL: If the database was initialized, NEVER re-seed even if collections are empty (due to user deletions)!
@@ -2061,6 +2254,18 @@ export function reconcileDroplistData(
 }
 
 export async function saveHierarchicalDroplistsToFirestore(statuses: HierarchicalStatus[]): Promise<void> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      await fetch('/api/supabase/settings/hierarchical_droplists', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ value: statuses, description: 'Hierarchical Droplists Configuration' })
+      });
+    } catch (err) {
+      console.warn('[Supabase Sync] saveHierarchicalDroplists error:', err);
+    }
+    return;
+  }
   const path = `${COLLECTIONS.APP_SETTINGS}/hierarchical_droplists`;
   try {
     const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'hierarchical_droplists');
@@ -2120,6 +2325,18 @@ export async function saveHierarchicalDroplistsToFirestore(statuses: Hierarchica
 }
 
 export async function loadHierarchicalDroplistsFromFirestore(): Promise<HierarchicalStatus[] | null> {
+  if (!isFirestoreActiveForEnvironment()) {
+    try {
+      const res = await fetch('/api/supabase/settings/hierarchical_droplists', {
+        headers: getAuthHeaders()
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        return (json.data.value || json.data) as HierarchicalStatus[];
+      }
+    } catch {}
+    return null;
+  }
   const path = `${COLLECTIONS.APP_SETTINGS}/hierarchical_droplists`;
   try {
     const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'hierarchical_droplists');
@@ -2138,6 +2355,9 @@ export function subscribeToHierarchicalDroplists(
   callback: (statuses: HierarchicalStatus[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
+  if (!isFirestoreActiveForEnvironment()) {
+    return () => {};
+  }
   const path = `${COLLECTIONS.APP_SETTINGS}/hierarchical_droplists`;
   const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'hierarchical_droplists');
   return onSnapshot(

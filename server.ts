@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import type { Ticket } from './src/types/index.ts';
 
 import { checkSupabaseConnection, getLastSupabaseHealthStatus, getSupabaseBackendClient } from './server/supabaseClient.ts';
 import {
@@ -41,7 +42,10 @@ import {
   getAppSettingFromSupabase,
   saveAppSettingToSupabase,
   getAuditLogsFromSupabase,
-  insertAuditLogToSupabase
+  insertAuditLogToSupabase,
+  getTicketMessagesFromSupabase,
+  insertTicketMessageToSupabase,
+  getWaTemplatesFromSupabase
 } from './server/supabaseAdapter.ts';
 import { runPhase8ShadowDryRunSuite } from './server/supabaseShadowService.ts';
 import { realtimeSandboxHub, requireSandboxSuperAdmin, getSandboxSuperAdminAllowlist } from './server/realtimeHub.ts';
@@ -1223,37 +1227,41 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
   if (rawToken) {
     const token = rawToken;
 
-    // 1. Firebase Admin ID Token Verification (Section F Workflow)
-    try {
-      const decodedFirebaseToken = await verifyFirebaseIdToken(token);
-      if (decodedFirebaseToken && decodedFirebaseToken.uid) {
-        authSource = 'firebase_token';
-        verifiedDecodedFirebaseToken = decodedFirebaseToken;
+    // Fast-fail if this token was explicitly revoked in server sessions
+    const knownSession = SERVER_SESSIONS.find(s => s.token === token);
+    if (knownSession && knownSession.status === 'revoked') {
+      return res.status(401).json({
+        error: 'Sesi login telah dicabut atau Anda telah logout. Silakan login kembali.',
+        code: 'SESSION_REVOKED'
+      });
+    }
 
-        // 1.A. Match UID or email with user in Supabase
-        if (isSupabaseMode()) {
-          try {
-            const cleanEmail = (decodedFirebaseToken.email || '').toLowerCase().trim();
-            const sbUser = (await findUserInSupabase(decodedFirebaseToken.uid)) ||
-              (cleanEmail ? await findUserInSupabase(cleanEmail) : null);
-            if (sbUser && sbUser.active && !sbUser.isDeleted) {
-              found = sbUser;
-            } else if (!sbUser && !isLocalJsonModeAllowed()) {
-              // User not registered in authoritative Supabase: access denied in production
-              found = undefined;
-            }
-          } catch (sbErr) {
-            if (!isLocalJsonModeAllowed()) {
-              return res.status(503).json({
-                error: 'Database authoritative tidak tersedia saat verifikasi token Firebase.',
-                code: 'DATABASE_UNAVAILABLE'
-              });
-            }
-          }
+    // 1. Supabase Auth JWT Token Verification (Sole Production Authentication Mechanism)
+    if (token.startsWith('eyJ')) {
+      try {
+        const saRes = await verifySupabaseAuthToken(token, knownSession?.sessionVersion);
+        if (saRes.success && saRes.data) {
+          authSource = 'supabase_auth';
+          found = saRes.data as ServerUser;
+        } else if (saRes.error?.code === 'SESSION_REVOKED') {
+          return res.status(401).json({
+            error: 'Sesi login telah dicabut karena perubahan akun atau logout.',
+            code: 'SESSION_REVOKED'
+          });
         }
+      } catch (saErr) {
+        // Fallback to server session check
+      }
+    }
 
-        // 1.B. Match with local persistent storage ONLY when explicitly allowed (non-production)
-        if (!found && isLocalJsonModeAllowed()) {
+    // 1.B. Firebase Admin ID Token Verification (Strictly disabled in production per Phase 13E)
+    if (!found && isLocalJsonModeAllowed()) {
+      try {
+        const decodedFirebaseToken = await verifyFirebaseIdToken(token);
+        if (decodedFirebaseToken && decodedFirebaseToken.uid) {
+          authSource = 'firebase_token';
+          verifiedDecodedFirebaseToken = decodedFirebaseToken;
+
           const cleanEmail = (decodedFirebaseToken.email || '').toLowerCase().trim();
           found = db.users.find(u =>
             !u.isDeleted && u.active && (
@@ -1268,21 +1276,8 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
             saveDatabaseToDisk();
           }
         }
-      }
-    } catch (fbErr) {
-      console.warn('[Auth Middleware] Firebase token check warning:', fbErr);
-    }
-
-    // 1.C. Supabase Auth JWT Token Verification (Section 6 Production Supabase Auth Target)
-    if (!found && token.startsWith('eyJ')) {
-      try {
-        const saRes = await verifySupabaseAuthToken(token);
-        if (saRes.success && saRes.data) {
-          authSource = 'supabase_auth';
-          found = saRes.data as ServerUser;
-        }
-      } catch (saErr) {
-        // Fallback to server session check
+      } catch (fbErr) {
+        console.warn('[Auth Middleware] Firebase token check warning (dev only):', fbErr);
       }
     }
 
@@ -1416,6 +1411,20 @@ function requireTemplateManager(req: AuthenticatedRequest, res: Response, next: 
     return res.status(403).json({
       error: 'Akses Ditolak: Pengelolaan WhatsApp Templates dibatasi untuk Super Admin dan Dispatch.',
       code: 'REQUIRE_TEMPLATE_MANAGER'
+    });
+  }
+  next();
+}
+
+function requireSettingsManager(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Tidak terautentikasi: Sesi login tidak ditemukan.', code: 'UNAUTHENTICATED' });
+  }
+  if (req.user.role !== 'super_admin' && req.user.role !== 'it_support') {
+    logServerAudit('Access Denied (Settings Manager Required)', 'rbac', req.originalUrl, `User ${req.user.name} (${req.user.role}) ditolak mengelola settings aplikasi`, req.user);
+    return res.status(403).json({
+      error: 'Akses Ditolak: Pengelolaan pengaturan aplikasi dibatasi untuk Super Admin dan IT Support.',
+      code: 'REQUIRE_SETTINGS_MANAGER'
     });
   }
   next();
@@ -1865,6 +1874,14 @@ async function startServer() {
 
   // Firebase Authentication Backend Verification Endpoint
   app.post('/api/auth/firebase-login', async (req: Request, res: Response) => {
+    if (!isLocalJsonModeAllowed()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Firebase Authentication dinonaktifkan pada lingkungan produksi MoraJaws. Gunakan login resmi dengan Supabase Auth via /api/auth/supabase-login.',
+        code: 'FIREBASE_AUTH_DISABLED_PRODUCTION'
+      });
+    }
+
     const { email, uid, displayName, idToken } = req.body;
 
     const fbAdminHealth = checkFirebaseAdminHealth();
@@ -2005,19 +2022,43 @@ async function startServer() {
   app.get('/api/bootstrap', async (req: AuthenticatedRequest, res) => {
     const user = req.user;
     let baseTickets: any[] = [];
+    let contractorsList = db.contractors;
+    let coverageAreasList = db.coverageAreas;
+    let templatesList = db.templates;
 
     if (isSupabaseMode()) {
       try {
-        const sbResult = await getWorkOrdersFromSupabase();
+        const [sbResult, sbContr, sbAreas, sbTemplates] = await Promise.all([
+          getWorkOrdersFromSupabase(),
+          getContractorsFromSupabase(),
+          getCoverageAreasFromSupabase(),
+          getWaTemplatesFromSupabase()
+        ]);
+
         if (sbResult.success && sbResult.data) {
           baseTickets = sbResult.data;
-        } else if (isLocalJsonModeAllowed()) {
+        } else if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({
+            success: false,
+            error: 'Database authoritative Supabase tidak dapat diakses saat bootstrap.',
+            code: 'DATABASE_UNAVAILABLE'
+          });
+        } else {
           baseTickets = db.tickets;
         }
+
+        if (sbContr.success && sbContr.data) contractorsList = sbContr.data;
+        if (sbAreas.success && sbAreas.data) coverageAreasList = sbAreas.data;
+        if (sbTemplates.success && sbTemplates.data) templatesList = sbTemplates.data;
       } catch {
-        if (isLocalJsonModeAllowed()) {
-          baseTickets = db.tickets;
+        if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({
+            success: false,
+            error: 'Database authoritative Supabase tidak dapat diakses saat bootstrap.',
+            code: 'DATABASE_UNAVAILABLE'
+          });
         }
+        baseTickets = db.tickets;
       }
     } else {
       baseTickets = db.tickets;
@@ -2041,9 +2082,9 @@ async function startServer() {
         active: user.active
       } : null,
       tickets: scopedTickets,
-      contractors: db.contractors,
-      coverageAreas: db.coverageAreas,
-      templates: db.templates,
+      contractors: contractorsList,
+      coverageAreas: coverageAreasList,
+      templates: templatesList,
       globalConfig: db.globalConfig,
       sheetsConfig: user?.role === 'super_admin' ? db.sheetsConfig : undefined,
       operationalDate: getOperationalDate().date,
@@ -2183,6 +2224,14 @@ async function startServer() {
 
   // --- Auth Endpoints with Brute-Force Rate Limiting & Session Lifecycle ---
   app.post('/api/auth/login', async (req: AuthenticatedRequest, res) => {
+    if (!isLocalJsonModeAllowed()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Endpoint /api/auth/login telah dinonaktifkan pada mode produksi. Seluruh autentikasi wajib melalui /api/auth/supabase-login.',
+        code: 'DEPRECATED_AUTH_ENDPOINT'
+      });
+    }
+
     const rawUser = req.body.username || req.body.identifier;
     const { password, firebaseUid } = req.body;
     if (!rawUser || !password) {
@@ -2400,22 +2449,62 @@ async function startServer() {
       });
     }
 
+    const cleanIdent = String(targetIdent).trim().toLowerCase();
+    const clientIp = (req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+    const rateLimitKey = `${cleanIdent}_${clientIp}`;
+    const attemptInfo = LOGIN_ATTEMPTS.get(rateLimitKey);
+    const nowMs = Date.now();
+
+    if (attemptInfo && attemptInfo.lockedUntil && attemptInfo.lockedUntil > nowMs) {
+      const waitSeconds = Math.ceil((attemptInfo.lockedUntil - nowMs) / 1000);
+      return res.status(429).json({
+        success: false,
+        error: `Terlalu banyak percobaan login yang gagal. Akun/IP ditangguhkan sementara demi keamanan. Coba lagi dalam ${waitSeconds} detik.`,
+        code: 'auth/too-many-requests'
+      });
+    }
+
     const authRes = await signInWithSupabaseAuth(targetIdent, password);
     if (!authRes.success || !authRes.data) {
+      const errCode = authRes.error?.code || 'AUTH_FAILED';
+      let statusCode = 401;
+
+      if (errCode === 'DATABASE_UNAVAILABLE') {
+        statusCode = 503;
+      } else if (errCode === 'auth/user-not-found') {
+        statusCode = 404;
+      } else if (errCode === 'ACCOUNT_DISABLED' || errCode === 'ACCOUNT_DELETED' || errCode === 'auth/user-disabled') {
+        statusCode = 403;
+      } else {
+        const currentAttempts = (attemptInfo?.count || 0) + 1;
+        let lockedUntil: number | undefined;
+        if (currentAttempts >= 5) {
+          lockedUntil = nowMs + 5 * 60 * 1000;
+        }
+        LOGIN_ATTEMPTS.set(rateLimitKey, {
+          count: currentAttempts,
+          lastAttempt: nowMs,
+          lockedUntil
+        });
+      }
+
       await logServerAuditAsync(
         'Login Failed (Supabase Auth)',
         'auth',
         targetIdent,
-        `Percobaan login Supabase Auth gagal untuk ${targetIdent}: ${authRes.error?.message || 'Invalid credentials'}`,
+        `Percobaan login Supabase Auth gagal untuk ${targetIdent}: ${authRes.error?.message || 'Invalid credentials'} [${errCode}]`,
         null,
         { level: 'critical' }
       );
-      return res.status(401).json({
+      return res.status(statusCode).json({
         success: false,
         error: authRes.error?.message || 'Autentikasi Supabase Auth gagal.',
-        code: authRes.error?.code || 'AUTH_FAILED'
+        code: errCode
       });
     }
+
+    // Reset failed attempts on success
+    LOGIN_ATTEMPTS.delete(rateLimitKey);
 
     const { user, tokens, sessionVersion } = authRes.data;
 
@@ -3514,8 +3603,22 @@ async function startServer() {
   });
 
   // --- Contractor Endpoints ---
-  app.get('/api/contractors', requireAuth, (_req, res) => {
-    res.json({ contractors: db.contractors });
+  app.get('/api/contractors', requireAuth, async (_req, res) => {
+    if (isSupabaseMode()) {
+      try {
+        const result = await getContractorsFromSupabase();
+        if (result.success && result.data) {
+          return res.json({ success: true, contractors: result.data });
+        } else if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
+        }
+      } catch (err: any) {
+        if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
+        }
+      }
+    }
+    res.json({ success: true, contractors: db.contractors });
   });
 
   app.post('/api/contractors', requireAuth, (req: AuthenticatedRequest, res) => {
@@ -3584,8 +3687,22 @@ async function startServer() {
   app.patch('/api/contractors/:id', requireAuth, handleUpdateContractor);
 
   // --- Coverage Area Endpoints ---
-  app.get('/api/coverage-areas', requireAuth, (_req, res) => {
-    res.json({ coverageAreas: db.coverageAreas });
+  app.get('/api/coverage-areas', requireAuth, async (_req, res) => {
+    if (isSupabaseMode()) {
+      try {
+        const result = await getCoverageAreasFromSupabase();
+        if (result.success && result.data) {
+          return res.json({ success: true, coverageAreas: result.data });
+        } else if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
+        }
+      } catch (err: any) {
+        if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
+        }
+      }
+    }
+    res.json({ success: true, coverageAreas: db.coverageAreas });
   });
 
   app.post('/api/coverage-areas', requireAuth, (req: AuthenticatedRequest, res) => {
@@ -3608,12 +3725,30 @@ async function startServer() {
   });
 
   // --- User Management Endpoints (Super Admin / Leader creating Installer) ---
-  app.get('/api/users', requireAuth, (_req, res) => {
+  app.get('/api/users', requireAuth, async (_req, res) => {
+    if (isSupabaseMode()) {
+      try {
+        const result = await getUsersFromSupabase(false);
+        if (result.success && result.data) {
+          const safe = result.data.filter(u => !u.isDeleted).map(u => {
+            const { passwordHash: _, ...rest } = u as any;
+            return rest;
+          });
+          return res.json({ success: true, users: safe });
+        } else if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
+        }
+      } catch (err: any) {
+        if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
+        }
+      }
+    }
     const activeUsers = db.users.filter(u => !u.isDeleted).map(u => {
       const { passwordHash: _, ...safe } = u;
       return safe;
     });
-    res.json({ users: activeUsers });
+    res.json({ success: true, users: activeUsers });
   });
 
   app.post('/api/users', requireAuth, (req: AuthenticatedRequest, res) => {
@@ -6166,9 +6301,15 @@ async function startServer() {
   app.get('/api/supabase/contractors', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const result = await getContractorsFromSupabase();
+      if (!result.success && !isLocalJsonModeAllowed()) {
+        return res.status(503).json({ success: false, error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' } });
+      }
       const list = result.success ? (result.data || []) : (db.contractors || []);
       return res.json({ success: true, data: list });
     } catch (err: any) {
+      if (!isLocalJsonModeAllowed()) {
+        return res.status(503).json({ success: false, error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' } });
+      }
       return res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err?.message } });
     }
   });
@@ -6219,9 +6360,15 @@ async function startServer() {
   app.get('/api/supabase/coverage-areas', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const result = await getCoverageAreasFromSupabase();
+      if (!result.success && !isLocalJsonModeAllowed()) {
+        return res.status(503).json({ success: false, error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' } });
+      }
       const list = result.success ? (result.data || []) : (db.coverageAreas || []);
       return res.json({ success: true, data: list });
     } catch (err: any) {
+      if (!isLocalJsonModeAllowed()) {
+        return res.status(503).json({ success: false, error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' } });
+      }
       return res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err?.message } });
     }
   });
@@ -6257,7 +6404,7 @@ async function startServer() {
   });
 
   // 21. POST /api/supabase/settings/:key
-  app.post('/api/supabase/settings/:key', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/supabase/settings/:key', requireSettingsManager, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { key } = req.params;
       const user = req.user!;
@@ -6287,9 +6434,15 @@ async function startServer() {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 100;
       const result = await getAuditLogsFromSupabase(limit);
+      if (!result.success && !isLocalJsonModeAllowed()) {
+        return res.status(503).json({ success: false, error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' } });
+      }
       const list = result.success ? (result.data || []) : (db.auditLogs || []);
       return res.json({ success: true, data: list });
     } catch (err: any) {
+      if (!isLocalJsonModeAllowed()) {
+        return res.status(503).json({ success: false, error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' } });
+      }
       return res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err?.message } });
     }
   });
@@ -6951,7 +7104,7 @@ async function startServer() {
   });
 
   // --- Live Chat Messages with RBAC & Auto Check-in Engine ---
-  app.get('/api/tickets/:id/messages', requireAuth, (req: AuthenticatedRequest, res) => {
+  app.get('/api/tickets/:id/messages', requireAuth, async (req: AuthenticatedRequest, res) => {
     const { id } = req.params;
     const ticket = db.tickets.find(t => t.id === id || t.woNumber === id);
 
@@ -6971,10 +7124,26 @@ async function startServer() {
     }
 
     const msgs = db.ticketMessages.filter(m => m.ticketId === (ticket ? ticket.id : id) || m.woNumber === (ticket ? ticket.woNumber : id));
-    res.json({ messages: msgs });
+
+    if (isSupabaseMode()) {
+      try {
+        const msgRes = await getTicketMessagesFromSupabase(id);
+        if (msgRes.success && msgRes.data) {
+          return res.json({ success: true, messages: msgRes.data });
+        } else if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
+        }
+      } catch (err) {
+        if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
+        }
+      }
+    }
+
+    res.json({ success: true, messages: msgs });
   });
 
-  app.post('/api/tickets/:id/messages', requireAuth, (req: AuthenticatedRequest, res) => {
+  app.post('/api/tickets/:id/messages', requireAuth, async (req: AuthenticatedRequest, res) => {
     const { id } = req.params;
     const { text, attachments } = req.body;
     const user = req.user!;
@@ -7047,6 +7216,25 @@ async function startServer() {
       timestamp: nowIso
     };
 
+    if (isSupabaseMode()) {
+      try {
+        await insertTicketMessageToSupabase({
+          id: newMsg.id,
+          ticketId: newMsg.ticketId,
+          woNumber: newMsg.woNumber,
+          senderId: newMsg.senderId,
+          senderName: newMsg.senderName,
+          senderRole: newMsg.senderRole,
+          messageText: newMsg.text,
+          attachments: newMsg.attachments
+        });
+      } catch (sbErr) {
+        if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
+        }
+      }
+    }
+
     db.ticketMessages.push(newMsg);
     saveDatabaseToDisk();
 
@@ -7071,8 +7259,22 @@ async function startServer() {
   });
 
   // --- Audit Logs (Super Admin & IT Support Read-Only) ---
-  app.get('/api/audit-logs', requireAuditLogViewer, (_req, res) => {
-    res.json({ logs: db.auditLogs });
+  app.get('/api/audit-logs', requireAuditLogViewer, async (_req, res) => {
+    if (isSupabaseMode()) {
+      try {
+        const auditRes = await getAuditLogsFromSupabase(100);
+        if (auditRes.success && auditRes.data) {
+          return res.json({ success: true, logs: auditRes.data });
+        } else if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
+        }
+      } catch (err: any) {
+        if (!isLocalJsonModeAllowed()) {
+          return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
+        }
+      }
+    }
+    res.json({ success: true, logs: db.auditLogs });
   });
 
   // Disabled per Phase 9O Remediation: Audit records must exclusively originate from trusted server operations
