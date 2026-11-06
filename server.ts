@@ -305,6 +305,9 @@ export function isLocalJsonModeAllowed(): boolean {
 }
 
 export function isSupabaseMode(): boolean {
+  if (getSupabaseBackendClient() !== null) {
+    return true;
+  }
   const hasSupabaseUrl = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_URL.trim());
   const hasServiceKey = Boolean(
     (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY.trim()) ||
@@ -350,6 +353,8 @@ export interface ServerSession {
   name: string;
   role: 'super_admin' | 'dispatch' | 'leader' | 'installer' | 'management_data' | 'it_support';
   contractor?: string;
+  contractorId?: string;
+  area?: string;
   sessionVersion?: number;
   loginAt: string;
   lastActivityAt: string;
@@ -4804,7 +4809,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     let user: ServerUser | null | undefined = null;
     if (isSupabaseMode()) {
       const supaUser = await getUserByIdFromSupabase(id);
-      if (supaUser.success && supaUser.data) {
+      if (supaUser.success) {
         user = supaUser.data;
       } else if (!isLocalJsonModeAllowed()) {
         const status = supaUser.error?.isUnavailable ? 503 : (supaUser.error?.isNotFound ? 404 : 500);
@@ -4864,7 +4869,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     let user: ServerUser | null | undefined = null;
     if (isSupabaseMode()) {
       const supaUser = await getUserByIdFromSupabase(id);
-      if (supaUser.success && supaUser.data) {
+      if (supaUser.success) {
         user = supaUser.data;
       } else if (!isLocalJsonModeAllowed()) {
         const status = supaUser.error?.isUnavailable ? 503 : (supaUser.error?.isNotFound ? 404 : 500);
@@ -7929,7 +7934,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         if (!isLocalJsonModeAllowed()) {
           const errCode = assignRes.error?.code;
           const status = assignRes.error?.isUnavailable ? 503
-            : (errCode === 'SCOPE_MISMATCH' || errCode === 'PROTECTED_RECORD') ? 403
+            : (errCode === 'SCOPE_MISMATCH' || errCode === 'PROTECTED_RECORD' || errCode === 'PROTECTED_PRODUCTION_RECORD') ? 403
             : errCode === 'NOT_FOUND' ? 404
             : errCode === 'INVALID_INPUT' ? 400
             : 500;
@@ -8019,7 +8024,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         if (!isLocalJsonModeAllowed()) {
           const errCode = reassignRes.error?.code;
           const status = reassignRes.error?.isUnavailable ? 503
-            : (errCode === 'SCOPE_MISMATCH' || errCode === 'PROTECTED_RECORD') ? 403
+            : (errCode === 'SCOPE_MISMATCH' || errCode === 'PROTECTED_RECORD' || errCode === 'PROTECTED_PRODUCTION_RECORD') ? 403
             : errCode === 'NOT_FOUND' ? 404
             : (errCode === 'INVALID_INPUT' || errCode === 'INVALID_REASON') ? 400
             : 500;

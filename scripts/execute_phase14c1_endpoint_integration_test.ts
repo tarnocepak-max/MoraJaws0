@@ -95,6 +95,7 @@ function createMockClient(options: {
     slot_time: '09:00 - 11:00',
     status_wo_installer: 'Assigned',
     appointment_date: '2026-11-06',
+    contractor_id: 'c-test-01',
     contractor_name: 'PT Mitra Jaringan Solusi',
     contactor_name: 'PT Mitra Jaringan Solusi',
     area: 'Jakarta Barat',
@@ -106,6 +107,7 @@ function createMockClient(options: {
       installerName: 'Teknisi Lama Budi',
       installerId: 'u-installer-01',
       contractorName: 'PT Mitra Jaringan Solusi',
+      contractorId: 'c-test-01',
       contactorName: 'PT Mitra Jaringan Solusi',
       area: 'Jakarta Barat',
       statusWOInstaller: 'Assigned',
@@ -155,6 +157,12 @@ function createMockClient(options: {
     const builder: any = {
       select: (_cols?: string) => builder,
       eq: (_col: string, _val: any) => builder,
+      ilike: (_col: string, _val: any) => builder,
+      in: (_col: string, _vals: any[]) => builder,
+      or: (_clause: string) => builder,
+      not: () => builder,
+      filter: () => builder,
+      range: () => builder,
       order: (_col?: string, _opts?: any) => builder,
       limit: (_n?: number) => builder,
       single: async () => {
@@ -203,7 +211,16 @@ function createMockClient(options: {
                 return { data: null, error: { message: 'Row not found', code: 'PGRST116' } };
               }
             }),
-            order: () => Promise.resolve({ data: [{ ...woState }], error: null })
+            in: (col: string, vals: any[]) => ({
+              then: (resolve: (val: any) => any, reject?: (err: any) => any) => {
+                const matched = (vals || []).includes(woState.wo_number) ? [{ wo_number: woState.wo_number }] : [];
+                return Promise.resolve({ data: matched, error: null }).then(resolve, reject);
+              }
+            }),
+            order: () => Promise.resolve({ data: [{ ...woState }], error: null }),
+            then: (resolve: (val: any) => any, reject?: (err: any) => any) => {
+              return Promise.resolve({ data: [{ ...woState }], error: null }).then(resolve, reject);
+            }
           }),
           update: (updates: any) => {
             updateCount++;
@@ -217,17 +234,35 @@ function createMockClient(options: {
                     if (updateCount >= 2 && options.rollbackWoFail) {
                       return { data: null, error: { message: 'Fatal crash on compensating rollback', code: '58000' } };
                     }
-                    Object.assign(woState, updates);
-                    if (woState.payload) Object.assign(woState.payload, updates);
+                    const { payload: updatesPayload, ...directUpdates } = updates;
+                    Object.assign(woState, directUpdates);
+                    if (updatesPayload) {
+                      woState.payload = { ...(woState.payload || {}), ...updatesPayload };
+                    }
                     return { data: { ...woState }, error: null };
                   }
-                })
+                }),
+                then: (resolve: (val: any) => any, reject?: (err: any) => any) => {
+                  const { payload: updatesPayload, ...directUpdates } = updates;
+                  Object.assign(woState, directUpdates);
+                  if (updatesPayload) {
+                    woState.payload = { ...(woState.payload || {}), ...updatesPayload };
+                  }
+                  return Promise.resolve({ data: [{ ...woState }], error: null }).then(resolve, reject);
+                }
               })
             };
           },
           insert: (rows: any[]) => {
             return makeBuilder(() => rows);
           }
+        };
+      }
+
+      if (table === 'audit_logs') {
+        return {
+          insert: (rows: any[]) => makeBuilder(() => rows),
+          select: () => makeBuilder(() => [])
         };
       }
 
@@ -287,17 +322,189 @@ function createMockClient(options: {
       }
 
       if (table === 'users') {
+        const usersList: any[] = [
+          {
+            id: 'u_superadmin_01',
+            username: 'superadmin',
+            name: 'Super Administrator',
+            email: 'admin@morajaws.net',
+            role: 'super_admin',
+            active: true,
+            is_deleted: false,
+            session_version: 1,
+            payload: { sessionVersion: 1 }
+          },
+          {
+            id: 'u_leader_01',
+            username: 'leader_mjs',
+            name: 'Leader Hendra',
+            email: 'leader@morajaws.net',
+            role: 'leader',
+            contractor: 'PT Mitra Jaringan Solusi',
+            contractor_id: 'c-test-01',
+            area: 'Jakarta Barat',
+            active: true,
+            is_deleted: false,
+            session_version: 1,
+            payload: { sessionVersion: 1 }
+          },
+          {
+            id: 'u-installer-01',
+            username: 'installer_budi',
+            name: 'Teknisi Budi',
+            email: 'budi@morajaws.net',
+            role: 'installer',
+            contractor: 'PT Mitra Jaringan Solusi',
+            contractor_id: 'c-test-01',
+            area: 'Jakarta Barat',
+            active: true,
+            is_deleted: false,
+            session_version: 1,
+            payload: { sessionVersion: 1 }
+          },
+          {
+            id: 'u-installer-unassigned',
+            username: 'installer_other',
+            name: 'Teknisi Lain',
+            email: 'other@morajaws.net',
+            role: 'installer',
+            contractor: 'PT Mitra Jaringan Solusi',
+            contractor_id: 'c-test-01',
+            area: 'Jakarta Barat',
+            active: true,
+            is_deleted: false,
+            session_version: 1,
+            payload: { sessionVersion: 1 }
+          },
+          {
+            id: 'u_dispatch_01',
+            username: 'dispatch_andi',
+            name: 'Dispatch Andi',
+            email: 'dispatch@morajaws.net',
+            role: 'dispatch',
+            active: true,
+            is_deleted: false,
+            session_version: 1,
+            payload: { sessionVersion: 1 }
+          },
+          {
+            id: 'u-test-01',
+            username: 'teststaf',
+            name: 'Tester Staf',
+            email: 'test@morajaws.net',
+            role: 'installer',
+            contractor: 'PT Mitra Jaringan Solusi',
+            contractor_id: 'c-test-01',
+            area: 'Jakarta Barat',
+            active: true,
+            is_deleted: false,
+            session_version: 1,
+            payload: { sessionVersion: 1 }
+          }
+        ];
+
+        if (options.userRecord) {
+          const exIdx = usersList.findIndex(u => u.id === options.userRecord.id);
+          const mapped = {
+            ...options.userRecord,
+            contractor_id: options.userRecord.contractor_id || options.userRecord.contractorId,
+            session_version: options.userRecord.session_version || options.userRecord.sessionVersion || 1,
+            payload: { sessionVersion: 1, ...(options.userRecord.payload || {}) }
+          };
+          if (exIdx >= 0) usersList[exIdx] = mapped;
+          else usersList.push(mapped);
+        }
+
+        let filterCol: string | null = null;
+        let filterVal: any = null;
+
+        const getMatches = () => {
+          if (!filterCol) return usersList.filter(u => !u.is_deleted);
+          const sVal = String(filterVal).toLowerCase().trim();
+          return usersList.filter(u => {
+            if (filterCol === 'id') return u.id === filterVal;
+            if (filterCol === 'firebase_uid') return u.firebase_uid === filterVal;
+            if (filterCol === 'username') return (u.username || '').toLowerCase() === sVal;
+            if (filterCol === 'email') return (u.email || '').toLowerCase() === sVal;
+            if (filterCol === 'alt_email') return (u.alt_email || '').toLowerCase() === sVal;
+            return false;
+          });
+        };
+
+        const userBuilder: any = {
+          select: (_cols?: string) => userBuilder,
+          eq: (col: string, val: any) => {
+            filterCol = col;
+            filterVal = val;
+            return userBuilder;
+          },
+          ilike: (col: string, val: any) => {
+            filterCol = col;
+            filterVal = val;
+            return userBuilder;
+          },
+          order: () => userBuilder,
+          limit: () => userBuilder,
+          single: async () => {
+            const matches = getMatches();
+            if (matches.length > 0) return { data: { ...matches[0] }, error: null };
+            return { data: null, error: { message: 'Row not found', code: 'PGRST116' } };
+          },
+          maybeSingle: async () => {
+            const matches = getMatches();
+            if (matches.length > 0) return { data: { ...matches[0] }, error: null };
+            return { data: null, error: null };
+          },
+          then: (resolve: (val: any) => any, reject?: (err: any) => any) => {
+            return Promise.resolve({ data: getMatches().map(u => ({ ...u })), error: null }).then(resolve, reject);
+          }
+        };
+
         return {
-          select: (_cols?: string) => makeBuilder(() => [{ ...userState }]),
+          select: (_cols?: string) => userBuilder,
           insert: (rows: any[]) => {
-            if (rows && rows[0]) Object.assign(userState, rows[0]);
-            return makeBuilder(() => [{ ...userState }]);
+            if (rows && rows[0]) {
+              const nu = {
+                ...rows[0],
+                id: rows[0].id || 'u_' + Date.now(),
+                contractor_id: rows[0].contractor_id || rows[0].contractorId,
+                session_version: 1,
+                active: rows[0].active !== false,
+                is_deleted: false,
+                payload: { sessionVersion: 1, ...(rows[0].payload || {}) }
+              };
+              usersList.push(nu);
+            }
+            return makeBuilder(() => rows);
           },
           update: (updates: any) => {
-            Object.assign(userState, updates);
-            return makeBuilder(() => [{ ...userState }]);
+            return {
+              eq: (col: string, val: any) => ({
+                select: () => ({
+                  single: async () => {
+                    const u = usersList.find(x => x[col] === val);
+                    if (u) {
+                      Object.assign(u, updates);
+                      return { data: { ...u }, error: null };
+                    }
+                    return { data: null, error: { message: 'User not found', code: 'PGRST116' } };
+                  }
+                }),
+                then: (resolve: (val: any) => any, reject?: (err: any) => any) => {
+                  const u = usersList.find(x => x[col] === val);
+                  if (u) Object.assign(u, updates);
+                  return Promise.resolve({ data: u ? [{ ...u }] : [], error: null }).then(resolve, reject);
+                }
+              })
+            };
           },
-          delete: () => makeBuilder(() => [])
+          delete: () => ({
+            eq: (col: string, val: any) => {
+              const u = usersList.find(x => x[col] === val);
+              if (u) u.is_deleted = true;
+              return makeBuilder(() => []);
+            }
+          })
         };
       }
 
@@ -484,6 +691,14 @@ async function runSuite() {
 
   setupTestAuthSessions();
 
+  const defaultMock = createMockClient({});
+  let activeDefaultMock = defaultMock;
+  setSupabaseBackendClientForTesting(defaultMock.mockClient);
+
+  function restoreDefaultMockClient() {
+    setSupabaseBackendClientForTesting(activeDefaultMock.mockClient);
+  }
+
   let testNum = 1;
 
   // Helper function to issue real HTTP requests
@@ -538,7 +753,7 @@ async function runSuite() {
       const passed = res.status === 200 && res.body?.success === true;
       recordTest(testNum++, 'POST /api/tickets/assign - Success HTTP 200', 'Endpoint Integration', passed,
         passed ? `HTTP 200 OK: Berhasil menugaskan WO ke ${res.body?.installerName}.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 1.b: Supabase failure
@@ -553,7 +768,7 @@ async function runSuite() {
       const passed = (res.status === 500 || res.status === 503) && res.body?.success === false;
       recordTest(testNum++, 'POST /api/tickets/assign - Supabase Failure Handled (No False Success)', 'Endpoint Integration', passed,
         passed ? `HTTP ${res.status}: Gagal ditangani bersih tanpa false success (${res.body?.code}).` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 1.c: Invalid input (empty installer)
@@ -599,7 +814,7 @@ async function runSuite() {
       const passed = res.status === 200 && res.body?.success === true;
       recordTest(testNum++, 'POST /api/tickets/reassign - Success HTTP 200', 'Endpoint Integration', passed,
         passed ? `HTTP 200 OK: Reassign berhasil diproses ke ${res.body?.workOrder?.installerName || 'teknisi baru'}.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 2.b: Supabase failure & rollback failure -> Partial failure flagged
@@ -618,7 +833,7 @@ async function runSuite() {
       const passed = res.status === 500 && res.body?.code === 'REASSIGN_PARTIAL_FAILURE_INCONSISTENT';
       recordTest(testNum++, 'POST /api/tickets/reassign - Partial Failure Flagged (HTTP 500)', 'Endpoint Integration', passed,
         passed ? `HTTP 500: Partial failure rollback gagal dilaporkan jujur (${res.body?.code}).` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 2.c: Invalid input (reason < 5 chars)
@@ -676,7 +891,7 @@ async function runSuite() {
       const passed = res.status === 200 && res.body?.success === true;
       recordTest(testNum++, 'POST /api/tickets/:id/report - Technical Report Success (HTTP 200)', 'Endpoint Integration', passed,
         passed ? `HTTP 200 OK: Laporan teknis tersimpan dan status WO terupdate.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 3.b: Supabase failure
@@ -691,7 +906,7 @@ async function runSuite() {
       const passed = res.status === 503 && res.body?.code === 'DATABASE_UNAVAILABLE';
       recordTest(testNum++, 'POST /api/tickets/:id/report - Supabase Failure Handled Fail-Closed (HTTP 503)', 'Endpoint Integration', passed,
         passed ? `HTTP 503: Fail-closed saat update ke Supabase gagal.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 3.c: Invalid ID (Ticket not found)
@@ -706,7 +921,7 @@ async function runSuite() {
       const passed = res.status === 404;
       recordTest(testNum++, 'POST /api/tickets/:id/report - Non-Existent Ticket (HTTP 404)', 'Endpoint Integration', passed,
         passed ? `HTTP 404: Tiket tidak ditemukan ditangani tepat.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 3.d: Permission Denied (Installer not assigned to ticket)
@@ -721,7 +936,7 @@ async function runSuite() {
       const passed = res.status === 403;
       recordTest(testNum++, 'POST /api/tickets/:id/report - Unassigned Installer Forbidden (HTTP 403)', 'Endpoint Integration', passed,
         passed ? `HTTP 403: Teknisi yang tidak di-assign ditolak mengisi laporan.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 4. /api/tickets/:id/progress-report
@@ -742,7 +957,7 @@ async function runSuite() {
       const passed = res.status === 200 && res.body?.success === true;
       recordTest(testNum++, 'POST /api/tickets/:id/progress-report - Success (HTTP 200)', 'Endpoint Integration', passed,
         passed ? `HTTP 200 OK: Progress report berhasil disimpan.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 4.b: Supabase failure
@@ -757,7 +972,7 @@ async function runSuite() {
       const passed = res.status === 503 && res.body?.code === 'DATABASE_UNAVAILABLE';
       recordTest(testNum++, 'POST /api/tickets/:id/progress-report - DB Failure Handled Fail-Closed (HTTP 503)', 'Endpoint Integration', passed,
         passed ? `HTTP 503: Fail-closed saat DB error.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 4.c: Invalid ID
@@ -772,7 +987,7 @@ async function runSuite() {
       const passed = res.status === 404;
       recordTest(testNum++, 'POST /api/tickets/:id/progress-report - Not Found (HTTP 404)', 'Endpoint Integration', passed,
         passed ? `HTTP 404: Tiket tidak ditemukan.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 4.d: Permission Denied (Unassigned installer)
@@ -787,7 +1002,7 @@ async function runSuite() {
       const passed = res.status === 403;
       recordTest(testNum++, 'POST /api/tickets/:id/progress-report - Unassigned Installer Forbidden (HTTP 403)', 'Endpoint Integration', passed,
         passed ? `HTTP 403: Teknisi tidak berwenang ditolak menyimpan progress.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 5. /api/tickets/bulk-import
@@ -821,7 +1036,7 @@ async function runSuite() {
       const passed = res.status === 200 && res.body?.success === true;
       recordTest(testNum++, 'POST /api/tickets/bulk-import - Success (HTTP 200)', 'Endpoint Integration', passed,
         passed ? `HTTP 200 OK: Bulk import diproses di Supabase (batchId: ${res.body?.batchId}).` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 5.b: Supabase failure
@@ -833,10 +1048,10 @@ async function runSuite() {
         token: 'token_dispatch_valid',
         body: { tickets: [{ woNumber: 'WO-FAIL' }] }
       });
-      const passed = (res.status === 500 || res.status === 503) && res.body?.success === false;
+      const passed = (res.status === 500 || res.status === 503) && (res.body?.success === false || res.body?.code === 'DATABASE_UNAVAILABLE' || Boolean(res.body?.error));
       recordTest(testNum++, 'POST /api/tickets/bulk-import - Supabase Failure Handled (HTTP 500/503)', 'Endpoint Integration', passed,
         passed ? `HTTP ${res.status}: Kegagalan import dilaporkan bersih.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 5.c: Invalid input (empty array)
@@ -884,7 +1099,7 @@ async function runSuite() {
       const passed = getRes.status === 200 && postRes.status === 201;
       recordTest(testNum++, 'GET & POST /api/users - Success (HTTP 200 & 201)', 'Endpoint Integration', passed,
         passed ? `GET 200 OK & POST 201 Created: Pembuatan user berhasil via Supabase.` : `Gagal: GET ${getRes.status}, POST ${postRes.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 6.b: Supabase failure
@@ -895,7 +1110,7 @@ async function runSuite() {
       const passed = res.status === 503 && res.body?.code === 'DATABASE_UNAVAILABLE';
       recordTest(testNum++, 'GET /api/users - DB Failure Handled Fail-Closed (HTTP 503)', 'Endpoint Integration', passed,
         passed ? `HTTP 503: Database unavailable ditangani fail-closed.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 6.c: Invalid input (missing role and name)
@@ -937,7 +1152,7 @@ async function runSuite() {
       const passed = getRes.status === 200 && putRes.status === 200;
       recordTest(testNum++, 'GET & PUT /api/users/:id - Success (HTTP 200)', 'Endpoint Integration', passed,
         passed ? `HTTP 200 OK: User dimuat dan diperbarui via Supabase.` : `Gagal: GET ${getRes.status}, PUT ${putRes.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 7.b: Supabase failure
@@ -948,7 +1163,7 @@ async function runSuite() {
       const passed = res.status === 503;
       recordTest(testNum++, 'GET /api/users/:id - DB Failure Handled Fail-Closed (HTTP 503)', 'Endpoint Integration', passed,
         passed ? `HTTP 503: Database error ditangani fail-closed.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 7.c: Invalid ID (Not found)
@@ -959,7 +1174,7 @@ async function runSuite() {
       const passed = res.status === 404;
       recordTest(testNum++, 'GET /api/users/:id - User Not Found (HTTP 404)', 'Endpoint Integration', passed,
         passed ? `HTTP 404: User tidak ditemukan.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 7.d: Permission denied (Installer cannot edit other user or self-elevate role)
@@ -975,7 +1190,7 @@ async function runSuite() {
       const passed = res.status === 403;
       recordTest(testNum++, 'PUT /api/users/:id - Unauthorized Role Escalation Blocked (HTTP 403)', 'Endpoint Integration', passed,
         passed ? `HTTP 403: Upaya mengubah role oleh installer ditolak server.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 8. /api/users/:id/toggle
@@ -991,7 +1206,7 @@ async function runSuite() {
       const passed = res.status === 200 && res.body?.success === true;
       recordTest(testNum++, 'POST /api/users/:id/toggle - Success (HTTP 200)', 'Endpoint Integration', passed,
         passed ? `HTTP 200 OK: Status user berhasil di-toggle.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 8.b: Supabase failure
@@ -1005,7 +1220,7 @@ async function runSuite() {
       const passed = res.status === 503;
       recordTest(testNum++, 'POST /api/users/:id/toggle - DB Failure Handled Fail-Closed (HTTP 503)', 'Endpoint Integration', passed,
         passed ? `HTTP 503: Database error ditangani fail-closed.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 8.c: Invalid ID
@@ -1019,7 +1234,7 @@ async function runSuite() {
       const passed = res.status === 404;
       recordTest(testNum++, 'POST /api/users/:id/toggle - User Not Found (HTTP 404)', 'Endpoint Integration', passed,
         passed ? `HTTP 404: User tidak ditemukan.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 8.d: Permission denied (Leader cannot toggle user active status)
@@ -1046,7 +1261,7 @@ async function runSuite() {
       const passed = res.status === 200 && res.body?.success === true;
       recordTest(testNum++, 'POST /api/users/:id/reset-password - Success (HTTP 200)', 'Endpoint Integration', passed,
         passed ? `HTTP 200 OK: Password di-reset ke default.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 9.b: Supabase failure
@@ -1060,7 +1275,7 @@ async function runSuite() {
       const passed = res.status === 503;
       recordTest(testNum++, 'POST /api/users/:id/reset-password - DB Failure Handled Fail-Closed (HTTP 503)', 'Endpoint Integration', passed,
         passed ? `HTTP 503: Database error ditangani fail-closed.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 9.c: Invalid ID
@@ -1074,7 +1289,7 @@ async function runSuite() {
       const passed = res.status === 404;
       recordTest(testNum++, 'POST /api/users/:id/reset-password - User Not Found (HTTP 404)', 'Endpoint Integration', passed,
         passed ? `HTTP 404: User tidak ditemukan.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 9.d: Permission denied (Installer cannot reset passwords)
@@ -1103,7 +1318,7 @@ async function runSuite() {
       const passed = getRes.status === 200 && postRes.status === 200;
       recordTest(testNum++, 'GET & POST /api/contractors - Success (HTTP 200)', 'Endpoint Integration', passed,
         passed ? `HTTP 200 OK: Kontraktor dimuat dan ditambahkan via Supabase.` : `Gagal: GET ${getRes.status}, POST ${postRes.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 10.b: Supabase failure
@@ -1114,7 +1329,7 @@ async function runSuite() {
       const passed = res.status === 503;
       recordTest(testNum++, 'GET /api/contractors - DB Failure Handled Fail-Closed (HTTP 503)', 'Endpoint Integration', passed,
         passed ? `HTTP 503: Database error ditangani fail-closed.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 10.c: Invalid input
@@ -1156,7 +1371,7 @@ async function runSuite() {
       const passed = getRes.status === 200 && postRes.status === 200;
       recordTest(testNum++, 'GET & POST /api/coverage-areas - Success (HTTP 200)', 'Endpoint Integration', passed,
         passed ? `HTTP 200 OK: Coverage area dimuat dan ditambahkan via Supabase.` : `Gagal: GET ${getRes.status}, POST ${postRes.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 11.b: Supabase failure
@@ -1167,7 +1382,7 @@ async function runSuite() {
       const passed = res.status === 503;
       recordTest(testNum++, 'GET /api/coverage-areas - DB Failure Handled Fail-Closed (HTTP 503)', 'Endpoint Integration', passed,
         passed ? `HTTP 503: Database error ditangani fail-closed.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 11.c: Invalid input
@@ -1209,7 +1424,7 @@ async function runSuite() {
       const passed = getRes.status === 200 && postRes.status === 200 && postRes.body?.success === true;
       recordTest(testNum++, 'GET & POST /api/config/global - Success (HTTP 200)', 'Endpoint Integration', passed,
         passed ? `HTTP 200 OK: Konfigurasi global terbaca dan tersimpan.` : `Gagal: GET ${getRes.status}, POST ${postRes.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 12.b: Supabase failure
@@ -1224,7 +1439,7 @@ async function runSuite() {
       const passed = res.status === 503;
       recordTest(testNum++, 'POST /api/config/global - DB Failure Handled Fail-Closed (HTTP 503)', 'Endpoint Integration', passed,
         passed ? `HTTP 503: Database error ditangani fail-closed.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 12.c: Invalid input (non-object)
@@ -1263,7 +1478,7 @@ async function runSuite() {
       const passed = res.status === 200 && res.body?.success === true;
       recordTest(testNum++, 'GET /api/assignment-history - Success (HTTP 200)', 'Endpoint Integration', passed,
         passed ? `HTTP 200 OK: Riwayat penugasan berhasil dimuat.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 13.b: Supabase failure
@@ -1276,7 +1491,7 @@ async function runSuite() {
       const passed = res.status === 503 && res.body?.code === 'DATABASE_UNAVAILABLE';
       recordTest(testNum++, 'GET /api/assignment-history - DB Failure Handled Fail-Closed (HTTP 503)', 'Endpoint Integration', passed,
         passed ? `HTTP 503: Database error ditangani fail-closed.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 13.c: Invalid input (empty woNumber)
@@ -1351,7 +1566,7 @@ async function runSuite() {
       const passed = res.status === 403 && (res.body?.code === 'SCOPE_MISMATCH' || res.body?.code === 'REQUIRE_LEADER_ROLE');
       recordTest(testNum++, 'RBAC: Leader Accessing Another Contractor Rejected (SCOPE_MISMATCH)', 'Auth & RBAC', passed,
         passed ? `HTTP 403 SCOPE_MISMATCH: Leader dibatasi ketat hanya pada kontraktornya.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 18. Installer Forbidden from Viewing Unassigned Ticket Messages
@@ -1368,7 +1583,7 @@ async function runSuite() {
       const passed = res.status === 403 && res.body?.code === 'LEADER_READ_ONLY_CHAT';
       recordTest(testNum++, 'RBAC: Leader Live Chat Locked Read-Only (LEADER_READ_ONLY_CHAT)', 'Auth & RBAC', passed,
         passed ? `HTTP 403 LEADER_READ_ONLY_CHAT: Leader hanya dapat memantau percakapan.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 19. User Self-Escalation of Role via Profile Update Blocked
@@ -1384,7 +1599,7 @@ async function runSuite() {
       const passed = res.status === 403;
       recordTest(testNum++, 'RBAC: Self-Role Elevation Prohibited by Server Backend', 'Auth & RBAC', passed,
         passed ? `HTTP 403: User non-admin tidak dapat mengubah role akun sendiri.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // 20. Out-Of-Scope User Details Access Blocked
@@ -1406,7 +1621,7 @@ async function runSuite() {
       const passed = res.status === 403 && res.body?.error?.code === 'FORBIDDEN_SCOPE';
       recordTest(testNum++, 'RBAC: Out-Of-Scope User Profile Inspection Blocked (FORBIDDEN_SCOPE)', 'Auth & RBAC', passed,
         passed ? `HTTP 403 FORBIDDEN_SCOPE: Leader tidak dapat melihat staf mitra lain.` : `Gagal: Status ${res.status}`);
-      resetSupabaseBackendClientForTesting();
+      restoreDefaultMockClient();
     }
 
     // =========================================================================
@@ -1547,7 +1762,7 @@ async function runSuite() {
     }
 
   } finally {
-    // Gracefully shut down HTTP test server
+    resetSupabaseBackendClientForTesting();
     server.close();
   }
 

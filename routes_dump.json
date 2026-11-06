@@ -1,0 +1,870 @@
+[
+  {
+    "num": 1,
+    "line": 1731,
+    "method": "GET",
+    "path": "/api/health",
+    "body": "async (_req, res) => {"
+  },
+  {
+    "num": 2,
+    "line": 1877,
+    "method": "GET",
+    "path": "/api/auth/session",
+    "body": "(req: AuthenticatedRequest, res) => {\n    if (!req.user) {\n      return res.json({\n        authenticated: false,\n        user: null,\n        session: null\n      });\n    }"
+  },
+  {
+    "num": 3,
+    "line": 1894,
+    "method": "POST",
+    "path": "/api/auth/firebase-login",
+    "body": "async (req: Request, res: Response) => {\n    if (!isLocalJsonModeAllowed()) {\n      return res.status(403).json({\n        success: false,\n        error: 'Firebase Authentication dinonaktifkan pada lingkungan produksi MoraJaws. Gunakan login resmi den"
+  },
+  {
+    "num": 4,
+    "line": 2040,
+    "method": "GET",
+    "path": "/api/bootstrap",
+    "body": "async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 5,
+    "line": 2174,
+    "method": "POST",
+    "path": "/api/auth/resolve-identity",
+    "body": "async (req: Request, res: Response) => {"
+  },
+  {
+    "num": 6,
+    "line": 2266,
+    "method": "POST",
+    "path": "/api/users/sync-profile",
+    "body": "(req: Request, res: Response) => {\n    if (!isLocalJsonModeAllowed()) {\n      return res.status(403).json({\n        success: false,\n        error: 'Endpoint /api/users/sync-profile dinonaktifkan pada mode produksi. Profil pengguna dikelola langsung d"
+  },
+  {
+    "num": 7,
+    "line": 2312,
+    "method": "POST",
+    "path": "/api/auth/login",
+    "body": "async (req: AuthenticatedRequest, res) => {\n    if (!isLocalJsonModeAllowed()) {\n      return res.status(403).json({\n        success: false,\n        error: 'Endpoint /api/auth/login telah dinonaktifkan pada mode produksi. Seluruh autentikasi wajib me"
+  },
+  {
+    "num": 8,
+    "line": 2506,
+    "method": "POST",
+    "path": "/api/auth/logout",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {\n    if (req.session) {\n      req.session.status = 'revoked';\n    }\n    if (req.user) {\n      req.user.sessionVersion = (req.user.sessionVersion || 1) + 1;\n      if (isSupabaseMode()) {\n        "
+  },
+  {
+    "num": 9,
+    "line": 2526,
+    "method": "POST",
+    "path": "/api/auth/supabase-login",
+    "body": "async (req: Request, res: Response) => {"
+  },
+  {
+    "num": 10,
+    "line": 2526,
+    "method": "POST",
+    "path": "/api/auth/supabase-refresh",
+    "body": "async (req: Request, res: Response) => {"
+  },
+  {
+    "num": 11,
+    "line": 2526,
+    "method": "POST",
+    "path": "/api/auth/supabase-logout",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    await signOutSupabaseAuth();\n    if (req.session) {\n      req.session.status = 'revoked';\n    }\n    if (req.user) {\n      req.user.sessionVersion = (req.user.sessionVersion || 1) "
+  },
+  {
+    "num": 12,
+    "line": 2526,
+    "method": "POST",
+    "path": "/api/auth/supabase-reset-password",
+    "body": "async (req: Request, res: Response) => {"
+  },
+  {
+    "num": 13,
+    "line": 2683,
+    "method": "POST",
+    "path": "/api/auth/change-password",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 14,
+    "line": 2765,
+    "method": "GET",
+    "path": "/api/auth/me",
+    "body": "requireAuth, (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 15,
+    "line": 2780,
+    "method": "GET",
+    "path": "/api/tickets",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 16,
+    "line": 2822,
+    "method": "GET",
+    "path": "/api/tickets/search",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 17,
+    "line": 2909,
+    "method": "POST",
+    "path": "/api/tickets/sameday",
+    "body": "requireDispatch, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 18,
+    "line": 2963,
+    "method": "POST",
+    "path": "/api/tickets/bulk-import",
+    "body": "requireImportPermission, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 19,
+    "line": 3255,
+    "method": "PUT",
+    "path": "/api/tickets/:id",
+    "body": "requireAuth, handleUpdateTicket);"
+  },
+  {
+    "num": 20,
+    "line": 3256,
+    "method": "PATCH",
+    "path": "/api/tickets/:id",
+    "body": "requireAuth, handleUpdateTicket);\n\n  // Assign Ticket Personnel (Leader or Super Admin)"
+  },
+  {
+    "num": 21,
+    "line": 3259,
+    "method": "POST",
+    "path": "/api/tickets/assign",
+    "body": "requireLeaderOrAdminForAssignment, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 22,
+    "line": 3441,
+    "method": "POST",
+    "path": "/api/tickets/reassign",
+    "body": "requireLeaderOrAdminForAssignment, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 23,
+    "line": 3581,
+    "method": "POST",
+    "path": "/api/tickets/:id/report",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 24,
+    "line": 3581,
+    "method": "POST",
+    "path": "/api/tickets/:id/progress-report",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 25,
+    "line": 3891,
+    "method": "DELETE",
+    "path": "/api/tickets/:id",
+    "body": "requireManagementData, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 26,
+    "line": 2963,
+    "method": "POST",
+    "path": "/api/tickets/bulk-delete",
+    "body": "requireManagementData, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 27,
+    "line": 4072,
+    "method": "POST",
+    "path": "/api/tickets/purge-by-date",
+    "body": "requireManagementData, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 28,
+    "line": 4081,
+    "method": "DELETE",
+    "path": "/api/tickets/batch/:date",
+    "body": "requireManagementData, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 29,
+    "line": 4091,
+    "method": "GET",
+    "path": "['/api/tickets/:woNumber/assignment-history', '/api/assignment-history', '/api/assignment-history/:woNumber']",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 30,
+    "line": 4142,
+    "method": "GET",
+    "path": "/api/contractors",
+    "body": "requireAuth, async (_req, res) => {\n    if (!isLocalJsonModeAllowed() && !isSupabaseMode()) {\n      return res.status(503).json({ success: false, error: 'Supabase belum dikonfigurasi pada mode produksi.', code: 'SUPABASE_NOT_CONFIGURED' });\n    }\n   "
+  },
+  {
+    "num": 31,
+    "line": 4167,
+    "method": "POST",
+    "path": "/api/contractors",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 32,
+    "line": 4301,
+    "method": "PUT",
+    "path": "/api/contractors/:id",
+    "body": "requireAuth, handleUpdateContractor);"
+  },
+  {
+    "num": 33,
+    "line": 4302,
+    "method": "PATCH",
+    "path": "/api/contractors/:id",
+    "body": "requireAuth, handleUpdateContractor);"
+  },
+  {
+    "num": 34,
+    "line": 4304,
+    "method": "DELETE",
+    "path": "/api/contractors/:id",
+    "body": "requireAuth, requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 35,
+    "line": 4337,
+    "method": "GET",
+    "path": "/api/coverage-areas",
+    "body": "requireAuth, async (_req, res) => {\n    if (!isLocalJsonModeAllowed() && !isSupabaseMode()) {\n      return res.status(503).json({ success: false, error: 'Supabase belum dikonfigurasi pada mode produksi.', code: 'SUPABASE_NOT_CONFIGURED' });\n    }\n   "
+  },
+  {
+    "num": 36,
+    "line": 4362,
+    "method": "POST",
+    "path": "/api/coverage-areas",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 37,
+    "line": 4463,
+    "method": "PUT",
+    "path": "/api/coverage-areas/:id",
+    "body": "requireAuth, handleUpdateCoverageArea);"
+  },
+  {
+    "num": 38,
+    "line": 4464,
+    "method": "PATCH",
+    "path": "/api/coverage-areas/:id",
+    "body": "requireAuth, handleUpdateCoverageArea);"
+  },
+  {
+    "num": 39,
+    "line": 4466,
+    "method": "DELETE",
+    "path": "/api/coverage-areas/:id",
+    "body": "requireAuth, requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 40,
+    "line": 4499,
+    "method": "GET",
+    "path": "/api/users",
+    "body": "requireAuth, async (_req, res) => {\n    if (!isLocalJsonModeAllowed() && !isSupabaseMode()) {\n      return res.status(503).json({ success: false, error: 'Supabase belum dikonfigurasi pada mode produksi.', code: 'SUPABASE_NOT_CONFIGURED' });\n    }\n   "
+  },
+  {
+    "num": 41,
+    "line": 2266,
+    "method": "POST",
+    "path": "/api/users",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 42,
+    "line": 4634,
+    "method": "PUT",
+    "path": "/api/users/:id",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 43,
+    "line": 4803,
+    "method": "POST",
+    "path": "/api/users/:id/toggle",
+    "body": "requireSuperAdmin, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 44,
+    "line": 4803,
+    "method": "POST",
+    "path": "/api/users/:id/reset-password",
+    "body": "requireSuperAdmin, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 45,
+    "line": 4923,
+    "method": "DELETE",
+    "path": "/api/users/:id",
+    "body": "requireSuperAdmin, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 46,
+    "line": 4997,
+    "method": "GET",
+    "path": "/api/sessions",
+    "body": "requireSuperAdmin, (_req, res) => {"
+  },
+  {
+    "num": 47,
+    "line": 5011,
+    "method": "POST",
+    "path": "/api/sessions/revoke",
+    "body": "requireAuth, (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 48,
+    "line": 5025,
+    "method": "GET",
+    "path": "/api/sessions/config",
+    "body": "requireSuperAdmin, (_req, res) => {\n    res.json({ success: true, config: db.sessionConfig });\n  });"
+  },
+  {
+    "num": 49,
+    "line": 5029,
+    "method": "POST",
+    "path": "/api/sessions/config",
+    "body": "requireSuperAdmin, (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 50,
+    "line": 5044,
+    "method": "GET",
+    "path": "/api/admin/backup/download",
+    "body": "requireBackupDownloadPermission, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 51,
+    "line": 5122,
+    "method": "GET",
+    "path": "/api/config/global",
+    "body": "async (_req, res) => {\n    if (isSupabaseMode()) {\n      try {"
+  },
+  {
+    "num": 52,
+    "line": 5145,
+    "method": "POST",
+    "path": "/api/config/global",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {\n    if (req.user!.role !== 'super_admin' && req.user!.role !== 'it_support') {\n      return res.status(403).json({\n        success: false,\n        error: 'Akses Ditolak: Otoritas memperbarui ko"
+  },
+  {
+    "num": 53,
+    "line": 5191,
+    "method": "GET",
+    "path": "/api/system/operational-date",
+    "body": "(_req, res) => {\n    res.json(getOperationalDate());\n  });"
+  },
+  {
+    "num": 54,
+    "line": 5195,
+    "method": "POST",
+    "path": "/api/system/operational-date",
+    "body": "requireAuth, (req: AuthenticatedRequest, res) => {\n    if (req.user!.role !== 'super_admin' && req.user!.role !== 'dispatch') {\n      return res.status(403).json({ error: 'Akses Ditolak: Perubahan tanggal operasional hanya dapat dilakukan oleh Super "
+  },
+  {
+    "num": 55,
+    "line": 5218,
+    "method": "GET",
+    "path": "['/api/sheets/config', '/api/integrations/google-sheets/config']",
+    "body": "requireSuperAdmin, (_req, res) => {\n    res.json({ config: db.sheetsConfig });\n  });"
+  },
+  {
+    "num": 56,
+    "line": 5222,
+    "method": "POST",
+    "path": "['/api/sheets/config', '/api/integrations/google-sheets/config']",
+    "body": "requireSuperAdmin, (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 57,
+    "line": 5218,
+    "method": "GET",
+    "path": "/api/integrations/google-sheets/status",
+    "body": "requireAuth, (_req, res) => {"
+  },
+  {
+    "num": 58,
+    "line": 5222,
+    "method": "POST",
+    "path": "/api/integrations/google-sheets/test",
+    "body": "requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 59,
+    "line": 5222,
+    "method": "POST",
+    "path": "/api/integrations/google-sheets/sync",
+    "body": "requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {\n    if (isSyncInProgress) {\n      return res.status(409).json({\n        error: `Sinkronisasi sedang berlangsung (Job ID: ${currentSyncJobId}).`,\n        code: 'SYNC_IN_PROGRESS'"
+  },
+  {
+    "num": 60,
+    "line": 5638,
+    "method": "POST",
+    "path": "/api/attachments",
+    "body": "requireAuth, (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 61,
+    "line": 5696,
+    "method": "GET",
+    "path": "/api/storage/readiness",
+    "body": "async (req: Request, res: Response) => {\n    try {"
+  },
+  {
+    "num": 62,
+    "line": 5715,
+    "method": "POST",
+    "path": "/api/storage/classify-file",
+    "body": "(req: Request, res: Response) => {"
+  },
+  {
+    "num": 63,
+    "line": 5726,
+    "method": "GET",
+    "path": "/api/storage/actual-bucket-status",
+    "body": "async (req: Request, res: Response) => {\n    try {"
+  },
+  {
+    "num": 64,
+    "line": 5744,
+    "method": "POST",
+    "path": "/api/storage/test-upload",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 65,
+    "line": 5831,
+    "method": "POST",
+    "path": "/api/storage/refresh-signed-url",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 66,
+    "line": 5880,
+    "method": "GET",
+    "path": "/api/storage/download",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 67,
+    "line": 5927,
+    "method": "POST",
+    "path": "/api/storage/verify-access",
+    "body": "requireAuth, (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 68,
+    "line": 5958,
+    "method": "POST",
+    "path": "/api/storage/phase2-sandbox-test",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 69,
+    "line": 6321,
+    "method": "GET",
+    "path": "/api/storage/adapter/config",
+    "body": "(req: Request, res: Response) => {"
+  },
+  {
+    "num": 70,
+    "line": 6332,
+    "method": "POST",
+    "path": "/api/storage/adapter/upload",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 71,
+    "line": 6321,
+    "method": "GET",
+    "path": "/api/storage/adapter/download",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 72,
+    "line": 6332,
+    "method": "POST",
+    "path": "/api/storage/adapter/signed-url",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 73,
+    "line": 6332,
+    "method": "POST",
+    "path": "/api/storage/adapter/refresh-signed-url",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 74,
+    "line": 6467,
+    "method": "DELETE",
+    "path": "/api/storage/adapter/file",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 75,
+    "line": 6321,
+    "method": "GET",
+    "path": "/api/storage/adapter/reconciliation",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 76,
+    "line": 6517,
+    "method": "GET",
+    "path": "/api/supabase/work-orders",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 77,
+    "line": 6517,
+    "method": "GET",
+    "path": "/api/supabase/work-orders/:id",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 78,
+    "line": 6650,
+    "method": "POST",
+    "path": "/api/supabase/work-orders",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 79,
+    "line": 6723,
+    "method": "PATCH",
+    "path": "/api/supabase/work-orders/:id",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 80,
+    "line": 6821,
+    "method": "DELETE",
+    "path": "/api/supabase/work-orders/:id",
+    "body": "requireManagementData, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 81,
+    "line": 6650,
+    "method": "POST",
+    "path": "/api/supabase/work-orders/:id/archive",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 82,
+    "line": 6650,
+    "method": "POST",
+    "path": "/api/supabase/work-orders/:id/restore",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 83,
+    "line": 6650,
+    "method": "POST",
+    "path": "/api/supabase/work-orders/bulk-import",
+    "body": "requireImportPermission, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 84,
+    "line": 6997,
+    "method": "GET",
+    "path": "/api/supabase/users",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 85,
+    "line": 7037,
+    "method": "GET",
+    "path": "['/api/users/:id', '/api/supabase/users/:id']",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 86,
+    "line": 7088,
+    "method": "POST",
+    "path": "/api/supabase/users",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 87,
+    "line": 7150,
+    "method": "PATCH",
+    "path": "/api/supabase/users/:id",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 88,
+    "line": 7223,
+    "method": "DELETE",
+    "path": "/api/supabase/users/:id",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 89,
+    "line": 7088,
+    "method": "POST",
+    "path": "/api/supabase/users/:id/reset-password",
+    "body": "requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 90,
+    "line": 7333,
+    "method": "GET",
+    "path": "/api/supabase/contractors",
+    "body": "requireAuth, async (_req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 91,
+    "line": 7350,
+    "method": "POST",
+    "path": "/api/supabase/contractors",
+    "body": "requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 92,
+    "line": 7369,
+    "method": "PATCH",
+    "path": "/api/supabase/contractors/:id",
+    "body": "requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 93,
+    "line": 7333,
+    "method": "GET",
+    "path": "/api/supabase/coverage-areas",
+    "body": "requireAuth, async (_req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 94,
+    "line": 7350,
+    "method": "POST",
+    "path": "/api/supabase/coverage-areas",
+    "body": "requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 95,
+    "line": 7428,
+    "method": "GET",
+    "path": "/api/supabase/settings/:key",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 96,
+    "line": 7439,
+    "method": "POST",
+    "path": "/api/supabase/settings/:key",
+    "body": "requireSettingsManager, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 97,
+    "line": 7465,
+    "method": "GET",
+    "path": "/api/supabase/audit-logs",
+    "body": "requireAuditLogViewer, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 98,
+    "line": 7483,
+    "method": "GET",
+    "path": "/api/supabase/realtime/stream",
+    "body": "requireAuth, (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 99,
+    "line": 7529,
+    "method": "POST",
+    "path": "/api/supabase/phase8-shadow-dryrun",
+    "body": "requireAuth, requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {\n    try {"
+  },
+  {
+    "num": 100,
+    "line": 7566,
+    "method": "GET",
+    "path": "/api/realtime/stream-sandbox",
+    "body": "requireAuth, requireSandboxSuperAdmin, (req: AuthenticatedRequest, res: Response) => {\n    if (!realtimeSandboxHub.isEnabled()) {\n      return res.status(403).json({\n        success: false,\n        code: 'FEATURE_DISABLED',\n        error: 'SSE Sandbo"
+  },
+  {
+    "num": 101,
+    "line": 7595,
+    "method": "POST",
+    "path": "/api/realtime/publish-sandbox",
+    "body": "requireAuth, requireSandboxSuperAdmin, (req: AuthenticatedRequest, res: Response) => {\n    if (!realtimeSandboxHub.isEnabled()) {\n      return res.status(403).json({\n        success: false,\n        code: 'FEATURE_DISABLED',\n        error: 'SSE Sandbo"
+  },
+  {
+    "num": 102,
+    "line": 7566,
+    "method": "GET",
+    "path": "/api/realtime/sandbox-status",
+    "body": "requireAuth, requireSandboxSuperAdmin, (_req: AuthenticatedRequest, res: Response) => {\n    res.json({\n      success: true,\n      status: realtimeSandboxHub.getStatus()\n    });\n  });\n\n  // ============================================================="
+  },
+  {
+    "num": 103,
+    "line": 7663,
+    "method": "POST",
+    "path": "/api/sandbox/journal/mutate",
+    "body": "requireAuth, requireSandboxSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {\n    if (!checkSandboxEnabled(res)) return;\n    try {"
+  },
+  {
+    "num": 104,
+    "line": 7663,
+    "method": "POST",
+    "path": "/api/sandbox/journal/import-chunked",
+    "body": "requireAuth, requireSandboxSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {\n    if (!checkSandboxEnabled(res)) return;\n    try {"
+  },
+  {
+    "num": 105,
+    "line": 7713,
+    "method": "GET",
+    "path": "/api/sandbox/outbox/query",
+    "body": "requireAuth, requireSandboxSuperAdmin, (req: AuthenticatedRequest, res: Response) => {\n    if (!checkSandboxEnabled(res)) return;"
+  },
+  {
+    "num": 106,
+    "line": 7742,
+    "method": "POST",
+    "path": "/api/sandbox/recovery/drain",
+    "body": "requireAuth, requireSandboxSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {\n    if (!checkSandboxEnabled(res)) return;\n    try {"
+  },
+  {
+    "num": 107,
+    "line": 7760,
+    "method": "GET",
+    "path": "/api/sandbox/realtime/stream",
+    "body": "requireAuth, requireSandboxSuperAdmin, (req: AuthenticatedRequest, res: Response) => {\n    if (!checkSandboxEnabled(res)) return;"
+  },
+  {
+    "num": 108,
+    "line": 7836,
+    "method": "POST",
+    "path": "/api/sandbox/test/chaos",
+    "body": "requireAuth, requireSandboxSuperAdmin, async (_req: AuthenticatedRequest, res: Response) => {\n    if (!checkSandboxEnabled(res)) return;\n    try {"
+  },
+  {
+    "num": 109,
+    "line": 7856,
+    "method": "GET",
+    "path": "/api/work-orders",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {\n    try {\n      if (!isLocalJsonModeAllowed() && !isSupabaseMode()) {\n        return res.status(503).json({ success: false, error: 'Supabase belum dikonfigurasi pada mode produksi.', code: 'SUP"
+  },
+  {
+    "num": 110,
+    "line": 7879,
+    "method": "GET",
+    "path": "['/api/work-orders/:id', '/api/tickets/:id']",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 111,
+    "line": 7906,
+    "method": "POST",
+    "path": "/api/work-orders/:id/assign",
+    "body": "requireLeaderOrAdminForAssignment, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 112,
+    "line": 7906,
+    "method": "POST",
+    "path": "/api/work-orders/:id/reassign",
+    "body": "requireLeaderOrAdminForAssignment, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 113,
+    "line": 8084,
+    "method": "GET",
+    "path": "/api/settings",
+    "body": "requireAuth, async (_req, res) => {\n    if (!isLocalJsonModeAllowed() && !isSupabaseMode()) {\n      return res.status(503).json({\n        success: false,\n        error: 'Supabase belum dikonfigurasi pada mode produksi.',\n        code: 'SUPABASE_NOT_C"
+  },
+  {
+    "num": 114,
+    "line": 8115,
+    "method": "GET",
+    "path": "/api/reports",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {\n    if (!isLocalJsonModeAllowed() && !isSupabaseMode()) {\n      return res.status(503).json({ success: false, error: 'Supabase belum dikonfigurasi pada mode produksi.', code: 'SUPABASE_NOT_CONF"
+  },
+  {
+    "num": 115,
+    "line": 8145,
+    "method": "GET",
+    "path": "/api/sync/status",
+    "body": "requireAuth, (_req, res) => {"
+  },
+  {
+    "num": 116,
+    "line": 8162,
+    "method": "POST",
+    "path": "/api/sync/check-connection",
+    "body": "requireAuth, (_req, res) => {"
+  },
+  {
+    "num": 117,
+    "line": 8180,
+    "method": "GET",
+    "path": "/api/sync/history",
+    "body": "requireAuth, (_req, res) => {\n    res.json({ history: db.syncHistory });\n  });"
+  },
+  {
+    "num": 118,
+    "line": 8184,
+    "method": "POST",
+    "path": "/api/sync/run",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res: Response) => {"
+  },
+  {
+    "num": 119,
+    "line": 7879,
+    "method": "GET",
+    "path": "/api/tickets/:id/messages",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 120,
+    "line": 3581,
+    "method": "POST",
+    "path": "/api/tickets/:id/messages",
+    "body": "requireAuth, async (req: AuthenticatedRequest, res) => {"
+  },
+  {
+    "num": 121,
+    "line": 8521,
+    "method": "POST",
+    "path": "/api/whatsapp/preview",
+    "body": "requireTemplateManager, (req: AuthenticatedRequest, res) => {\n    try {"
+  },
+  {
+    "num": 122,
+    "line": 8538,
+    "method": "GET",
+    "path": "/api/audit-logs",
+    "body": "requireAuditLogViewer, async (_req, res) => {\n    if (isSupabaseMode()) {\n      try {"
+  },
+  {
+    "num": 123,
+    "line": 8557,
+    "method": "POST",
+    "path": "/api/audit-logs",
+    "body": "requireAuth, (_req: AuthenticatedRequest, res) => {\n    return res.status(405).json({\n      error: 'Pencatatan Audit Log melalui endpoint HTTP dinonaktifkan. Seluruh audit record hanya dicatat oleh operasi server internal tepercaya.',\n      code: 'ME"
+  },
+  {
+    "num": 124,
+    "line": 8577,
+    "method": "GET",
+    "path": "*",
+    "body": "(_req, res) => {\n      res.sendFile(path.join(__dirname, 'dist', 'index.html'));\n    });\n  } else if (!options?.skipVite) {"
+  }
+]
