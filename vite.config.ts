@@ -1,11 +1,42 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import fs from 'fs';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {defineConfig, Plugin} from 'vite';
+
+function distSecurityPlugin(): Plugin {
+  return {
+    name: 'security-clean-dist-backups',
+    closeBundle() {
+      const distDir = path.resolve(import.meta.dirname, 'dist');
+      if (fs.existsSync(distDir)) {
+        const scanAndPurge = (dir: string) => {
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              scanAndPurge(fullPath);
+            } else if (
+              entry.name.endsWith('.zip') ||
+              entry.name.endsWith('.bak') ||
+              entry.name.endsWith('.sql') ||
+              entry.name.includes('backup') ||
+              entry.name.includes('database.json')
+            ) {
+              fs.unlinkSync(fullPath);
+              console.warn(`[Security Plugin] Purged sensitive file from dist: ${entry.name}`);
+            }
+          }
+        };
+        scanAndPurge(distDir);
+      }
+    }
+  };
+}
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), distSecurityPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),

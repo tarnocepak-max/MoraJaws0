@@ -1,0 +1,59 @@
+{
+  "suite": "Phase14C.2.4.1_Regression",
+  "test_run_id": "run_phase14c241regression_1793981917630_gcwwir",
+  "environment": "isolated_mock_staging_loopback",
+  "generated_at": "2026-11-06T16:18:37.675Z",
+  "total_http_calls_executed": 1,
+  "all_passed": true,
+  "evidence": [
+    {
+      "suite": "Phase14C.2.4.1_Regression",
+      "scenario": "POST /api/whatsapp/preview - Live HTTP Regression Verification",
+      "test_scenario": "POST /api/whatsapp/preview - Live HTTP Regression Verification",
+      "scenario_number": 20,
+      "category": "Live Integration",
+      "method": "POST",
+      "url": "/api/whatsapp/preview",
+      "normalized_route": "/api/whatsapp/preview",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 5,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-06T16:18:37.674Z"
+        },
+        {
+          "assertion_name": "Response status is strictly 200",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-06T16:18:37.674Z"
+        },
+        {
+          "assertion_name": "Response body is non-null object",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-06T16:18:37.674Z"
+        },
+        {
+          "assertion_name": "Rendered template contains customer name",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-06T16:18:37.674Z"
+        },
+        {
+          "assertion_name": "Generated URL starts with https://wa.me/",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-06T16:18:37.674Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-06T16:18:37.674Z",
+      "test_run_id": "run_phase14c241regression_1793981917630_gcwwir",
+      "environment": "isolated_mock_staging_loopback"
+    }
+  ]
+}

@@ -8578,13 +8578,33 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   // ---------------------------------------------------------------------------
-  // PHASE 9L-6 Security: Block direct public access to backup files
+  // PHASE 9L-6 & PHASE 14C.2.3 Security: Block direct public access to backup files & archives
   // ---------------------------------------------------------------------------
   app.all('/morajaws_production_firestore_backup.json', (_req, res) => {
     return res.status(404).json({ error: 'File tidak ditemukan', code: 'NOT_FOUND' });
   });
   app.all('/data/morajaws_production_firestore_backup.json', (_req, res) => {
     return res.status(404).json({ error: 'File tidak ditemukan', code: 'NOT_FOUND' });
+  });
+  app.use((req, res, next) => {
+    const rawUrl = (req.path || '').toLowerCase();
+    if (
+      !rawUrl.startsWith('/api/') && (
+        rawUrl.endsWith('.zip') ||
+        rawUrl.endsWith('.bak') ||
+        rawUrl.endsWith('.sql') ||
+        rawUrl.endsWith('.sqlite') ||
+        rawUrl.endsWith('.dump') ||
+        rawUrl.includes('backup') ||
+        rawUrl.includes('quarantine') ||
+        rawUrl.includes('morajaws_database') ||
+        rawUrl.startsWith('/assets/aistudio') ||
+        rawUrl.startsWith('/data/')
+      )
+    ) {
+      return res.status(404).json({ error: 'File tidak ditemukan', code: 'NOT_FOUND' });
+    }
+    next();
   });
 
   // Mount Vite middleware in development or serve static in production

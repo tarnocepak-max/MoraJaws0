@@ -7,8 +7,15 @@ coverage/
 .env*
 !.env.example
 
-# Production backups and local fixtures protection
+# Production backups, quarantine, and local fixtures protection
 *production_firestore_backup*.json
 *production_backup*.json
 data/*_backup*.json
 data/morajaws_database.json
+quarantine/
+*.zip
+*.bak
+*.sqlite
+*.dump
+morajaws_database.json
+

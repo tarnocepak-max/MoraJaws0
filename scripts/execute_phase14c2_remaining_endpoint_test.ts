@@ -115,10 +115,40 @@ interface TestResult {
 const results: TestResult[] = [];
 const evidenceCollector = new SuiteEvidenceCollector('Phase14C.2');
 
-function recordTest(num: number, title: string, category: string, passed: boolean, details: string) {
-  results.push({ num, title, category, passed, details });
-  evidenceCollector.linkToScenario({ num, title, category, details });
-  const status = passed ? 'PASS' : 'FAIL';
+function recordTest(
+  num: number,
+  title: string,
+  category: string,
+  passed: boolean,
+  details: string,
+  extraAssertions?: Array<{ name: string; passed: boolean; failureReason?: string; evidence?: string }>
+) {
+  if (typeof passed !== 'boolean') {
+    console.error(`[CRITICAL TYPE ERROR] recordTest received non-boolean 'passed' in Test #${num}: type=${typeof passed}`);
+  }
+  results.push({ num, title, category, passed: passed === true, details });
+
+  const actualAssertions = (extraAssertions && extraAssertions.length > 0)
+    ? extraAssertions
+    : [
+        {
+          name: `Functional Check: ${title}`,
+          passed: passed,
+          failureReason: passed === true ? undefined : (details || `Functional condition evaluated to false in Test #${num}`),
+          evidence: `Evaluated in Test #${num}: ${details}`
+        }
+      ];
+
+  evidenceCollector.linkToScenario({
+    num,
+    title,
+    category,
+    passed,
+    functionalPassed: passed,
+    details,
+    assertions: actualAssertions
+  });
+  const status = passed === true ? 'PASS' : (typeof passed !== 'boolean' ? 'INVALID_ASSERTION' : 'FAIL');
   console.log(`[${status}] Test #${num} [${category}]: ${title}`);
   console.log(`       -> ${details}`);
 }
@@ -1339,9 +1369,36 @@ async function runPhase14C2Suite() {
         templateBody: 'Halo {{customerName}}, teknisi {{installerName}} menuju lokasi.',
         ticket: { customerName: 'Ibu Rahma', installerName: 'Budi', customerPhone: '08123456789' }
       });
-      const pass = res.status === 200 && res.data.renderedText && res.data.renderedText.includes('Ibu Rahma') && res.data.url;
-      recordTest(70, 'POST /api/whatsapp/preview - Dispatch Role Succeeded (HTTP 200)', 'Communication & Audit', pass,
-        `HTTP ${res.status}: Pratinjau template WhatsApp berhasil dirender dengan URL Click-to-Chat.`);
+      
+      const isStatus200 = typeof res.status === 'number' && res.status === 200;
+      const hasRenderedText = typeof res.data?.renderedText === 'string' && res.data.renderedText.includes('Ibu Rahma');
+      const hasInstaller = typeof res.data?.renderedText === 'string' && res.data.renderedText.includes('Budi');
+      const isUrlString = typeof res.data?.url === 'string';
+      const hasWaPrefix = typeof res.data?.url === 'string' && res.data.url.startsWith('https://wa.me/');
+      const hasCustomerPhone = typeof res.data?.url === 'string' && res.data.url.includes('628123456789');
+      const hasEncodedMessage = typeof res.data?.url === 'string' && res.data.url.includes('Halo');
+      const noUrlError = res.data?.urlError === null || res.data?.urlError === undefined;
+
+      const extraAssertions = [
+        { name: 'Template rendered text contains customer name', passed: hasRenderedText, failureReason: 'Missing Ibu Rahma in renderedText' },
+        { name: 'Template rendered text contains installer name', passed: hasInstaller, failureReason: 'Missing Budi in renderedText' },
+        { name: 'Click-to-chat URL is string type', passed: isUrlString, failureReason: 'URL is not string' },
+        { name: 'Click-to-chat URL starts with https://wa.me/', passed: hasWaPrefix, failureReason: 'URL does not start with https://wa.me/' },
+        { name: 'Click-to-chat URL targets sanitized customer phone', passed: hasCustomerPhone, failureReason: 'Phone number not formatted in URL' },
+        { name: 'Click-to-chat URL contains encoded message body', passed: hasEncodedMessage, failureReason: 'Message body missing from URL' },
+        { name: 'Click-to-chat URL generator reported zero errors', passed: noUrlError, failureReason: 'urlError present in response' }
+      ];
+
+      const pass = isStatus200 && hasRenderedText && hasInstaller && isUrlString && hasWaPrefix && hasCustomerPhone && hasEncodedMessage && noUrlError;
+
+      recordTest(
+        70,
+        'POST /api/whatsapp/preview - Dispatch Role Succeeded (HTTP 200)',
+        'Communication & Audit',
+        pass,
+        `HTTP ${res.status}: Pratinjau template WhatsApp berhasil dirender dengan URL Click-to-Chat tervalidasi (${res.data?.url || ''}).`,
+        extraAssertions
+      );
     }
 
     // Test 71: GET /api/audit-logs - Non-Audit-Viewer Forbidden (HTTP 403 REQUIRE_AUDIT_LOG_VIEWER)

@@ -69,10 +69,40 @@ interface TestResult {
 const results: TestResult[] = [];
 const evidenceCollector = new SuiteEvidenceCollector('Phase14C.1');
 
-function recordTest(num: number, title: string, category: string, passed: boolean, details: string) {
-  results.push({ num, title, category, passed, details });
-  evidenceCollector.linkToScenario({ num, title, category, details });
-  const status = passed ? 'PASS' : 'FAIL';
+function recordTest(
+  num: number,
+  title: string,
+  category: string,
+  passed: boolean,
+  details: string,
+  extraAssertions?: Array<{ name: string; passed: boolean; failureReason?: string; evidence?: string }>
+) {
+  if (typeof passed !== 'boolean') {
+    console.error(`[CRITICAL TYPE ERROR] recordTest received non-boolean 'passed' in Test #${num}: type=${typeof passed}`);
+  }
+  results.push({ num, title, category, passed: passed === true, details });
+
+  const actualAssertions = (extraAssertions && extraAssertions.length > 0)
+    ? extraAssertions
+    : [
+        {
+          name: `Functional Check: ${title}`,
+          passed: passed,
+          failureReason: passed === true ? undefined : (details || `Functional condition evaluated to false in Test #${num}`),
+          evidence: `Evaluated in Test #${num}: ${details}`
+        }
+      ];
+
+  evidenceCollector.linkToScenario({
+    num,
+    title,
+    category,
+    passed,
+    functionalPassed: passed,
+    details,
+    assertions: actualAssertions
+  });
+  const status = passed === true ? 'PASS' : (typeof passed !== 'boolean' ? 'INVALID_ASSERTION' : 'FAIL');
   console.log(`[${status}] Test #${num} [${category}]: ${title}`);
   console.log(`       -> ${details}`);
 }

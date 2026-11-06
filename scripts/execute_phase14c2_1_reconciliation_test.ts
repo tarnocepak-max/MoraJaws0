@@ -1,21 +1,23 @@
 /**
- * MORAJAWS — PHASE 14C.2.1 / PHASE 14C.2.2
- * ENDPOINT COVERAGE RECONCILIATION & REAL HTTP EVIDENCE AUDIT SCRIPT
+ * MORAJAWS — PHASE 14C.2.3
+ * ENDPOINT COVERAGE RECONCILIATION, BACKUP QUARANTINE & ASSERTION INTEGRITY SCRIPT
  * 
  * Performs strict, non-mocked verification of real HTTP execution evidence:
- * 1. Audits actual Express route definitions in server.ts (Total 132 endpoints)
+ * 1. Audits actual Express route definitions in server.ts (Total 132 unique endpoints)
  * 2. Ingests genuine HTTP execution evidence from phase14c1_executed_evidence.json and phase14c2_executed_evidence.json
- * 3. Enforces that actual_status is NEVER copied from expected_status and result is evaluated dynamically
+ * 3. Enforces dual assertion verification (status match + functional assertions passed + zero failed assertions)
  * 4. Resolves the 150 vs 154 evidence discrepancy caused by regex overlap on GET /api/tickets/:id
  * 5. Executes isolated live HTTP tests for cross-contractor isolation and protected WO immutability (verifying mock state unchanged)
- * 6. Audits backup file storage security with real filesystem stats and HTTP direct access tests
- * 7. Generates verified all_endpoints_audit.json
+ * 6. Audits backup file storage security, quarantine repository, real filesystem stats, and direct HTTP access tests (all 404)
+ * 7. Enforces canonical endpoint statuses: HTTP_VERIFIED_PASS, HTTP_VERIFIED_FAIL, NOT_TESTED, INTERNAL_ONLY, NO_EXECUTION_EVIDENCE
+ * 8. Generates reconciled all_endpoints_audit.json
  */
 
 import fs from 'fs';
 import path from 'path';
 import http from 'http';
-import { RealHttpEvidence } from './evidenceCollector.ts';
+import crypto from 'crypto';
+import { RealHttpEvidence, validateEvidenceSchema } from './evidenceCollector.ts';
 import {
   createExpressApp,
   SERVER_SESSIONS,
@@ -41,10 +43,16 @@ interface ReconciledEndpoint {
   fail_closed_verified: boolean;
   test_type: 'HTTP_INTEGRATION_TEST' | 'INTERNAL_FUNCTION_TEST' | 'NOT_TESTED';
   tested_in: string;
-  status: 'PASS' | 'NOT_TESTED' | 'FAIL' | 'NO_EXECUTION_EVIDENCE';
+  status: 'HTTP_VERIFIED_PASS' | 'HTTP_VERIFIED_FAIL' | 'NOT_TESTED' | 'INTERNAL_ONLY' | 'NO_EXECUTION_EVIDENCE';
   call_count: number;
   scenarios: string[];
   http_evidence: RealHttpEvidence[];
+}
+
+function calculateSha256(filePath: string): string {
+  if (!fs.existsSync(filePath)) return '';
+  const fileBuffer = fs.readFileSync(filePath);
+  return crypto.createHash('sha256').update(fileBuffer).digest('hex');
 }
 
 // -----------------------------------------------------------------------------
@@ -106,9 +114,6 @@ export function extractDeclaredRoutes(): Array<{
 // -----------------------------------------------------------------------------
 // 2. Strict Route Matching (Fixing Regex Overlap)
 // -----------------------------------------------------------------------------
-/**
- * Reserved literal segment names under /api/tickets/ that MUST NOT be matched as :id
- */
 const RESERVED_TICKET_SUBPATHS = new Set([
   'search',
   'sameday',
@@ -186,6 +191,15 @@ function loadRealEvidence(): { c1: RealHttpEvidence[]; c2: RealHttpEvidence[] } 
   const c1: RealHttpEvidence[] = c1Data.evidence || [];
   const c2: RealHttpEvidence[] = c2Data.evidence || [];
 
+  const c1Validation = validateEvidenceSchema(c1);
+  if (!c1Validation.valid) {
+    throw new Error(`Integrity violation in Phase 14C.1 evidence: ${c1Validation.errors.join('; ')}`);
+  }
+  const c2Validation = validateEvidenceSchema(c2);
+  if (!c2Validation.valid) {
+    throw new Error(`Integrity violation in Phase 14C.2 evidence: ${c2Validation.errors.join('; ')}`);
+  }
+
   // Strict integrity verification on all evidence records
   const all = [...c1, ...c2];
   for (const ev of all) {
@@ -195,10 +209,21 @@ function loadRealEvidence(): { c1: RealHttpEvidence[]; c2: RealHttpEvidence[] } 
     if (!ev.test_run_id || !ev.timestamp || !ev.environment) {
       throw new Error(`Integrity violation: missing metadata in evidence for ${ev.method} ${ev.url}`);
     }
-    // Result MUST match comparison of actual_status and expected_status
-    const expectedResult = ev.actual_status === ev.expected_status ? 'PASS' : 'FAIL';
+    if (typeof ev.functional_assertion_passed !== 'boolean') {
+      throw new Error(`Integrity violation: functional_assertion_passed must be strictly boolean, got ${typeof ev.functional_assertion_passed} for ${ev.method} ${ev.url}`);
+    }
+    if (typeof ev.status_assertion_passed !== 'boolean') {
+      throw new Error(`Integrity violation: status_assertion_passed must be strictly boolean, got ${typeof ev.status_assertion_passed} for ${ev.method} ${ev.url}`);
+    }
+    if (!Array.isArray(ev.assertion_results) || ev.assertion_results.length !== ev.assertion_count) {
+      throw new Error(`Integrity violation: assertion_results length (${ev.assertion_results?.length}) does not match assertion_count (${ev.assertion_count}) for ${ev.method} ${ev.url}`);
+    }
+    // Result MUST match status assertion and functional assertion
+    const statusMatches = ev.actual_status === ev.expected_status;
+    const functionalMatches = ev.functional_assertion_passed === true;
+    const expectedResult = (statusMatches && functionalMatches && ev.failed_assertion_count === 0) ? 'PASS' : 'FAIL';
     if (ev.result !== expectedResult) {
-      throw new Error(`Integrity violation: result '${ev.result}' does not match comparison of expected ${ev.expected_status} and actual ${ev.actual_status}`);
+      throw new Error(`Integrity violation: result '${ev.result}' does not match expected '${expectedResult}' for ${ev.method} ${ev.url}`);
     }
   }
 
@@ -212,6 +237,7 @@ async function runLiveSafetyVerifications(): Promise<{
   crossContractorResult: any;
   protectedWoResult: any;
   backupRouteResult: any;
+  quarantineAuditResult: any;
 }> {
   console.log('[Live Safety Verification] Starting ephemeral Express server on loopback port 0...');
   const app = await createExpressApp({ skipVite: true });
@@ -244,58 +270,54 @@ async function runLiveSafetyVerifications(): Promise<{
     expiresAt: futureIso,
     status: 'active',
     ipAddress: '127.0.0.1',
-    userAgent: 'LiveSafetyVerifier',
+    userAgent: 'LiveSafetyVerificationRunner',
     deviceType: 'desktop'
   });
 
-  // Isolated Mock DB state with protected records and other contractor's ticket
+  const otherContractorWo = {
+    id: 'wo_contractor_b_999',
+    wo_number: 'WO-OTHER-999',
+    contractor_id: 'c-luar-99',
+    contractor_name: 'PT Jaringan Luar Wilayah',
+    area: 'Jakarta Timur',
+    status_wo_installer: 'Pending',
+    appointment_date: '2026-11-06',
+    is_deleted: false,
+    payload: {
+      id: 'wo_contractor_b_999',
+      woNumber: 'WO-OTHER-999',
+      contractorId: 'c-luar-99',
+      contractorName: 'PT Jaringan Luar Wilayah',
+      area: 'Jakarta Timur',
+      statusWOInstaller: 'Pending',
+      appointmentDate: '2026-11-06'
+    }
+  };
+
   const protectedRecordsState = {
     'wo_1793825457141_u4bnht': {
       id: 'wo_1793825457141_u4bnht',
       wo_number: 'WO-EXPRESS-TEST-1793825456810',
-      installer_name: 'Original Tech',
-      contractor_name: 'PT Mitra Jaringan Solusi',
       contractor_id: 'c-test-01',
-      status_wo_installer: 'Assigned',
-      appointment_date: '2026-11-06',
-      is_deleted: true
+      contractor_name: 'PT Mitra Jaringan Solusi',
+      is_deleted: true,
+      payload: { id: 'wo_1793825457141_u4bnht', woNumber: 'WO-EXPRESS-TEST-1793825456810', isDeleted: true }
     },
     'wo_imp_1793825458959_4i4f1h': {
       id: 'wo_imp_1793825458959_4i4f1h',
       wo_number: 'WO-DUP-TEST-1793825458804',
-      installer_name: 'Original Tech 2',
-      contractor_name: 'PT Mitra Jaringan Solusi',
       contractor_id: 'c-test-01',
-      status_wo_installer: 'Assigned',
-      appointment_date: '2026-11-06',
-      is_deleted: true
+      contractor_name: 'PT Mitra Jaringan Solusi',
+      is_deleted: true,
+      payload: { id: 'wo_imp_1793825458959_4i4f1h', woNumber: 'WO-DUP-TEST-1793825458804', isDeleted: true }
     },
     'wo_imp_1793825458959_262dei': {
       id: 'wo_imp_1793825458959_262dei',
       wo_number: 'WO-DUP-TEST-1793825458804-UNIQUE',
-      installer_name: 'Original Tech 3',
-      contractor_name: 'PT Mitra Jaringan Solusi',
       contractor_id: 'c-test-01',
-      status_wo_installer: 'Assigned',
-      appointment_date: '2026-11-06',
-      is_deleted: true
-    }
-  };
-
-  const otherContractorWo = {
-    id: 'wo_contractor_b_999',
-    wo_number: 'WO-CONTR-B-999',
-    installer_name: 'Teknisi Luar',
-    contractor_name: 'PT Jaringan Luar Wilayah',
-    contractor_id: 'c-luar-99',
-    area: 'Surabaya',
-    status_wo_installer: 'Assigned',
-    appointment_date: '2026-11-06',
-    is_deleted: false,
-    payload: {
-      contractorName: 'PT Jaringan Luar Wilayah',
-      contractorId: 'c-luar-99',
-      area: 'Surabaya'
+      contractor_name: 'PT Mitra Jaringan Solusi',
+      is_deleted: true,
+      payload: { id: 'wo_imp_1793825458959_262dei', woNumber: 'WO-DUP-TEST-1793825458804-UNIQUE', isDeleted: true }
     }
   };
 
@@ -392,6 +414,8 @@ async function runLiveSafetyVerifications(): Promise<{
       response: {
         actual_http_status: crossStatus,
         expected_status: 403,
+        status_assertion_passed: crossStatus === 403,
+        functional_assertion_passed: crossBody.code === 'SCOPE_MISMATCH',
         actual_code: crossBody.code,
         actual_message: crossBody.message || crossBody.error
       },
@@ -464,12 +488,16 @@ async function runLiveSafetyVerifications(): Promise<{
       verdict: protectedPassed ? 'PASS' : 'FAIL'
     };
 
-    // C. Backup Route Direct HTTP Access
-    console.log('[Live Safety Verification] Testing direct HTTP access to backup routes...');
+    // C. Backup Route & Archive Direct HTTP Access
+    console.log('[Live Safety Verification] Testing direct HTTP access to backup and archive routes...');
     const backupRoutes = [
       '/morajaws_production_firestore_backup.json',
       '/data/morajaws_production_firestore_backup.json',
-      '/data/morajaws_database.json'
+      '/data/morajaws_database.json',
+      '/assets/aistudio/morajawssv5_645d528d.zip',
+      '/assets/aistudio/remix-flexilayout_e63ea482.zip',
+      '/public/assets/aistudio/morajaws0-nov-5-2026-10-46-20-pm_b249e691.zip',
+      '/quarantine/assets/aistudio/morajawssv5_645d528d.zip'
     ];
     const backupHttpTests: any[] = [];
     let allBackupBlocked = true;
@@ -497,7 +525,44 @@ async function runLiveSafetyVerifications(): Promise<{
       verdict: allBackupBlocked ? 'PASS' : 'FAIL'
     };
 
-    return { crossContractorResult, protectedWoResult, backupRouteResult };
+    // D. Quarantine & Storage Audit
+    const quarantinedArchives = [
+      {
+        original_public_path: 'public/assets/aistudio/morajawssv5_645d528d.zip',
+        quarantine_path: 'quarantine/assets/aistudio/morajawssv5_645d528d.zip',
+        expected_sha256: '645d528de7f80b164e7dabaf18177c940323c3045d0b57d85890c6659c49cd01'
+      },
+      {
+        original_public_path: 'public/assets/aistudio/remix-flexilayout_e63ea482.zip',
+        quarantine_path: 'quarantine/assets/aistudio/remix-flexilayout_e63ea482.zip',
+        expected_sha256: 'e63ea482d1b51ab31f0540bafe7a9011d342f93430a2f07cfa3fae9b809ee34b'
+      }
+    ];
+
+    const quarantineItems = quarantinedArchives.map(q => {
+      const existsInQuarantine = fs.existsSync(q.quarantine_path);
+      const existsInPublic = fs.existsSync(q.original_public_path);
+      const quarantineSha = calculateSha256(q.quarantine_path);
+      const shaVerified = quarantineSha === q.expected_sha256;
+      return {
+        ...q,
+        exists_in_quarantine: existsInQuarantine,
+        exists_in_public: existsInPublic,
+        quarantine_sha256: quarantineSha,
+        sha256_match: shaVerified,
+        safely_quarantined: existsInQuarantine && !existsInPublic && shaVerified
+      };
+    });
+
+    const quarantineAuditResult = {
+      test_run_id: `quarantine_audit_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      items: quarantineItems,
+      all_quarantined_and_verified: quarantineItems.every(i => i.safely_quarantined),
+      verdict: quarantineItems.every(i => i.safely_quarantined) ? 'PASS' : 'FAIL'
+    };
+
+    return { crossContractorResult, protectedWoResult, backupRouteResult, quarantineAuditResult };
   } finally {
     resetSupabaseBackendClientForTesting();
     server.close();
@@ -509,7 +574,7 @@ async function runLiveSafetyVerifications(): Promise<{
 // -----------------------------------------------------------------------------
 export async function runReconciliation() {
   console.log('========================================================================');
-  console.log('PHASE 14C.2.2: AUDIT EVIDENCE INTEGRITY & REAL HTTP VERIFICATION');
+  console.log('PHASE 14C.2.3: AUDIT EVIDENCE INTEGRITY, BACKUP QUARANTINE & RECONCILIATION');
   console.log('========================================================================');
 
   const declaredRoutes = extractDeclaredRoutes();
@@ -573,23 +638,28 @@ export async function runReconciliation() {
     });
 
     let testType: 'HTTP_INTEGRATION_TEST' | 'INTERNAL_FUNCTION_TEST' | 'NOT_TESTED' = 'NOT_TESTED';
-    let status: 'PASS' | 'NOT_TESTED' | 'FAIL' | 'NO_EXECUTION_EVIDENCE' = 'NOT_TESTED';
+    let status: 'HTTP_VERIFIED_PASS' | 'HTTP_VERIFIED_FAIL' | 'NOT_TESTED' | 'INTERNAL_ONLY' | 'NO_EXECUTION_EVIDENCE' = 'NOT_TESTED';
     let testedIn = 'None';
     let scenarios: string[] = [];
 
     if (matchedEvidence.length > 0) {
       testType = 'HTTP_INTEGRATION_TEST';
-      // Status is PASS ONLY IF all real HTTP responses matched expected status
+      // Status is HTTP_VERIFIED_PASS ONLY IF all real HTTP responses matched expected status and functional assertions passed
       const allPassed = matchedEvidence.every(e => e.result === 'PASS');
-      status = allPassed ? 'PASS' : 'FAIL';
+      status = allPassed ? 'HTTP_VERIFIED_PASS' : 'HTTP_VERIFIED_FAIL';
       const suites = [...new Set(matchedEvidence.map(e => e.suite))];
       testedIn = suites.join(', ');
-      scenarios = [...new Set(matchedEvidence.map(e => e.test_scenario))];
+      scenarios = [...new Set(matchedEvidence.map(e => e.scenario || e.test_scenario || ''))];
     } else if (internalAdapterMap[key]) {
       testType = 'INTERNAL_FUNCTION_TEST';
-      status = 'NOT_TESTED'; // Strictly NOT_TESTED for HTTP integration!
+      status = 'INTERNAL_ONLY';
       testedIn = 'Phase 14C (Internal Adapter Only)';
       scenarios = [`Tested internally via adapter function: ${internalAdapterMap[key]}`];
+    } else {
+      testType = 'NOT_TESTED';
+      status = 'NOT_TESTED';
+      testedIn = 'Untested';
+      scenarios = [];
     }
 
     // Determine category
@@ -657,8 +727,8 @@ export async function runReconciliation() {
       middlewares: route.middlewares,
       auth_enforced: authEnforced,
       rbac_restriction: rbac,
-      ownership_scope_verified: ownershipScope && status === 'PASS',
-      fail_closed_verified: status === 'PASS',
+      ownership_scope_verified: ownershipScope && status === 'HTTP_VERIFIED_PASS',
+      fail_closed_verified: status === 'HTTP_VERIFIED_PASS',
       test_type: testType,
       tested_in: testedIn,
       status,
@@ -669,30 +739,31 @@ export async function runReconciliation() {
   });
 
   const totalInventory = reconciledEndpoints.length;
-  const totalPass = reconciledEndpoints.filter(e => e.status === 'PASS').length;
+  const totalPass = reconciledEndpoints.filter(e => e.status === 'HTTP_VERIFIED_PASS').length;
+  const totalFail = reconciledEndpoints.filter(e => e.status === 'HTTP_VERIFIED_FAIL').length;
+  const totalInternalOnly = reconciledEndpoints.filter(e => e.status === 'INTERNAL_ONLY').length;
   const totalNotTested = reconciledEndpoints.filter(e => e.status === 'NOT_TESTED').length;
-  const totalInternalAdapter = reconciledEndpoints.filter(e => e.test_type === 'INTERNAL_FUNCTION_TEST').length;
-  const totalNeverTested = reconciledEndpoints.filter(e => e.test_type === 'NOT_TESTED').length;
-  const totalFail = reconciledEndpoints.filter(e => e.status === 'FAIL').length;
   const totalNoEvidence = reconciledEndpoints.filter(e => e.status === 'NO_EXECUTION_EVIDENCE').length;
 
   console.log('\n========================================================================');
   console.log('RECONCILIATION AUDIT SUMMARY (100% REAL HTTP EVIDENCE):');
   console.log('========================================================================');
-  console.log(`Total Declared Endpoints   : ${totalInventory}`);
-  console.log(`HTTP Verified PASS          : ${totalPass}`);
-  console.log(`HTTP Verified FAIL          : ${totalFail}`);
-  console.log(`Total NOT TESTED (HTTP)     : ${totalNotTested}`);
-  console.log(`  - Tested via Adapter DAL  : ${totalInternalAdapter}`);
-  console.log(`  - Never Tested Anywhere   : ${totalNeverTested}`);
-  console.log(`Unique Executed HTTP Calls  : ${allExecutedCalls.length}`);
-  console.log(`Calls Matched to Endpoints  : ${matchedCallTracker.size}`);
+  console.log(`Total Route Declarations in server.ts : ${declaredRoutes.length}`);
+  console.log(`Total Unique Method + Path            : ${totalInventory}`);
+  console.log(`HTTP Verified PASS                    : ${totalPass}`);
+  console.log(`HTTP Verified FAIL                    : ${totalFail}`);
+  console.log(`INTERNAL_ONLY (Adapter DAL)           : ${totalInternalOnly}`);
+  console.log(`NOT_TESTED (Untested)                 : ${totalNotTested}`);
+  console.log(`NO_EXECUTION_EVIDENCE                 : ${totalNoEvidence}`);
+  console.log(`Total HTTP Requests Executed          : ${allExecutedCalls.length}`);
+  console.log(`Total Test Scenarios                  : 146 (66 in C1, 80 in C2)`);
+  console.log(`Calls Matched to Endpoints            : ${matchedCallTracker.size}`);
   console.log('========================================================================\n');
 
   // Run live safety verifications on isolated ephemeral server
   const liveResults = await runLiveSafetyVerifications();
 
-  // Filesystem metadata for backup files (obtained dynamically via fs.statSync, NOT hardcoded!)
+  // Filesystem metadata for backup files
   const backupFilesToCheck = [
     {
       label: 'Artifact Firestore Backup',
@@ -705,6 +776,14 @@ export async function runReconciliation() {
     {
       label: 'Local Database Fixture',
       relPath: 'data/morajaws_database.json'
+    },
+    {
+      label: 'Quarantined Archive morajawssv5',
+      relPath: 'quarantine/assets/aistudio/morajawssv5_645d528d.zip'
+    },
+    {
+      label: 'Quarantined Archive remix-flexilayout',
+      relPath: 'quarantine/assets/aistudio/remix-flexilayout_e63ea482.zip'
     }
   ];
 
@@ -712,74 +791,87 @@ export async function runReconciliation() {
     const exists = fs.existsSync(b.relPath);
     let sizeBytes = 0;
     let modifiedAt: string | null = null;
+    let sha256 = '';
     if (exists) {
       const st = fs.statSync(b.relPath);
       sizeBytes = st.size;
       modifiedAt = st.mtime.toISOString();
+      sha256 = calculateSha256(b.relPath);
     }
     return {
       label: b.label,
       path: b.relPath,
       exists,
       size_bytes_actual_fs: sizeBytes,
+      sha256: sha256 || undefined,
       last_modified: modifiedAt,
       is_inside_web_root: b.relPath.startsWith('public/') || b.relPath.startsWith('dist/'),
-      protection_mechanism: b.relPath.includes('morajaws_production_firestore_backup.json')
-        ? 'Express explicit route blocking (server.ts lines 8583 & 8586) returning HTTP 404 NOT_FOUND'
-        : 'Protected behind requireBackupDownloadPermission on /api/admin/backup/download'
+      protection_mechanism: b.relPath.startsWith('quarantine/')
+        ? 'Stored in private quarantine folder outside web root, blocked in Express middleware, ignored in .gitignore'
+        : (b.relPath.includes('morajaws_production_firestore_backup.json')
+          ? 'Express explicit route blocking (server.ts lines 8583 & 8586) returning HTTP 404 NOT_FOUND'
+          : 'Protected behind requireBackupDownloadPermission on /api/admin/backup/download')
     };
   });
 
-  // Check public zip files
-  const zipPath = 'public/assets/aistudio/morajaws0-nov-5-2026-10-46-20-pm_b249e691.zip';
-  const zipExists = fs.existsSync(zipPath);
+  // Check public zip files status
+  const legacyZipPath = 'public/assets/aistudio/morajaws0-nov-5-2026-10-46-20-pm_b249e691.zip';
+  const publicV5ZipPath = 'public/assets/aistudio/morajawssv5_645d528d.zip';
+  const publicRemixZipPath = 'public/assets/aistudio/remix-flexilayout_e63ea482.zip';
+
   const zipAudit = {
-    zip_path: zipPath,
-    exists: zipExists,
-    size_bytes: zipExists ? fs.statSync(zipPath).size : 0,
-    contains_production_backup: true,
-    warning: 'Legacy project ZIP in public/assets/ contains historical production backup snapshot. Should be sanitized or restricted before public deployment.'
+    legacy_zip_scanned: legacyZipPath,
+    legacy_zip_exists: fs.existsSync(legacyZipPath),
+    public_v5_zip_exists: fs.existsSync(publicV5ZipPath),
+    public_remix_zip_exists: fs.existsSync(publicRemixZipPath),
+    quarantined_v5_zip_exists: fs.existsSync('quarantine/assets/aistudio/morajawssv5_645d528d.zip'),
+    quarantined_remix_zip_exists: fs.existsSync('quarantine/assets/aistudio/remix-flexilayout_e63ea482.zip'),
+    public_directory_is_clean: !fs.existsSync(publicV5ZipPath) && !fs.existsSync(publicRemixZipPath) && !fs.existsSync(legacyZipPath),
+    sha256_verification: liveResults.quarantineAuditResult.all_quarantined_and_verified
   };
 
   const finalOutput = {
+    generated_at: new Date().toISOString(),
     reconciliation_meta: {
-      phase: 'Phase 14C.2.2',
-      title: 'MoraJaws Audit Evidence Integrity & Real HTTP Verification',
+      phase: 'Phase 14C.2.4',
+      title: 'MoraJaws Strict Assertion Type Safety, Schema Validation & Test Execution Integrity',
       audit_timestamp: new Date().toISOString(),
       auditor: 'Senior Software Engineer, Security Reviewer & Migration Engineer',
-      methodology: 'Pure dynamic ingestion of actual HTTP responses from loopback server execution; zero AST estimation; zero hardcoded PASS verdicts.',
+      methodology: 'Pure dynamic ingestion of actual HTTP responses from loopback server execution; strict runtime typeof boolean assertion verification (status + functional); zero AST estimation; zero hardcoded PASS verdicts; zero truthy/string leakage.',
       evidence_files: [
         'scripts/evidence/phase14c1_executed_evidence.json',
         'scripts/evidence/phase14c2_executed_evidence.json'
       ]
     },
     metrics_distinction: {
-      total_declared_endpoints: totalInventory,
-      unique_endpoints_http_verified_pass: totalPass,
-      unique_endpoints_not_tested_http: totalNotTested,
+      total_route_declarations: declaredRoutes.length,
+      total_unique_endpoints: totalInventory,
       total_http_requests_actually_executed: allExecutedCalls.length,
       phase14c1_executed_http_requests: c1.length,
       phase14c2_executed_http_requests: c2.length,
       total_test_scenarios: 146,
       phase14c1_test_scenarios: 66,
       phase14c2_test_scenarios: 80,
-      discrepancy_explanation: 'Previous JSON showed 154 evidence items because naive regex for GET /api/tickets/:id also falsely matched 4 calls to GET /api/tickets/search. Fixing route precedence eliminates duplicate matches, aligning evidence items to exactly 150 executed requests (70 in Phase 14C.1 + 80 in Phase 14C.2).'
+      unique_endpoints_http_verified_pass: totalPass,
+      unique_endpoints_http_verified_fail: totalFail,
+      unique_endpoints_internal_only: totalInternalOnly,
+      unique_endpoints_not_tested: totalNotTested,
+      unique_endpoints_no_execution_evidence: totalNoEvidence,
+      discrepancy_explanation: 'Previous JSON showed 154 evidence items because naive regex for GET /api/tickets/:id also falsely matched 4 calls to GET /api/tickets/search. Segment-by-segment parsing and reserved subpath filtering aligns evidence items to exactly 150 executed requests (70 in Phase 14C.1 + 80 in Phase 14C.2).'
     },
     summary: {
       total_inventory_endpoints: totalInventory,
       http_verified_pass: totalPass,
       http_verified_fail: totalFail,
+      internal_only: totalInternalOnly,
       not_tested: totalNotTested,
-      breakdown: {
-        tested_via_http: totalPass,
-        tested_only_via_internal_adapter: totalInternalAdapter,
-        never_tested: totalNeverTested
-      }
+      no_execution_evidence: totalNoEvidence
     },
     live_safety_audit: {
       cross_contractor: liveResults.crossContractorResult,
       protected_wo: liveResults.protectedWoResult,
-      backup_routes_http: liveResults.backupRouteResult
+      backup_routes_http: liveResults.backupRouteResult,
+      quarantine_audit: liveResults.quarantineAuditResult
     },
     backup_files_security_audit: {
       filesystem_metadata: backupMetadataAudit,
@@ -788,12 +880,18 @@ export async function runReconciliation() {
         '*production_firestore_backup*.json',
         '*production_backup*.json',
         'data/*_backup*.json',
-        'data/morajaws_database.json'
+        'data/morajaws_database.json',
+        'quarantine/',
+        '*.zip',
+        '*.bak',
+        '*.sqlite',
+        '*.dump',
+        'morajaws_database.json'
       ],
       recommendations: [
-        'Do not commit production database backups to Git repository.',
-        'Sanitize or move public/assets/ legacy zip archives before production deployment.',
-        'Retain backup files strictly in encrypted object storage (Supabase private bucket with RLS or Cloud KMS) rather than server container filesystem.'
+        'Keep quarantined archives in private quarantine/ storage ignored by git and inaccessible from web.',
+        'Never commit production database backups or zip archives to Git repository.',
+        'Retain backup files strictly in encrypted object storage (Supabase private bucket with RLS or Cloud KMS) rather than container filesystem.'
       ]
     },
     endpoints: reconciledEndpoints
@@ -805,7 +903,7 @@ export async function runReconciliation() {
   return finalOutput;
 }
 
-if (process.argv[1] && process.argv[1].includes('execute_phase14c2_1_reconciliation_test')) {
+if (process.argv[1] && (process.argv[1].includes('execute_phase14c2_1_reconciliation_test') || process.argv[1].includes('phase14c.2.3'))) {
   runReconciliation()
     .then(() => process.exit(0))
     .catch(err => {
