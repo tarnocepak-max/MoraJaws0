@@ -12,7 +12,9 @@
     "lint": "tsc --noEmit",
     "test:phase14c": "tsx scripts/execute_phase14c_consistency_test.ts",
     "test:phase14c.1": "tsx scripts/execute_phase14c1_endpoint_integration_test.ts",
-    "test:phase14c.2": "tsx scripts/execute_phase14c2_remaining_endpoint_test.ts"
+    "test:phase14c.2": "tsx scripts/execute_phase14c2_remaining_endpoint_test.ts",
+    "test:phase14c.2.1": "tsx scripts/execute_phase14c2_1_reconciliation_test.ts",
+    "test:phase14c.2.2": "tsx scripts/execute_phase14c2_1_reconciliation_test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",

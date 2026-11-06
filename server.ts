@@ -1167,23 +1167,38 @@ function renderWhatsAppMessage(templateBody: string, ticket: any) {
   const missingVariables: string[] = [];
   const varMap: Record<string, string> = {
     customer_name: ticket?.customerName || ticket?.endUserName || '',
+    customername: ticket?.customerName || ticket?.endUserName || '',
     customer_id: ticket?.idCustomer || ticket?.customerId || '',
+    customerid: ticket?.idCustomer || ticket?.customerId || '',
     customer_phone: ticket?.customerPhone || '',
+    customerphone: ticket?.customerPhone || '',
     wo_number: ticket?.woNumber || ticket?.workOrderNumber || '',
+    wonumber: ticket?.woNumber || ticket?.workOrderNumber || '',
     ticket_number: ticket?.ticketNumber || ticket?.woNumber || '',
+    ticketnumber: ticket?.ticketNumber || ticket?.woNumber || '',
     ticket_category: ticket?.ticketCategory || '',
+    ticketcategory: ticket?.ticketCategory || '',
     slot_time: ticket?.slotTime || '',
+    slottime: ticket?.slotTime || '',
     street_name: ticket?.streetName || '',
+    streetname: ticket?.streetName || '',
     street_alternatif: ticket?.streetAlternatif || '',
+    streetalternatif: ticket?.streetAlternatif || '',
     cluster_name: ticket?.clusterName || '',
+    clustername: ticket?.clusterName || '',
     area: ticket?.area || '',
     contractor_name: ticket?.contactorName || ticket?.contractorName || '',
+    contractorname: ticket?.contactorName || ticket?.contractorName || '',
     contactor_name: ticket?.contactorName || ticket?.contractorName || '',
     installer_name: ticket?.installerName || '',
+    installername: ticket?.installerName || '',
     date: ticket?.appointmentDate || '',
     appointment_date: ticket?.appointmentDate || '',
+    appointmentdate: ticket?.appointmentDate || '',
     fdt_code: ticket?.fdtCode || '',
-    fat_code: ticket?.fatCode || ''
+    fdtcode: ticket?.fdtCode || '',
+    fat_code: ticket?.fatCode || '',
+    fatcode: ticket?.fatCode || ''
   };
 
   if (ticket?.additionalFields) {
@@ -1193,8 +1208,9 @@ function renderWhatsAppMessage(templateBody: string, ticket: any) {
   }
 
   const rendered = (templateBody || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match: string, varName: string) => {
-    const key = varName.toLowerCase();
-    const val = varMap[key];
+    const rawKey = varName.toLowerCase();
+    const cleanKey = rawKey.replace(/_/g, '');
+    const val = varMap[rawKey] !== undefined ? varMap[rawKey] : varMap[cleanKey];
     if (val === undefined || val === null || val.trim() === '') {
       missingVariables.push(varName);
       return '';
@@ -2700,6 +2716,14 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       });
     }
 
+    if (newPassword === '12345678') {
+      return res.status(400).json({
+        success: false,
+        error: 'Kata sandi baru tidak boleh menggunakan kata sandi default "12345678".',
+        code: 'CANNOT_USE_DEFAULT_PASSWORD'
+      });
+    }
+
     const currentHash = hashPassword(currentPassword);
     const matchesCurrent = user.passwordHash === currentHash || (currentPassword === '12345678' && user.passwordHash === DEFAULT_HASH);
     if (!matchesCurrent) {
@@ -2707,14 +2731,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         success: false,
         error: 'Kata sandi saat ini yang Anda masukkan salah.',
         code: 'INVALID_CURRENT_PASSWORD'
-      });
-    }
-
-    if (newPassword === '12345678') {
-      return res.status(400).json({
-        success: false,
-        error: 'Kata sandi baru tidak boleh menggunakan kata sandi default "12345678".',
-        code: 'CANNOT_USE_DEFAULT_PASSWORD'
       });
     }
 

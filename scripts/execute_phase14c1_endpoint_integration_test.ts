@@ -56,6 +56,8 @@ import {
   resetSupabaseBackendClientForTesting
 } from '../server/supabaseClient.ts';
 
+import { SuiteEvidenceCollector } from './evidenceCollector.ts';
+
 interface TestResult {
   num: number;
   title: string;
@@ -65,9 +67,11 @@ interface TestResult {
 }
 
 const results: TestResult[] = [];
+const evidenceCollector = new SuiteEvidenceCollector('Phase14C.1');
 
 function recordTest(num: number, title: string, category: string, passed: boolean, details: string) {
   results.push({ num, title, category, passed, details });
+  evidenceCollector.linkToScenario({ num, title, category, details });
   const status = passed ? 'PASS' : 'FAIL';
   console.log(`[${status}] Test #${num} [${category}]: ${title}`);
   console.log(`       -> ${details}`);
@@ -724,6 +728,7 @@ async function runSuite() {
       fetchOptions.body = JSON.stringify(options.body);
     }
 
+    const callerStack = new Error().stack?.split('\n')[2] || '';
     const response = await fetch(`${baseUrl}${pathUrl}`, fetchOptions);
     let json: any = null;
     try {
@@ -731,6 +736,14 @@ async function runSuite() {
     } catch {
       // Non-JSON response
     }
+    evidenceCollector.recordHttpCall({
+      method: options.method || 'GET',
+      url: pathUrl,
+      token: options.token,
+      actualStatus: response.status,
+      responseBody: json,
+      callerStack
+    });
     return { status: response.status, body: json, headers: response.headers };
   }
 
@@ -1764,6 +1777,7 @@ async function runSuite() {
   } finally {
     resetSupabaseBackendClientForTesting();
     server.close();
+    evidenceCollector.saveToFile('scripts/evidence/phase14c1_executed_evidence.json');
   }
 
   // ---------------------------------------------------------------------------

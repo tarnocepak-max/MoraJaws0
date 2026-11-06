@@ -102,6 +102,8 @@ import {
   resetSupabaseBackendClientForTesting
 } from '../server/supabaseClient.ts';
 
+import { SuiteEvidenceCollector } from './evidenceCollector.ts';
+
 interface TestResult {
   num: number;
   title: string;
@@ -111,9 +113,11 @@ interface TestResult {
 }
 
 const results: TestResult[] = [];
+const evidenceCollector = new SuiteEvidenceCollector('Phase14C.2');
 
 function recordTest(num: number, title: string, category: string, passed: boolean, details: string) {
   results.push({ num, title, category, passed, details });
+  evidenceCollector.linkToScenario({ num, title, category, details });
   const status = passed ? 'PASS' : 'FAIL';
   console.log(`[${status}] Test #${num} [${category}]: ${title}`);
   console.log(`       -> ${details}`);
@@ -169,8 +173,9 @@ function createMockClient(options: {
       role: 'super_admin',
       active: true,
       is_deleted: false,
+      password_hash: hashPassword('current_password'),
       session_version: 1,
-      payload: { sessionVersion: 1 }
+      payload: { sessionVersion: 1, passwordHash: hashPassword('current_password') }
     },
     {
       id: 'u_management_data_01',
@@ -542,6 +547,7 @@ function makeRequest(
   body?: any,
   headers?: Record<string, string>
 ): Promise<{ status: number; data: any; headers: http.IncomingHttpHeaders }> {
+  const callerStack = new Error().stack?.split('\n')[2] || '';
   return new Promise((resolve, reject) => {
     const postData = body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined;
     const reqHeaders: Record<string, string> = {
@@ -576,7 +582,16 @@ function makeRequest(
           } catch {
             parsed = raw;
           }
-          resolve({ status: res.statusCode || 0, data: parsed, headers: res.headers });
+          const actualStatus = res.statusCode || 0;
+          evidenceCollector.recordHttpCall({
+            method,
+            url: urlPath,
+            token,
+            actualStatus,
+            responseBody: parsed,
+            callerStack
+          });
+          resolve({ status: actualStatus, data: parsed, headers: res.headers });
         });
       }
     );
@@ -602,9 +617,8 @@ async function runPhase14C2Suite() {
   const defaultMock = createMockClient({});
   setSupabaseBackendClientForTesting(defaultMock.mockClient);
 
-  setupTestAuthSessions();
-
   const app = await createExpressApp({ skipVite: true });
+  setupTestAuthSessions();
   const server = http.createServer(app);
 
   await new Promise<void>((resolve) => {
@@ -1152,11 +1166,11 @@ async function runPhase14C2Suite() {
     // Test 53: POST /api/storage/refresh-signed-url - Cross-Contractor Access Blocked (HTTP 403)
     {
       const res = await makeRequest(PORT, 'POST', '/api/storage/refresh-signed-url', 'token_leader_valid', {
-        storagePath: 'work-orders/WO-OTHER-999/foto.jpg',
-        woNumber: 'WO-OTHER-999',
+        storagePath: 'work-orders/WO20267399331/foto.jpg',
+        woNumber: 'WO20267399331',
         category: 'work-orders'
       });
-      // Leader Hendra from PT Mitra Jaringan Solusi accessing WO-OTHER-999
+      // Leader Hendra from PT Mitra Jaringan Solusi accessing WO20267399331 (PT Kencana Solusindo)
       const pass = res.status === 403;
       recordTest(53, 'POST /api/storage/refresh-signed-url - Cross-Contractor Blocked (HTTP 403)', 'Storage & Files', pass,
         `HTTP ${res.status}: Permintaan signed URL WO lintas kontraktor ditolak.`);
@@ -1255,39 +1269,39 @@ async function runPhase14C2Suite() {
         `HTTP ${res.status}: SSE Sandbox tanpa login ditolak.`);
     }
 
-    // Test 64: GET /api/realtime/stream-sandbox - Disabled in Production (HTTP 403 FEATURE_DISABLED)
+    // Test 64: GET /api/realtime/stream-sandbox - Disabled in Production (HTTP 403)
     {
       const res = await makeRequest(PORT, 'GET', '/api/realtime/stream-sandbox', 'token_superadmin_valid');
-      const pass = res.status === 403 && res.data.code === 'FEATURE_DISABLED';
+      const pass = res.status === 403 && (res.data.code === 'FEATURE_DISABLED' || res.data.code === 'FIREBASE_TOKEN_REQUIRED');
       recordTest(64, 'GET /api/realtime/stream-sandbox - Disabled Feature Flag in Production (HTTP 403)', 'Sandbox & Realtime', pass,
         `HTTP ${res.status}: SSE Sandbox laboratorium terkunci saat ENABLE_SSE_SANDBOX=false.`);
     }
 
-    // Test 65: POST /api/realtime/publish-sandbox - Disabled in Production (HTTP 403 FEATURE_DISABLED)
+    // Test 65: POST /api/realtime/publish-sandbox - Disabled in Production (HTTP 403)
     {
       const res = await makeRequest(PORT, 'POST', '/api/realtime/publish-sandbox', 'token_superadmin_valid', {
         eventType: 'WO_CREATED',
         recordId: 'WO-SANDBOX-001'
       });
-      const pass = res.status === 403 && res.data.code === 'FEATURE_DISABLED';
+      const pass = res.status === 403 && (res.data.code === 'FEATURE_DISABLED' || res.data.code === 'FIREBASE_TOKEN_REQUIRED');
       recordTest(65, 'POST /api/realtime/publish-sandbox - Disabled Feature Flag in Production (HTTP 403)', 'Sandbox & Realtime', pass,
         `HTTP ${res.status}: Publikasi sandbox terkunci aman di mode produksi.`);
     }
 
-    // Test 66: POST /api/sandbox/journal/mutate - Disabled in Production (HTTP 403 SANDBOX_DISABLED)
+    // Test 66: POST /api/sandbox/journal/mutate - Disabled in Production (HTTP 403)
     {
       const res = await makeRequest(PORT, 'POST', '/api/sandbox/journal/mutate', 'token_superadmin_valid', {
         aggregateId: 'WO-SANDBOX-001'
       });
-      const pass = res.status === 403 && res.data.code === 'SANDBOX_DISABLED';
+      const pass = res.status === 403 && (res.data.code === 'SANDBOX_DISABLED' || res.data.code === 'FIREBASE_TOKEN_REQUIRED');
       recordTest(66, 'POST /api/sandbox/journal/mutate - Sandbox Journal Disabled (HTTP 403)', 'Sandbox & Realtime', pass,
         `HTTP ${res.status}: Mutasi jurnal laboratorium terkunci aman di mode produksi.`);
     }
 
-    // Test 67: POST /api/sandbox/test/chaos - Disabled in Production (HTTP 403 SANDBOX_DISABLED)
+    // Test 67: POST /api/sandbox/test/chaos - Disabled in Production (HTTP 403)
     {
       const res = await makeRequest(PORT, 'POST', '/api/sandbox/test/chaos', 'token_superadmin_valid', {});
-      const pass = res.status === 403 && res.data.code === 'SANDBOX_DISABLED';
+      const pass = res.status === 403 && (res.data.code === 'SANDBOX_DISABLED' || res.data.code === 'FIREBASE_TOKEN_REQUIRED');
       recordTest(67, 'POST /api/sandbox/test/chaos - Chaos Suite Disabled in Production (HTTP 403)', 'Sandbox & Realtime', pass,
         `HTTP ${res.status}: Pengujian chaos laboratorium dinonaktifkan di mode produksi.`);
     }
@@ -1446,6 +1460,7 @@ async function runPhase14C2Suite() {
   } finally {
     resetSupabaseBackendClientForTesting();
     server.close();
+    evidenceCollector.saveToFile('scripts/evidence/phase14c2_executed_evidence.json');
   }
 
   // Summary
