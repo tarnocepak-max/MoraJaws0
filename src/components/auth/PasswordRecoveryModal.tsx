@@ -62,12 +62,13 @@ export const PasswordRecoveryModal: React.FC<PasswordRecoveryModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Recovery credentials extracted from URL or props
+  // Recovery credentials and token state held strictly in memory
   const [recoveryCredentials, setRecoveryCredentials] = useState<{
     accessToken?: string;
     code?: string;
     token_hash?: string;
   }>({});
+  const [recoverySessionToken, setRecoverySessionToken] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -92,6 +93,16 @@ export const PasswordRecoveryModal: React.FC<PasswordRecoveryModalProps> = ({
         token_hash: tokenHash || undefined
       };
       setRecoveryCredentials(creds);
+
+      // SENSITIVE CREDENTIAL CLEANUP:
+      // Immediately wipe recovery tokens and codes from the browser address bar
+      // to prevent leaks into browser history, logs, or screen snooping.
+      try {
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      } catch {}
+
       verifyToken(creds);
     } else {
       setMode(initialMode);
@@ -110,12 +121,16 @@ export const PasswordRecoveryModal: React.FC<PasswordRecoveryModalProps> = ({
         if (res.data.email) {
           setVerifiedEmail(res.data.email);
         }
+        if (res.data.recoveryToken) {
+          setRecoverySessionToken(res.data.recoveryToken);
+        }
       } else {
-        setError(res.data?.error || 'Tautan pemulihan kata sandi tidak valid atau telah kedaluwarsa. Silakan kirim permintaan ulang.');
+        const errorMsg = res.data?.error || 'Tautan pemulihan kata sandi tidak valid atau telah kedaluwarsa. Silakan minta tautan baru.';
+        setError(errorMsg);
         setSessionVerified(false);
       }
     } catch (e: any) {
-      setError(e?.message || 'Gagal memverifikasi token pemulihan.');
+      setError(e?.message || 'Gagal memverifikasi token pemulihan. Periksa koneksi jaringan Anda.');
       setSessionVerified(false);
     } finally {
       setVerifyingSession(false);
@@ -164,29 +179,32 @@ export const PasswordRecoveryModal: React.FC<PasswordRecoveryModalProps> = ({
       return;
     }
 
+    const effectiveToken = recoverySessionToken || recoveryCredentials.accessToken;
+    if (!effectiveToken && !recoveryCredentials.code && !recoveryCredentials.token_hash) {
+      setError('Bukti pemulihan tidak ditemukan atau telah kedaluwarsa. Silakan minta tautan pemulihan baru.');
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await resetPasswordWithRecoveryToken({
         newPassword,
         confirmPassword,
-        accessToken: recoveryCredentials.accessToken,
+        recoveryToken: effectiveToken,
         code: recoveryCredentials.code,
         token_hash: recoveryCredentials.token_hash
       });
 
       if (res.ok && res.data?.success) {
         setResetSuccess(true);
-        // Clean URL fragment and search params to avoid re-triggering recovery mode on reload
-        try {
-          if (window.history && window.history.replaceState) {
-            window.history.replaceState({}, document.title, window.location.pathname);
-          }
-        } catch {}
+        // Wipe memory tokens
+        setRecoverySessionToken(null);
+        setRecoveryCredentials({});
       } else {
         setError(res.data?.error || 'Gagal memperbarui kata sandi. Tautan mungkin telah kedaluwarsa.');
       }
     } catch (err: any) {
-      setError(err?.message || 'Terjadi kesalahan sistem saat menyimpan kata sandi baru.');
+      setError(err?.message || 'Terjadi kesalahan sistem saat menyimpan kata sandi baru. Periksa koneksi internet.');
     } finally {
       setLoading(false);
     }
@@ -416,7 +434,7 @@ export const PasswordRecoveryModal: React.FC<PasswordRecoveryModalProps> = ({
 
                 <button
                   type="submit"
-                  disabled={loading || verifyingSession}
+                  disabled={loading || verifyingSession || (!sessionVerified && !recoverySessionToken && !recoveryCredentials.code && !recoveryCredentials.token_hash && !recoveryCredentials.accessToken)}
                   className="w-full py-3 px-4 bg-gradient-to-r from-[#7135B5] via-[#A855F7] to-[#7135B5] hover:brightness-110 active:scale-98 text-white rounded-xl font-bold text-xs shadow-[0_8px_25px_rgba(113,53,181,0.5)] border border-[#D8B4FE]/40 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60"
                 >
                   {loading ? (
@@ -431,6 +449,21 @@ export const PasswordRecoveryModal: React.FC<PasswordRecoveryModalProps> = ({
                     </>
                   )}
                 </button>
+
+                {error && !sessionVerified && !verifyingSession && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      setMode('request');
+                      setRequestSent(false);
+                    }}
+                    className="w-full py-2.5 px-4 bg-[#35105E]/60 hover:bg-[#35105E] text-[#E9D5FF] rounded-xl font-semibold text-xs border border-[#D8B4FE]/30 transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-[#D8B4FE]" />
+                    <span>Minta Tautan Pemulihan Baru</span>
+                  </button>
+                )}
               </form>
             </div>
           )}

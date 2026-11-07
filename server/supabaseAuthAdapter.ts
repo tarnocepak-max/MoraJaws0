@@ -1,6 +1,7 @@
 import { getSupabaseBackendClient } from './supabaseClient.ts';
 import { findUserInSupabaseDetailed } from './supabaseAdapter.ts';
 import type { ServerUser } from '../server.ts';
+import crypto from 'crypto';
 
 // ==============================================================================
 // MORAJAWS SUPABASE AUTH ADAPTER
@@ -572,6 +573,7 @@ export async function signOutSupabaseAuth(): Promise<SupabaseAuthResponse<boolea
  * Resolves the canonical MoraJaws Auth Redirect URL.
  * Strictly defaults to production domain 'https://morajaws.ai.studio/'
  * as configured in Supabase Project Site URL and Redirect URLs.
+ * Strictly prevents open redirect vulnerabilities or localhost fallback.
  */
 export function resolveAuthRedirectUrl(customRedirect?: string): string {
   const PRODUCTION_DOMAIN = 'https://morajaws.ai.studio/';
@@ -579,7 +581,8 @@ export function resolveAuthRedirectUrl(customRedirect?: string): string {
   if (customRedirect && typeof customRedirect === 'string') {
     try {
       const parsed = new URL(customRedirect.trim());
-      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+      // Only allow https:// protocol on production domain morajaws.ai.studio
+      if (parsed.protocol === 'https:' && parsed.hostname === 'morajaws.ai.studio') {
         return parsed.toString();
       }
     } catch {
@@ -683,15 +686,123 @@ export async function resetSupabaseAuthPassword(
   }
 }
 
+export interface ServerRecoveryTransaction {
+  token: string;
+  userId: string;
+  email: string;
+  createdAt: number;
+  expiresAt: number; // 5 minutes TTL
+  consumed: boolean;
+}
+
+// In-memory short-lived, single-use recovery transaction store
+const SERVER_RECOVERY_STORE = new Map<string, ServerRecoveryTransaction>();
+
+export function clearServerRecoveryStoreForTesting(): void {
+  SERVER_RECOVERY_STORE.clear();
+}
+
+export function createRecoveryTransaction(userId: string, email: string): string {
+  const now = Date.now();
+  // Auto-clean expired entries
+  for (const [k, v] of SERVER_RECOVERY_STORE.entries()) {
+    if (now > v.expiresAt || v.consumed) {
+      SERVER_RECOVERY_STORE.delete(k);
+    }
+  }
+
+  const token = `rec_${crypto.randomBytes(24).toString('hex')}`;
+  SERVER_RECOVERY_STORE.set(token, {
+    token,
+    userId,
+    email: email || '',
+    createdAt: now,
+    expiresAt: now + 5 * 60 * 1000, // 5 minutes strict TTL
+    consumed: false
+  });
+  return token;
+}
+
+export function getValidRecoveryTransaction(recToken: string): {
+  valid: boolean;
+  error?: { code: string; message: string };
+  tx?: ServerRecoveryTransaction;
+} {
+  const now = Date.now();
+  const tx = SERVER_RECOVERY_STORE.get(recToken);
+  if (!tx) {
+    return {
+      valid: false,
+      error: { code: 'INVALID_RECOVERY_TOKEN', message: 'Token pemulihan tidak valid atau tidak terdaftar.' }
+    };
+  }
+
+  if (tx.consumed) {
+    return {
+      valid: false,
+      error: { code: 'TOKEN_ALREADY_USED', message: 'Bukti sesi pemulihan telah digunakan sebelumnya (token replay dicegah). Silakan minta tautan baru.' }
+    };
+  }
+
+  if (now > tx.expiresAt) {
+    SERVER_RECOVERY_STORE.delete(recToken);
+    return {
+      valid: false,
+      error: { code: 'TOKEN_EXPIRED', message: 'Token pemulihan telah kedaluwarsa. Silakan minta tautan baru.' }
+    };
+  }
+
+  return { valid: true, tx };
+}
+
 /**
- * Verifies recovery session credentials (accessToken, code, or token_hash).
- * Ensures server-side validation without browser directly accessing Supabase.
+ * Detects if a token is a standard login access token rather than an official recovery credential.
+ */
+export function isLoginAccessToken(tokenCandidate?: string): boolean {
+  if (!tokenCandidate || typeof tokenCandidate !== 'string') return false;
+  const clean = tokenCandidate.replace(/^Bearer\s+/i, '').trim();
+  if (clean.startsWith('eyJ') && clean.includes('.')) {
+    const parts = clean.split('.');
+    if (parts.length === 3) {
+      try {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+        if (Array.isArray(payload.amr)) {
+          const hasRecovery = payload.amr.some((m: any) => m.method === 'recovery' || m.method === 'otp');
+          const hasPassword = payload.amr.some((m: any) => m.method === 'password');
+          if (hasPassword && !hasRecovery) {
+            return true;
+          }
+        }
+      } catch {}
+    }
+  }
+  return false;
+}
+
+/**
+ * Verifies recovery session credentials (PKCE code or OTP token_hash with type: 'recovery').
+ * Strictly rejects ordinary login access tokens.
+ * Issues a short-lived, single-use, account-bound recoveryToken for password update.
  */
 export async function verifySupabaseRecoveryToken(params: {
   accessToken?: string;
+  recoveryToken?: string;
   code?: string;
   token_hash?: string;
-}): Promise<SupabaseAuthResponse<{ userId: string; email?: string }>> {
+}): Promise<SupabaseAuthResponse<{ userId: string; email?: string; recoveryToken?: string }>> {
+  const { accessToken, recoveryToken, code, token_hash } = params;
+
+  // 1. Strictly detect and reject ordinary login access tokens
+  if (accessToken || isLoginAccessToken(recoveryToken)) {
+    return {
+      success: false,
+      error: {
+        code: 'LOGIN_TOKEN_REJECTED_AS_RECOVERY_PROOF',
+        message: 'Access token sesi login biasa tidak dapat digunakan sebagai bukti pemulihan kata sandi. Wajib menggunakan tautan atau kode pemulihan resmi dari email.'
+      }
+    };
+  }
+
   const client = getSupabaseBackendClient();
   if (!client) {
     return {
@@ -700,23 +811,33 @@ export async function verifySupabaseRecoveryToken(params: {
     };
   }
 
-  const { accessToken, code, token_hash } = params;
-
-  // 1. PKCE Code Exchange (if redirected with ?code=...)
+  // 2. PKCE Code Exchange (from email redirect: ?code=...)
   if (code && typeof code === 'string' && code.trim()) {
     try {
       const { data, error } = await client.auth.exchangeCodeForSession(code.trim());
       if (error || !data.user) {
+        const errMsg = (error?.message || '').toLowerCase();
+        const isExpired = errMsg.includes('expired');
+        const isUsed = errMsg.includes('already used') || errMsg.includes('already consumed');
         return {
           success: false,
-          error: { code: 'INVALID_RECOVERY_CODE', message: error?.message || 'Kode verifikasi recovery tidak valid atau telah kedaluwarsa.' }
+          error: {
+            code: isUsed ? 'TOKEN_ALREADY_USED' : (isExpired ? 'TOKEN_EXPIRED' : 'INVALID_RECOVERY_CODE'),
+            message: isUsed
+              ? 'Kode otorisasi pemulihan telah digunakan sebelumnya (token replay dicegah).'
+              : (isExpired
+                ? 'Kode verifikasi pemulihan telah kedaluwarsa. Silakan minta tautan baru.'
+                : (error?.message || 'Kode verifikasi recovery tidak valid atau telah kedaluwarsa.'))
+          }
         };
       }
+      const recToken = createRecoveryTransaction(data.user.id, data.user.email || '');
       return {
         success: true,
         data: {
           userId: data.user.id,
-          email: data.user.email
+          email: data.user.email,
+          recoveryToken: recToken
         }
       };
     } catch (err: any) {
@@ -727,7 +848,7 @@ export async function verifySupabaseRecoveryToken(params: {
     }
   }
 
-  // 2. OTP Token Hash (if redirected with ?token_hash=...&type=recovery)
+  // 3. OTP Token Hash (from email redirect: ?token_hash=...&type=recovery)
   if (token_hash && typeof token_hash === 'string' && token_hash.trim()) {
     try {
       const { data, error } = await client.auth.verifyOtp({
@@ -735,16 +856,28 @@ export async function verifySupabaseRecoveryToken(params: {
         type: 'recovery'
       });
       if (error || !data.user) {
+        const errMsg = (error?.message || '').toLowerCase();
+        const isExpired = errMsg.includes('expired');
+        const isUsed = errMsg.includes('already used') || errMsg.includes('already consumed');
         return {
           success: false,
-          error: { code: 'INVALID_RECOVERY_OTP', message: error?.message || 'Token verifikasi OTP pemulihan tidak valid atau telah kedaluwarsa.' }
+          error: {
+            code: isUsed ? 'TOKEN_ALREADY_USED' : (isExpired ? 'TOKEN_EXPIRED' : 'INVALID_RECOVERY_OTP'),
+            message: isUsed
+              ? 'Token hash pemulihan telah digunakan sebelumnya (token replay dicegah).'
+              : (isExpired
+                ? 'Token hash pemulihan telah kedaluwarsa. Silakan minta tautan baru.'
+                : (error?.message || 'Token verifikasi OTP pemulihan tidak valid atau telah kedaluwarsa.'))
+          }
         };
       }
+      const recToken = createRecoveryTransaction(data.user.id, data.user.email || '');
       return {
         success: true,
         data: {
           userId: data.user.id,
-          email: data.user.email
+          email: data.user.email,
+          recoveryToken: recToken
         }
       };
     } catch (err: any) {
@@ -755,49 +888,98 @@ export async function verifySupabaseRecoveryToken(params: {
     }
   }
 
-  // 3. Bearer Access Token (if implicit hash #access_token=...&type=recovery)
-  if (accessToken && typeof accessToken === 'string' && accessToken.trim()) {
-    try {
-      const cleanToken = accessToken.replace(/^Bearer\s+/i, '').trim();
-      const { data, error } = await client.auth.getUser(cleanToken);
-      if (error || !data.user) {
-        return {
-          success: false,
-          error: { code: 'INVALID_RECOVERY_TOKEN', message: error?.message || 'Token recovery tidak valid atau telah kedaluwarsa.' }
-        };
-      }
-      return {
-        success: true,
-        data: {
-          userId: data.user.id,
-          email: data.user.email
-        }
-      };
-    } catch (err: any) {
+  // 4. Pre-verified Recovery Transaction (issued in Step 1)
+  if (recoveryToken && typeof recoveryToken === 'string' && recoveryToken.trim()) {
+    const txCheck = getValidRecoveryTransaction(recoveryToken.trim());
+    if (!txCheck.valid || !txCheck.tx) {
       return {
         success: false,
-        error: { code: 'GET_USER_EXCEPTION', message: err?.message || 'Gagal memverifikasi access token recovery.' }
+        error: txCheck.error || { code: 'INVALID_RECOVERY_TOKEN', message: 'Token recovery tidak valid atau telah kedaluwarsa.' }
       };
     }
+    return {
+      success: true,
+      data: {
+        userId: txCheck.tx.userId,
+        email: txCheck.tx.email,
+        recoveryToken: txCheck.tx.token
+      }
+    };
   }
 
   return {
     success: false,
-    error: { code: 'MISSING_RECOVERY_CREDENTIALS', message: 'Token, kode autentikasi, atau token hash pemulihan wajib disertakan.' }
+    error: {
+      code: 'MISSING_RECOVERY_CREDENTIALS',
+      message: 'Kode otorisasi (code), token hash (token_hash), atau token pemulihan (recoveryToken) wajib disertakan.'
+    }
   };
 }
 
 /**
  * Updates a user's password following recovery verification.
- * Enforces minimum password strength and invalidates previous sessions.
+ * CRITICAL SECURITY:
+ * - NEVER accepts or trusts client-supplied verifiedUserId.
+ * - The target user ID MUST be cryptographically validated by Supabase Auth or verified recovery proof.
+ * - Enforces minimum password strength and confirmation match.
+ * - Enforces authoritative staff account active status.
+ * - Immediately executes global sign-out to invalidate old sessions and prevent token replay.
+ * - Output contract omits userId to prevent identifier leakage.
  */
 export async function updateSupabaseUserPassword(params: {
   newPassword: string;
+  confirmPassword?: string;
   accessToken?: string;
+  recoveryToken?: string;
   code?: string;
   token_hash?: string;
-  verifiedUserId?: string;
-}): Promise<SupabaseAuthResponse<{ userId: string; email?: string }>> {
+}): Promise<SupabaseAuthResponse<{ email?: string }>> {
+  const { newPassword, confirmPassword, accessToken, recoveryToken, code, token_hash } = params;
+
+  // 1. Fail-fast input validation
+  if (!newPassword || typeof newPassword !== 'string') {
+    return {
+      success: false,
+      error: { code: 'INVALID_PASSWORD', message: 'Kata sandi baru wajib diisi.' }
+    };
+  }
+
+  if (newPassword.length < 8) {
+    return {
+      success: false,
+      error: { code: 'INVALID_PASSWORD_LENGTH', message: 'Kata sandi baru minimal harus 8 karakter.' }
+    };
+  }
+
+  if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+    return {
+      success: false,
+      error: { code: 'PASSWORD_MISMATCH', message: 'Konfirmasi kata sandi tidak cocok dengan kata sandi baru.' }
+    };
+  }
+
+  // 2. Reject login access token outright
+  if (accessToken || isLoginAccessToken(recoveryToken)) {
+    return {
+      success: false,
+      error: {
+        code: 'LOGIN_TOKEN_REJECTED_AS_RECOVERY_PROOF',
+        message: 'Access token sesi login biasa tidak dapat digunakan sebagai bukti pemulihan kata sandi. Wajib menggunakan tautan atau kode pemulihan resmi dari email.'
+      }
+    };
+  }
+
+  if (!code && !token_hash && !recoveryToken) {
+    return {
+      success: false,
+      error: {
+        code: 'MISSING_RECOVERY_CREDENTIALS',
+        message: 'Bukti pemulihan (code, token_hash, atau recoveryToken) wajib disertakan.'
+      }
+    };
+  }
+
+  // 3. Client configuration check
   const client = getSupabaseBackendClient();
   if (!client) {
     return {
@@ -806,33 +988,114 @@ export async function updateSupabaseUserPassword(params: {
     };
   }
 
-  const { newPassword, accessToken, code, token_hash, verifiedUserId } = params;
+  let authenticatedUserId: string = '';
+  let authenticatedEmail: string = '';
+  let isFromStore = false;
+  let storeToken = '';
 
-  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+  // 4. Resolve target user strictly through Supabase Auth recovery proof
+  if (code && typeof code === 'string' && code.trim()) {
+    try {
+      const { data, error } = await client.auth.exchangeCodeForSession(code.trim());
+      if (error || !data.user) {
+        const errMsg = (error?.message || '').toLowerCase();
+        const isExpired = errMsg.includes('expired');
+        const isUsed = errMsg.includes('already used') || errMsg.includes('already consumed');
+        return {
+          success: false,
+          error: {
+            code: isUsed ? 'TOKEN_ALREADY_USED' : (isExpired ? 'TOKEN_EXPIRED' : 'INVALID_RECOVERY_CODE'),
+            message: isUsed
+              ? 'Kode otorisasi pemulihan telah digunakan sebelumnya (token replay dicegah).'
+              : (isExpired
+                ? 'Kode verifikasi pemulihan telah kedaluwarsa. Silakan minta tautan baru.'
+                : (error?.message || 'Kode verifikasi recovery tidak valid.'))
+          }
+        };
+      }
+      authenticatedUserId = data.user.id;
+      authenticatedEmail = data.user.email || '';
+    } catch (err: any) {
+      return {
+        success: false,
+        error: { code: 'EXCHANGE_CODE_EXCEPTION', message: err?.message || 'Gagal menukar authorization code.' }
+      };
+    }
+  } else if (token_hash && typeof token_hash === 'string' && token_hash.trim()) {
+    try {
+      const { data, error } = await client.auth.verifyOtp({
+        token_hash: token_hash.trim(),
+        type: 'recovery'
+      });
+      if (error || !data.user) {
+        const errMsg = (error?.message || '').toLowerCase();
+        const isExpired = errMsg.includes('expired');
+        const isUsed = errMsg.includes('already used') || errMsg.includes('already consumed');
+        return {
+          success: false,
+          error: {
+            code: isUsed ? 'TOKEN_ALREADY_USED' : (isExpired ? 'TOKEN_EXPIRED' : 'INVALID_RECOVERY_OTP'),
+            message: isUsed
+              ? 'Token hash pemulihan telah digunakan sebelumnya (token replay dicegah).'
+              : (isExpired
+                ? 'Token hash pemulihan telah kedaluwarsa. Silakan minta tautan baru.'
+                : (error?.message || 'Token verifikasi OTP recovery tidak valid.'))
+          }
+        };
+      }
+      authenticatedUserId = data.user.id;
+      authenticatedEmail = data.user.email || '';
+    } catch (err: any) {
+      return {
+        success: false,
+        error: { code: 'VERIFY_OTP_EXCEPTION', message: err?.message || 'Gagal memverifikasi OTP recovery.' }
+      };
+    }
+  } else if (recoveryToken && typeof recoveryToken === 'string' && recoveryToken.trim()) {
+    const txCheck = getValidRecoveryTransaction(recoveryToken.trim());
+    if (!txCheck.valid || !txCheck.tx) {
+      return {
+        success: false,
+        error: txCheck.error || { code: 'INVALID_RECOVERY_TOKEN', message: 'Token recovery tidak valid atau telah kedaluwarsa.' }
+      };
+    }
+    // Mark consumed immediately to prevent race conditions or replay
+    txCheck.tx.consumed = true;
+    isFromStore = true;
+    storeToken = recoveryToken.trim();
+    authenticatedUserId = txCheck.tx.userId;
+    authenticatedEmail = txCheck.tx.email;
+  }
+
+  if (!authenticatedUserId) {
     return {
       success: false,
-      error: { code: 'INVALID_PASSWORD_LENGTH', message: 'Kata sandi baru minimal harus 8 karakter.' }
+      error: { code: 'UNAUTHORIZED_RECOVERY', message: 'Bukti pemulihan tidak valid atau tidak dapat diverifikasi.' }
     };
   }
 
-  let targetUserId = verifiedUserId;
-  let userEmail: string | undefined;
-
-  if (!targetUserId) {
-    const verifyRes = await verifySupabaseRecoveryToken({ accessToken, code, token_hash });
-    if (!verifyRes.success || !verifyRes.data?.userId) {
-      return {
-        success: false,
-        error: verifyRes.error || { code: 'UNAUTHORIZED_RECOVERY', message: 'Sesi pemulihan tidak sah.' }
-      };
-    }
-    targetUserId = verifyRes.data.userId;
-    userEmail = verifyRes.data.email;
-  }
-
+  // 5. Verify authoritative staff directory state
   try {
-    // 1. Update user password using Supabase Auth Admin API
-    const { data: updatedData, error: updateError } = await client.auth.admin.updateUserById(targetUserId, {
+    const userRes = await findUserInSupabaseDetailed(authenticatedUserId);
+    if (userRes.success && userRes.data) {
+      if (userRes.data.isDeleted) {
+        return {
+          success: false,
+          error: { code: 'ACCOUNT_DELETED', message: 'Akun telah dihapus dari sistem MoraJaws. Pembaruan kata sandi ditolak.' }
+        };
+      }
+      if (!userRes.data.active) {
+        return {
+          success: false,
+          error: { code: 'ACCOUNT_DISABLED', message: 'Akun Anda sedang dinonaktifkan oleh Administrator.' }
+        };
+      }
+    }
+  } catch {}
+
+  // 6. Update user password using Supabase Auth Admin API
+  try {
+    const { data: updatedData, error: updateError } = await client.auth.admin.updateUserById(authenticatedUserId, {
       password: newPassword
     });
 
@@ -843,18 +1106,20 @@ export async function updateSupabaseUserPassword(params: {
       };
     }
 
-    // 2. Global Sign Out: revoke previous sessions to enforce re-login
+    // 7. Global Sign Out: Revoke all existing sessions to enforce re-login with new password
     try {
-      await client.auth.admin.signOut(targetUserId, 'global');
-    } catch {
-      // non-fatal if already signed out
+      await client.auth.admin.signOut(authenticatedUserId, 'global');
+    } catch {}
+
+    // Cleanup recovery transaction
+    if (isFromStore && storeToken) {
+      SERVER_RECOVERY_STORE.delete(storeToken);
     }
 
     return {
       success: true,
       data: {
-        userId: targetUserId,
-        email: updatedData?.user?.email || userEmail
+        email: updatedData?.user?.email || authenticatedEmail
       }
     };
   } catch (err: any) {

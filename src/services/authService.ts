@@ -252,6 +252,7 @@ export async function requestPasswordRecovery(identifier: string, customRedirect
  */
 export async function verifyRecoverySession(params: {
   accessToken?: string;
+  recoveryToken?: string;
   code?: string;
   token_hash?: string;
 }) {
@@ -265,15 +266,15 @@ export async function verifyRecoverySession(params: {
 }
 
 /**
- * Submits new password for recovery through Express backend
+ * Submits new password for recovery through Express backend.
+ * Never supplies or trusts verifiedUserId or login accessToken from browser.
  */
 export async function resetPasswordWithRecoveryToken(params: {
   newPassword: string;
   confirmPassword: string;
-  accessToken?: string;
+  recoveryToken?: string;
   code?: string;
   token_hash?: string;
-  verifiedUserId?: string;
 }) {
   const res = await fetch('/api/auth/reset-password', {
     method: 'POST',

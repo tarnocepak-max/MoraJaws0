@@ -1740,6 +1740,18 @@ export function getBackendTicketWODate(t: any): string | null {
   return null;
 }
 
+// ==============================================================================
+// MORAJAWS RECOVERY RATE LIMITING & SECURITY DEFENSE
+// - In-process token bucket with IP and normalized identity isolation.
+// - Multi-Instance Distributed Cache: BLOCKED (Requires Redis / Valkey infrastructure
+//   not currently provisioned in environment). In-process sliding window enforced.
+// ==============================================================================
+export const RECOVERY_ATTEMPTS = new Map<string, { count: number; lockedUntil?: number; lastAttempt: number }>();
+
+export const clearAllRecoveryRateLimitsForTesting = (): void => {
+  RECOVERY_ATTEMPTS.clear();
+};
+
 export async function createExpressApp(options?: { skipVite?: boolean }): Promise<express.Express> {
   loadDatabaseFromDisk();
 
@@ -2774,34 +2786,103 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     res.json({ success: true, message: 'Sesi Supabase Auth berhasil diakhiri.', sessionVersion: req.user?.sessionVersion });
   });
 
-  // --- Supabase Password Recovery Flow ---
+  // Recovery endpoints and rate limiting
+
+  const checkRecoveryRateLimit = (key: string, maxAttempts = 5, lockDurationMs = 10 * 60 * 1000): { allowed: boolean; waitSeconds?: number } => {
+    const now = Date.now();
+    const entry = RECOVERY_ATTEMPTS.get(key);
+    if (!entry) return { allowed: true };
+    if (entry.lockedUntil && entry.lockedUntil > now) {
+      return { allowed: false, waitSeconds: Math.ceil((entry.lockedUntil - now) / 1000) };
+    }
+    // Auto-reset if last attempt was older than lock window
+    if (now - entry.lastAttempt > lockDurationMs) {
+      RECOVERY_ATTEMPTS.delete(key);
+      return { allowed: true };
+    }
+    return { allowed: true };
+  };
+
+  const recordRecoveryFailure = (key: string, maxAttempts = 5, lockDurationMs = 10 * 60 * 1000) => {
+    const now = Date.now();
+    const entry = RECOVERY_ATTEMPTS.get(key) || { count: 0, lastAttempt: now };
+    entry.count += 1;
+    entry.lastAttempt = now;
+    if (entry.count >= maxAttempts) {
+      entry.lockedUntil = now + lockDurationMs;
+    }
+    RECOVERY_ATTEMPTS.set(key, entry);
+  };
+
+  const clearRecoveryRateLimit = (key: string) => {
+    RECOVERY_ATTEMPTS.delete(key);
+  };
+
   const handleForgotPassword = async (req: Request, res: Response) => {
+    const clientIp = (req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
     const { email, emailOrUsername, identifier, redirectTo } = req.body || {};
     const targetIdent = (identifier || emailOrUsername || email || '').trim();
     if (!targetIdent) {
       return res.status(400).json({ success: false, error: 'Email atau nama pengguna wajib diisi.', code: 'INVALID_INPUT' });
     }
+
+    const cleanNormalized = targetIdent.toLowerCase();
+    const ipRateKey = `forgot_ip_${clientIp}`;
+    const identRateKey = `forgot_id_${cleanNormalized}`;
+
+    const ipCheck = checkRecoveryRateLimit(ipRateKey, 5, 15 * 60 * 1000);
+    if (!ipCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: `Terlalu banyak permintaan pemulihan kata sandi dari perangkat ini. Silakan tunggu ${ipCheck.waitSeconds} detik.`,
+        code: 'auth/too-many-requests'
+      });
+    }
+
+    const identCheck = checkRecoveryRateLimit(identRateKey, 5, 15 * 60 * 1000);
+    if (!identCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: `Terlalu banyak permintaan pemulihan untuk akun ini. Silakan tunggu ${identCheck.waitSeconds} detik.`,
+        code: 'auth/too-many-requests'
+      });
+    }
+
     const resetRes = await resetSupabaseAuthPassword(targetIdent, redirectTo);
     if (!resetRes.success) {
+      recordRecoveryFailure(ipRateKey, 5, 15 * 60 * 1000);
+      recordRecoveryFailure(identRateKey, 5, 15 * 60 * 1000);
+
+      // CRITICAL ANTI-ENUMERATION DEFENSE:
+      // If user is not found, do not leak non-existence to the browser.
+      // Return identical generic success response so attackers cannot harvest usernames.
+      if (resetRes.error?.code === 'USER_NOT_FOUND' || resetRes.error?.code === 'STAFF_AUTH_EMAIL_MISSING') {
+        return res.json({
+          success: true,
+          message: 'Jika akun terdaftar dalam direktori staf MoraJaws, instruksi pemulihan kata sandi telah dikirim ke alamat email resmi terdaftar.'
+        });
+      }
+
       return res.status(400).json({
         success: false,
         error: resetRes.error?.message || 'Gagal mengirim email reset kata sandi.',
         code: resetRes.error?.code || 'RESET_FAILED'
       });
     }
+
     await logServerAuditAsync(
       'Password Reset Requested',
       'auth',
       targetIdent,
-      `Permintaan pemulihan kata sandi dikirim untuk "${resetRes.data?.email}" (Redirect: ${resetRes.data?.redirectTo})`,
+      `Permintaan pemulihan kata sandi diproses untuk "${targetIdent}" (Redirect: ${resetRes.data?.redirectTo})`,
       undefined,
       { level: 'informational' }
     );
+
+    // ANTI-ENUMERATION CONTRACT: Do not expose email in response
     res.json({
       success: true,
-      message: `Tautan pemulihan kata sandi telah dikirim ke alamat email resmi yang terdaftar.`,
-      email: resetRes.data?.email,
-      redirectTo: resetRes.data?.redirectTo
+      message: 'Jika akun terdaftar dalam direktori staf MoraJaws, instruksi pemulihan kata sandi telah dikirim ke alamat email resmi terdaftar.'
     });
   };
 
@@ -2809,17 +2890,50 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   app.post('/api/auth/forgot-password', handleForgotPassword);
 
   app.post('/api/auth/verify-recovery', async (req: Request, res: Response) => {
-    const { accessToken, code, token_hash } = req.body || {};
-    if (!accessToken && !code && !token_hash) {
+    const clientIp = (req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+    
+    // CRITICAL SECURITY ENFORCEMENT: Reject any client-supplied target UID
+    if (req.body?.verifiedUserId !== undefined || req.body?.userId !== undefined) {
       return res.status(400).json({
         success: false,
-        error: 'Kredensial token pemulihan (accessToken, code, atau token_hash) wajib disertakan.',
+        error: 'Permintaan tidak valid: Pengiriman UID target dari browser dilarang demi keamanan. Identitas akun wajib ditentukan secara eksklusif oleh bukti recovery backend.',
+        code: 'UNAUTHORIZED_TARGET_UID'
+      });
+    }
+
+    const rateKey = `verify_${clientIp}`;
+    const rateCheck = checkRecoveryRateLimit(rateKey, 10, 10 * 60 * 1000);
+    if (!rateCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: `Terlalu banyak percobaan verifikasi pemulihan. Silakan tunggu ${rateCheck.waitSeconds} detik.`,
+        code: 'auth/too-many-requests'
+      });
+    }
+
+    const { accessToken, recoveryToken, code, token_hash } = req.body || {};
+
+    // Reject standard login access tokens outright
+    if (accessToken && !recoveryToken && !code && !token_hash) {
+      recordRecoveryFailure(rateKey, 10, 10 * 60 * 1000);
+      return res.status(400).json({
+        success: false,
+        error: 'Access token sesi login biasa tidak dapat digunakan sebagai bukti pemulihan kata sandi. Wajib menggunakan tautan atau kode pemulihan resmi dari email.',
+        code: 'LOGIN_TOKEN_REJECTED_AS_RECOVERY_PROOF'
+      });
+    }
+
+    if (!recoveryToken && !code && !token_hash) {
+      return res.status(400).json({
+        success: false,
+        error: 'Kredensial token pemulihan (code, token_hash, atau recoveryToken) wajib disertakan.',
         code: 'MISSING_RECOVERY_CREDENTIALS'
       });
     }
 
-    const verifyRes = await verifySupabaseRecoveryToken({ accessToken, code, token_hash });
+    const verifyRes = await verifySupabaseRecoveryToken({ accessToken, recoveryToken, code, token_hash });
     if (!verifyRes.success || !verifyRes.data?.userId) {
+      recordRecoveryFailure(rateKey, 10, 10 * 60 * 1000);
       return res.status(400).json({
         success: false,
         error: verifyRes.error?.message || 'Token pemulihan tidak valid atau telah kedaluwarsa.',
@@ -2837,16 +2951,51 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       maskedEmail = `${maskedLocal}@${domainPart}`;
     }
 
+    // Note: Never return raw userId to browser to prevent client-side identifier spoofing.
+    // Return bound, short-lived, single-use recoveryToken.
     res.json({
       success: true,
       valid: true,
-      userId: verifyRes.data.userId,
-      email: maskedEmail
+      email: maskedEmail,
+      recoveryToken: verifyRes.data.recoveryToken
     });
   });
 
   app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
-    const { newPassword, confirmPassword, accessToken, code, token_hash, verifiedUserId } = req.body || {};
+    const clientIp = (req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+
+    // CRITICAL SECURITY ENFORCEMENT:
+    // Reject any attempt to supply client-controlled target UID (e.g. verifiedUserId, userId).
+    if (req.body?.verifiedUserId !== undefined || req.body?.userId !== undefined) {
+      console.warn(`[Security Alert] Client attempt to supply unverified target UID from IP ${clientIp}. Request rejected.`);
+      return res.status(400).json({
+        success: false,
+        error: 'Permintaan tidak valid: Pengiriman UID target dari browser dilarang demi keamanan. Identitas akun wajib ditentukan secara eksklusif oleh bukti recovery backend.',
+        code: 'UNAUTHORIZED_TARGET_UID'
+      });
+    }
+
+    const rateKey = `reset_${clientIp}`;
+    const rateCheck = checkRecoveryRateLimit(rateKey, 5, 10 * 60 * 1000);
+    if (!rateCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: `Terlalu banyak percobaan reset kata sandi. Silakan tunggu ${rateCheck.waitSeconds} detik.`,
+        code: 'auth/too-many-requests'
+      });
+    }
+
+    const { newPassword, confirmPassword, recoveryToken, code, token_hash, accessToken } = req.body || {};
+
+    // Reject standard login access tokens outright
+    if (accessToken && !recoveryToken && !code && !token_hash) {
+      recordRecoveryFailure(rateKey, 5, 10 * 60 * 1000);
+      return res.status(400).json({
+        success: false,
+        error: 'Access token sesi login biasa tidak dapat digunakan sebagai bukti pemulihan kata sandi. Wajib menggunakan tautan atau kode pemulihan resmi dari email.',
+        code: 'LOGIN_TOKEN_REJECTED_AS_RECOVERY_PROOF'
+      });
+    }
 
     if (!newPassword || typeof newPassword !== 'string') {
       return res.status(400).json({
@@ -2872,23 +3021,26 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       });
     }
 
-    if (!accessToken && !code && !token_hash && !verifiedUserId) {
+    if (!recoveryToken && !code && !token_hash) {
       return res.status(400).json({
         success: false,
-        error: 'Sesi token pemulihan tidak sah atau tidak ditemukan.',
-        code: 'MISSING_RECOVERY_TOKEN'
+        error: 'Bukti sesi token pemulihan (recoveryToken, code, atau token_hash) tidak sah atau tidak ditemukan.',
+        code: 'MISSING_RECOVERY_CREDENTIALS'
       });
     }
 
+    // Cryptographically enforce Supabase Auth recovery verification & account binding
     const updateRes = await updateSupabaseUserPassword({
       newPassword,
-      accessToken,
+      confirmPassword,
+      recoveryToken,
       code,
       token_hash,
-      verifiedUserId
+      accessToken
     });
 
     if (!updateRes.success) {
+      recordRecoveryFailure(rateKey, 5, 10 * 60 * 1000);
       return res.status(400).json({
         success: false,
         error: updateRes.error?.message || 'Gagal memperbarui kata sandi akun.',
@@ -2896,11 +3048,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       });
     }
 
+    clearRecoveryRateLimit(rateKey);
+
     await logServerAuditAsync(
       'Password Reset Success',
       'auth',
-      updateRes.data?.userId || 'unknown',
-      `Kata sandi akun (${updateRes.data?.email || 'staf'}) berhasil diperbarui melalui alur pemulihan kata sandi Supabase.`,
+      updateRes.data?.email || 'staff',
+      `Kata sandi akun (${updateRes.data?.email || 'staf'}) berhasil diperbarui melalui alur pemulihan kata sandi resmi.`,
       undefined,
       { level: 'critical' }
     );

@@ -176,12 +176,12 @@ async function runTests() {
     `Successfully verified OTP token hash for user ID "${otpRes.data?.userId}"`
   );
 
-  // C. Implicit access token verification
+  // C. Rejection of standard login access token as recovery proof
   const jwtRes = await verifySupabaseRecoveryToken({ accessToken: 'valid-jwt-token' });
   assert(
-    'Implicit Access Token Verification',
-    jwtRes.success === true && jwtRes.data?.userId === 'usr_mock_token',
-    `Successfully verified Bearer token for user ID "${jwtRes.data?.userId}"`
+    'Login Access Token Rejection',
+    jwtRes.success === false && jwtRes.error?.code === 'LOGIN_TOKEN_REJECTED_AS_RECOVERY_PROOF',
+    `Standard login access token is strictly rejected (error: "${jwtRes.error?.code}")`
   );
 
   // D. Missing credentials rejection
@@ -208,15 +208,15 @@ async function runTests() {
     'Rejects passwords under 8 characters with INVALID_PASSWORD_LENGTH'
   );
 
-  // B. Successful password update with valid password
+  // B. Successful password update with valid password via PKCE proof
   const validPassRes = await updateSupabaseUserPassword({
     newPassword: 'SecurePassword2026!',
     code: 'valid-pkce-code'
   });
   assert(
     'Password Update Success',
-    validPassRes.success === true && validPassRes.data?.userId === 'usr_mock_123',
-    'Successfully updates password via Supabase Auth Admin API and invalidates sessions'
+    validPassRes.success === true && validPassRes.data?.email === 'updated@morajaws.com',
+    'Successfully updates password via Supabase Auth Admin API and invalidates sessions without leaking userId'
   );
 
   // --------------------------------------------------------------------------
