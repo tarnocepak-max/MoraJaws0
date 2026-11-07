@@ -81,9 +81,20 @@ export async function signInWithSupabaseAuth(
 
     if (userRes.data) {
       authoritativeUser = userRes.data;
-      if (authoritativeUser.email) {
-        targetEmail = authoritativeUser.email.trim().toLowerCase();
+      // Supabase Auth always signs in with an email address. Prefer the
+      // primary email, then the registered alternate email when the primary
+      // field is empty. Never attempt to use a username as an Auth email.
+      const authEmail = String(authoritativeUser.email || authoritativeUser.altEmail || '').trim().toLowerCase();
+      if (!authEmail || !authEmail.includes('@')) {
+        return {
+          success: false,
+          error: {
+            code: 'STAFF_AUTH_EMAIL_MISSING',
+            message: 'Profil staf ditemukan, tetapi email autentikasi belum terdaftar. Hubungi Super Admin untuk melengkapi email akun.'
+          }
+        };
       }
+      targetEmail = authEmail;
     } else {
       // User not found in authoritative users table
       return {
@@ -143,12 +154,51 @@ export async function signInWithSupabaseAuth(
     });
 
     if (authError || !authData?.session || !authData?.user) {
+      // Do not collapse every Supabase Auth failure into "wrong password".
+      // Network/configuration/confirmation/ban errors need different recovery.
+      const rawCode = String((authError as any)?.code || '').toLowerCase();
+      const rawMessage = String(authError?.message || '').toLowerCase();
+      const rawStatus = Number((authError as any)?.status || 0);
+      let code = 'AUTH_PROVIDER_ERROR';
+      let message = 'Layanan Supabase Auth gagal memproses login. Coba kembali atau hubungi administrator.';
+
+      if (
+        rawCode.includes('invalid_credentials') ||
+        rawMessage.includes('invalid login credentials') ||
+        rawMessage.includes('invalid credentials') ||
+        rawMessage.includes('email or password')
+      ) {
+        code = 'AUTH_INVALID_CREDENTIALS';
+        message = 'Email atau kata sandi Supabase tidak cocok. Pastikan email akun dan kata sandi yang digunakan benar.';
+      } else if (
+        rawCode.includes('email_not_confirmed') ||
+        rawMessage.includes('email not confirmed')
+      ) {
+        code = 'AUTH_EMAIL_NOT_CONFIRMED';
+        message = 'Email akun Supabase belum dikonfirmasi. Hubungi Super Admin.';
+      } else if (
+        rawCode.includes('user_banned') ||
+        rawMessage.includes('banned') ||
+        rawMessage.includes('disabled')
+      ) {
+        code = 'ACCOUNT_DISABLED';
+        message = 'Akun Supabase sedang dinonaktifkan atau diblokir.';
+      } else if (
+        rawStatus >= 500 ||
+        rawMessage.includes('fetch failed') ||
+        rawMessage.includes('network') ||
+        rawMessage.includes('timeout')
+      ) {
+        code = 'AUTH_PROVIDER_UNAVAILABLE';
+        message = 'Layanan Supabase Auth tidak dapat dijangkau. Periksa koneksi server dan konfigurasi Supabase.';
+      } else if (rawCode.includes('too_many') || rawMessage.includes('rate limit')) {
+        code = 'auth/too-many-requests';
+        message = 'Terlalu banyak percobaan login. Tunggu beberapa saat sebelum mencoba kembali.';
+      }
+
       return {
         success: false,
-        error: {
-          code: 'auth/wrong-password',
-          message: 'Autentikasi gagal. Kredensial kata sandi salah. Pastikan kata sandi yang Anda masukkan benar.'
-        }
+        error: { code, message }
       };
     }
 

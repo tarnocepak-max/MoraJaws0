@@ -1252,6 +1252,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           errorMsg = data.error || 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.';
         } else if (serverRes.status === 429 || errCode === 'auth/too-many-requests') {
           errorMsg = data.error || 'Terlalu banyak percobaan login yang gagal. Akses akun ditangguhkan sementara demi keamanan.';
+        } else if (errCode === 'NEEDS_MAPPING') {
+          errorMsg = 'Kata sandi berhasil diverifikasi, tetapi profil staf belum dipetakan ke Supabase Auth. Minta Super Admin menyetujui mapping Auth UID.';
+        } else if (errCode === 'AUTH_UID_MISMATCH') {
+          errorMsg = 'Identitas Supabase Auth tidak cocok dengan profil staf. Login ditolak demi keamanan; hubungi Super Admin.';
+        } else if (errCode === 'STAFF_AUTH_EMAIL_MISSING') {
+          errorMsg = 'Profil staf belum memiliki email autentikasi. Hubungi Super Admin untuk melengkapi email.';
+        } else if (errCode === 'AUTH_EMAIL_NOT_CONFIRMED') {
+          errorMsg = 'Email Supabase belum dikonfirmasi. Hubungi Super Admin.';
+        } else if (errCode === 'AUTH_PROVIDER_UNAVAILABLE' || errCode === 'SUPABASE_NOT_CONFIGURED') {
+          errorMsg = 'Layanan Supabase Auth sedang tidak tersedia atau konfigurasi server belum lengkap. Coba lagi nanti.';
         }
 
         addAuditLog('Login Attempt Failed', 'auth', cleanUser, errorMsg);

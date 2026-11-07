@@ -2585,12 +2585,35 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const errCode = authRes.error?.code || 'AUTH_FAILED';
       let statusCode = 401;
 
-      if (errCode === 'DATABASE_UNAVAILABLE') {
+      if (
+        errCode === 'DATABASE_UNAVAILABLE' ||
+        errCode === 'SUPABASE_NOT_CONFIGURED' ||
+        errCode === 'AUTH_PROVIDER_UNAVAILABLE' ||
+        errCode === 'AUTH_PROVIDER_ERROR'
+      ) {
         statusCode = 503;
       } else if (errCode === 'auth/user-not-found') {
         statusCode = 404;
-      } else if (errCode === 'ACCOUNT_DISABLED' || errCode === 'ACCOUNT_DELETED' || errCode === 'auth/user-disabled') {
+      } else if (
+        errCode === 'ACCOUNT_DISABLED' ||
+        errCode === 'ACCOUNT_DELETED' ||
+        errCode === 'auth/user-disabled' ||
+        errCode === 'AUTH_EMAIL_NOT_CONFIRMED'
+      ) {
         statusCode = 403;
+      } else if (errCode === 'NEEDS_MAPPING' || errCode === 'AUTH_UID_MISMATCH' || errCode === 'INVALID_ROLE' || errCode === 'STAFF_AUTH_EMAIL_MISSING') {
+        statusCode = 409;
+      } else if (errCode === 'AUTH_INVALID_CREDENTIALS') {
+        statusCode = 401;
+      } else if (
+        errCode === 'NEEDS_MAPPING' ||
+        errCode === 'AUTH_UID_MISMATCH' ||
+        errCode === 'INVALID_ROLE' ||
+        errCode === 'STAFF_AUTH_EMAIL_MISSING' ||
+        errCode === 'AUTH_EMAIL_NOT_CONFIRMED'
+      ) {
+        // Profile/configuration failures are not bad-password attempts.
+        statusCode = 409;
       } else {
         const currentAttempts = (attemptInfo?.count || 0) + 1;
         let lockedUntil: number | undefined;
