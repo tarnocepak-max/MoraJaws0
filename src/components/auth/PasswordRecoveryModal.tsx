@@ -148,7 +148,7 @@ export const PasswordRecoveryModal: React.FC<PasswordRecoveryModalProps> = ({
 
     setLoading(true);
     try {
-      const res = await requestPasswordRecovery(cleanIdent, 'https://morajaws.ai.studio/');
+      const res = await requestPasswordRecovery(cleanIdent);
       if (res.ok && res.data?.success) {
         setRequestSent(true);
         setRequestSuccessMessage(res.data.message || 'Tautan pemulihan berhasil dikirim.');
@@ -258,7 +258,7 @@ export const PasswordRecoveryModal: React.FC<PasswordRecoveryModalProps> = ({
               <div className="p-3.5 bg-[#35105E]/40 border border-[#D8B4FE]/20 rounded-xl text-xs text-[#E9D5FF] leading-relaxed flex items-start gap-2.5">
                 <Mail className="w-4 h-4 text-[#D8B4FE] shrink-0 mt-0.5" />
                 <div>
-                  Masukkan nama pengguna atau email akun Anda. Sistem akan mengirimkan tautan pemulihan resmi yang mengarah ke domain <span className="font-mono text-white underline">https://morajaws.ai.studio/</span>.
+                  Masukkan nama pengguna atau email akun Anda. Sistem akan mengirimkan tautan pemulihan resmi ke alamat email resmi terdaftar Anda.
                 </div>
               </div>
 

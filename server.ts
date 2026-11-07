@@ -1758,6 +1758,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   const app = express();
   const PORT = 3000;
 
+  // Configure trusted proxy to handle reverse proxies (Cloud Run / load balancers)
+  app.set('trust proxy', 1);
+
   // Production CORS & Security Headers
   const configuredCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
     .split(',')
@@ -2820,6 +2823,16 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
   const handleForgotPassword = async (req: Request, res: Response) => {
     const clientIp = (req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+
+    // CRITICAL SECURITY ENFORCEMENT: Reject any client attempt to specify environment or Supabase target project
+    if (req.body?.environment !== undefined || req.body?.supabaseUrl !== undefined || req.body?.projectId !== undefined || req.body?.targetProjectId !== undefined || req.body?.appEnv !== undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'Permintaan tidak valid: Penentuan environment atau target project dari browser dilarang demi keamanan.',
+        code: 'UNAUTHORIZED_ENVIRONMENT_MANIPULATION'
+      });
+    }
+
     const { email, emailOrUsername, identifier, redirectTo } = req.body || {};
     const targetIdent = (identifier || emailOrUsername || email || '').trim();
     if (!targetIdent) {
@@ -2901,6 +2914,15 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       });
     }
 
+    // CRITICAL SECURITY ENFORCEMENT: Reject any client attempt to specify environment or Supabase target project
+    if (req.body?.environment !== undefined || req.body?.supabaseUrl !== undefined || req.body?.projectId !== undefined || req.body?.targetProjectId !== undefined || req.body?.appEnv !== undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'Permintaan tidak valid: Penentuan environment atau target project dari browser dilarang demi keamanan.',
+        code: 'UNAUTHORIZED_ENVIRONMENT_MANIPULATION'
+      });
+    }
+
     const rateKey = `verify_${clientIp}`;
     const rateCheck = checkRecoveryRateLimit(rateKey, 10, 10 * 60 * 1000);
     if (!rateCheck.allowed) {
@@ -2972,6 +2994,15 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         success: false,
         error: 'Permintaan tidak valid: Pengiriman UID target dari browser dilarang demi keamanan. Identitas akun wajib ditentukan secara eksklusif oleh bukti recovery backend.',
         code: 'UNAUTHORIZED_TARGET_UID'
+      });
+    }
+
+    // CRITICAL SECURITY ENFORCEMENT: Reject any client attempt to specify environment or Supabase target project
+    if (req.body?.environment !== undefined || req.body?.supabaseUrl !== undefined || req.body?.projectId !== undefined || req.body?.targetProjectId !== undefined || req.body?.appEnv !== undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'Permintaan tidak valid: Penentuan environment atau target project dari browser dilarang demi keamanan.',
+        code: 'UNAUTHORIZED_ENVIRONMENT_MANIPULATION'
       });
     }
 

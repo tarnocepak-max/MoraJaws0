@@ -1,7 +1,10 @@
 import { getSupabaseBackendClient } from './supabaseClient.ts';
 import { findUserInSupabaseDetailed } from './supabaseAdapter.ts';
+import { resolveAuthRedirectUrl, AuthRedirectConfigError } from './environmentConfig.ts';
 import type { ServerUser } from '../server.ts';
 import crypto from 'crypto';
+
+export { resolveAuthRedirectUrl, AuthRedirectConfigError };
 
 // ==============================================================================
 // MORAJAWS SUPABASE AUTH ADAPTER
@@ -570,31 +573,6 @@ export async function signOutSupabaseAuth(): Promise<SupabaseAuthResponse<boolea
 }
 
 /**
- * Resolves the canonical MoraJaws Auth Redirect URL.
- * Strictly defaults to production domain 'https://morajaws.ai.studio/'
- * as configured in Supabase Project Site URL and Redirect URLs.
- * Strictly prevents open redirect vulnerabilities or localhost fallback.
- */
-export function resolveAuthRedirectUrl(customRedirect?: string): string {
-  const PRODUCTION_DOMAIN = 'https://morajaws.ai.studio/';
-
-  if (customRedirect && typeof customRedirect === 'string') {
-    try {
-      const parsed = new URL(customRedirect.trim());
-      // Only allow https:// protocol on production domain morajaws.ai.studio
-      if (parsed.protocol === 'https:' && parsed.hostname === 'morajaws.ai.studio') {
-        return parsed.toString();
-      }
-    } catch {
-      // invalid URL fallback
-    }
-  }
-
-  // Strictly enforce canonical production domain
-  return PRODUCTION_DOMAIN;
-}
-
-/**
  * Initiates a password reset flow via Supabase Auth.
  * Supports email or username (resolves username to canonical email in authoritative DB).
  * Explicitly provides redirectTo to ensure reset links do NOT fall back to localhost:3000.
@@ -659,7 +637,18 @@ export async function resetSupabaseAuthPassword(
     }
   }
 
-  const redirectTo = resolveAuthRedirectUrl(customRedirectTo);
+  let redirectTo: string;
+  try {
+    redirectTo = resolveAuthRedirectUrl(customRedirectTo);
+  } catch (err: any) {
+    return {
+      success: false,
+      error: {
+        code: err.code || 'REDIRECT_CONFIG_ERROR',
+        message: err.message || 'Konfigurasi callback redirect tidak valid atau belum ditetapkan.'
+      }
+    };
+  }
 
   try {
     const { error } = await client.auth.resetPasswordForEmail(targetEmail, {

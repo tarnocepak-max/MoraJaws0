@@ -232,16 +232,19 @@ export async function logoutSupabase() {
 }
 
 /**
- * Initiates password recovery through Express backend with canonical redirect to https://morajaws.ai.studio/
+ * Initiates password recovery through Express backend with server-authoritative canonical redirect.
  */
 export async function requestPasswordRecovery(identifier: string, customRedirectTo?: string) {
+  const body: Record<string, string> = {
+    emailOrUsername: identifier.trim()
+  };
+  if (customRedirectTo && typeof customRedirectTo === 'string' && customRedirectTo.trim()) {
+    body.redirectTo = customRedirectTo.trim();
+  }
   const res = await fetch('/api/auth/forgot-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      emailOrUsername: identifier.trim(),
-      redirectTo: customRedirectTo || 'https://morajaws.ai.studio/'
-    })
+    body: JSON.stringify(body)
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
