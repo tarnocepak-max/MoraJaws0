@@ -13,7 +13,8 @@ import {
   verifySupabaseAuthToken,
   refreshSupabaseAuthSession,
   signOutSupabaseAuth,
-  resetSupabaseAuthPassword
+  resetSupabaseAuthPassword,
+  approveAuthUidMapping
 } from './server/supabaseAuthAdapter.ts';
 import { checkFirebaseAdminHealth, verifyFirebaseIdToken } from './server/firebaseAdmin.ts';
 import { EventEmitter } from 'events';
@@ -1274,7 +1275,6 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
     }
 
     // Explicit check for Firebase token in production mode:
-    // Section 6 & Section 9 test case #17: Firebase token ditolak pada mode produksi
     const isFirebaseIndicator = req.headers['x-auth-provider'] === 'firebase' ||
       (token.length > 500 && !token.startsWith('eyJ')) ||
       req.headers['x-firebase-client'] !== undefined;
@@ -1286,8 +1286,16 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
       });
     }
 
-    // 1. Supabase Auth JWT Token Verification (Sole Production Authentication Mechanism)
-    if (token.startsWith('eyJ')) {
+    // PRODUCTION MODE: Strictly enforce Supabase Auth JWT tokens.
+    // Local session tokens (mora_..., sess_...) and arbitrary tokens are rejected immediately.
+    if (!isLocalJsonModeAllowed()) {
+      if (!token.startsWith('eyJ')) {
+        return res.status(401).json({
+          error: 'Token autentikasi lokal ditolak pada lingkungan produksi. Gunakan access token Supabase Auth yang valid.',
+          code: 'LOCAL_AUTH_DISABLED_PRODUCTION'
+        });
+      }
+
       try {
         const saRes = await verifySupabaseAuthToken(token, knownSession?.sessionVersion);
         if (saRes.success && saRes.data) {
@@ -1308,7 +1316,7 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
               code: 'TOKEN_EXPIRED'
             });
           }
-          if (errCode === 'TOKEN_INVALID') {
+          if (errCode === 'TOKEN_INVALID' || errCode === 'INVALID_TOKEN') {
             return res.status(401).json({
               error: 'Token autentikasi tidak valid.',
               code: 'TOKEN_INVALID'
@@ -1332,110 +1340,129 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
               code: 'AUTH_UID_MISMATCH'
             });
           }
+          if (errCode === 'NEEDS_MAPPING') {
+            return res.status(403).json({
+              error: 'Profil staf belum memiliki pemetaan Supabase Auth UID yang disetujui.',
+              code: 'NEEDS_MAPPING'
+            });
+          }
           if (errCode === 'PROFILE_NOT_FOUND') {
             return res.status(404).json({
               error: 'Profil staf tidak ditemukan dalam database authoritative.',
               code: 'PROFILE_NOT_FOUND'
             });
           }
+          // Default fail-closed for any other error or unconfigured Supabase
+          return res.status(503).json({
+            error: 'Database authoritative Supabase tidak tersedia saat verifikasi token.',
+            code: 'DATABASE_UNAVAILABLE'
+          });
         }
       } catch (saErr) {
-        // Exception during token verification
+        return res.status(503).json({
+          error: 'Terjadi kegagalan koneksi database authoritative saat verifikasi token.',
+          code: 'DATABASE_UNAVAILABLE'
+        });
       }
-    }
-
-    // 1.B. Firebase Admin ID Token Verification (Strictly disabled in production per Phase 13E)
-    if (!found && isLocalJsonModeAllowed()) {
-      try {
-        const decodedFirebaseToken = await verifyFirebaseIdToken(token);
-        if (decodedFirebaseToken && decodedFirebaseToken.uid) {
-          authSource = 'firebase_token';
-          verifiedDecodedFirebaseToken = decodedFirebaseToken;
-
-          const cleanEmail = (decodedFirebaseToken.email || '').toLowerCase().trim();
-          found = db.users.find(u =>
-            !u.isDeleted && u.active && (
-              (u.firebaseUid && u.firebaseUid === decodedFirebaseToken.uid) ||
-              (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail) ||
-              (cleanEmail && u.altEmail && u.altEmail.toLowerCase().includes(cleanEmail))
-            )
-          );
-
-          if (found && !found.firebaseUid) {
-            found.firebaseUid = decodedFirebaseToken.uid;
-            saveDatabaseToDisk();
+    } else {
+      // DEVELOPMENT / LOCAL JSON MODE:
+      // 1. Supabase Auth JWT Token Verification if available
+      if (token.startsWith('eyJ')) {
+        try {
+          const saRes = await verifySupabaseAuthToken(token, knownSession?.sessionVersion);
+          if (saRes.success && saRes.data) {
+            authSource = 'supabase_auth';
+            found = saRes.data as ServerUser;
+            activeSession = knownSession;
+          } else if (saRes.error) {
+            const errCode = saRes.error.code;
+            if (errCode === 'SESSION_REVOKED') {
+              return res.status(401).json({ error: 'Sesi login telah dicabut.', code: 'SESSION_REVOKED' });
+            }
+            if (errCode === 'TOKEN_EXPIRED') {
+              return res.status(401).json({ error: 'Token autentikasi telah kedaluwarsa.', code: 'TOKEN_EXPIRED' });
+            }
+            if (errCode === 'TOKEN_INVALID' || errCode === 'INVALID_TOKEN') {
+              return res.status(401).json({ error: 'Token autentikasi tidak valid.', code: 'TOKEN_INVALID' });
+            }
+            if (errCode === 'ACCOUNT_DISABLED') {
+              return res.status(403).json({ error: 'Akun staf telah dinonaktifkan.', code: 'ACCOUNT_DISABLED' });
+            }
+            if (errCode === 'ACCOUNT_DELETED') {
+              return res.status(403).json({ error: 'Akun staf telah dihapus.', code: 'ACCOUNT_DELETED' });
+            }
+            if (errCode === 'AUTH_UID_MISMATCH') {
+              return res.status(403).json({ error: 'Auth UID tidak cocok.', code: 'AUTH_UID_MISMATCH' });
+            }
+            if (errCode === 'NEEDS_MAPPING') {
+              return res.status(403).json({ error: 'Profil belum memiliki pemetaan Auth UID yang disetujui.', code: 'NEEDS_MAPPING' });
+            }
           }
+        } catch (saErr) {
+          // Dev fallback
         }
-      } catch (fbErr) {
-        console.warn('[Auth Middleware] Firebase token check warning (dev only):', fbErr);
       }
-    }
 
-    // 2. Server Session Verification with strict sessionVersion & authoritative DB checks
-    if (!found) {
-      activeSession = SERVER_SESSIONS.find(s => s.token === token && s.status === 'active');
-      if (activeSession) {
-        if (new Date(activeSession.expiresAt).getTime() < now) {
-          activeSession.status = 'expired';
-          activeSession = undefined;
-        } else {
-          const lastAct = new Date(activeSession.lastActivityAt).getTime();
-          const idleLimitMs = (db.sessionConfig.idleTimeoutMinutes || 60) * 60 * 1000;
-          if (now - lastAct > idleLimitMs) {
+      // 1.B. Firebase Admin ID Token Verification (Dev only)
+      if (!found) {
+        try {
+          const decodedFirebaseToken = await verifyFirebaseIdToken(token);
+          if (decodedFirebaseToken && decodedFirebaseToken.uid) {
+            authSource = 'firebase_token';
+            verifiedDecodedFirebaseToken = decodedFirebaseToken;
+            const cleanEmail = (decodedFirebaseToken.email || '').toLowerCase().trim();
+            found = db.users.find(u =>
+              !u.isDeleted && u.active && (
+                (u.firebaseUid && u.firebaseUid === decodedFirebaseToken.uid) ||
+                (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail) ||
+                (cleanEmail && u.altEmail && u.altEmail.toLowerCase().includes(cleanEmail))
+              )
+            );
+            if (found && !found.firebaseUid) {
+              found.firebaseUid = decodedFirebaseToken.uid;
+              saveDatabaseToDisk();
+            }
+          }
+        } catch (fbErr) {
+          console.warn('[Auth Middleware] Firebase token check warning (dev only):', fbErr);
+        }
+      }
+
+      // 2. Server Session Verification (Dev only)
+      if (!found) {
+        activeSession = SERVER_SESSIONS.find(s => s.token === token && s.status === 'active');
+        if (activeSession) {
+          if (new Date(activeSession.expiresAt).getTime() < now) {
             activeSession.status = 'expired';
             activeSession = undefined;
           } else {
-            // Retrieve authoritative user state
-            let authoritativeUser: ServerUser | null = null;
-            if (isSupabaseMode()) {
-              try {
-                const sbRes = await findUserInSupabaseDetailed(activeSession.userId);
-                if (sbRes.success && sbRes.data) {
-                  authoritativeUser = sbRes.data;
-                } else if (!sbRes.success && !isLocalJsonModeAllowed()) {
-                  // Fail closed: Database is down or rejected query in production
-                  return res.status(503).json({
-                    error: 'Database authoritative tidak tersedia saat verifikasi kredensial sesi.',
-                    code: 'DATABASE_UNAVAILABLE'
-                  });
-                }
-              } catch {
-                if (!isLocalJsonModeAllowed()) {
-                  return res.status(503).json({
-                    error: 'Database authoritative gagal diakses.',
-                    code: 'DATABASE_UNAVAILABLE'
-                  });
-                }
-              }
-            }
-
-            if (!authoritativeUser && isLocalJsonModeAllowed()) {
-              authoritativeUser = db.users.find(u => u.id === activeSession!.userId) || null;
-            }
-
-            if (!authoritativeUser || authoritativeUser.isDeleted || !authoritativeUser.active) {
-              activeSession.status = 'revoked';
+            const lastAct = new Date(activeSession.lastActivityAt).getTime();
+            const idleLimitMs = (db.sessionConfig.idleTimeoutMinutes || 60) * 60 * 1000;
+            if (now - lastAct > idleLimitMs) {
+              activeSession.status = 'expired';
               activeSession = undefined;
-              found = undefined;
             } else {
-              // Authoritative sessionVersion check
-              const authoritativeVersion = authoritativeUser.sessionVersion || 1;
-              const sessionVersion = activeSession.sessionVersion || 1;
-
-              if (authoritativeVersion !== sessionVersion) {
-                // Token has been revoked due to account change or logout
+              let authoritativeUser: ServerUser | null = db.users.find(u => u.id === activeSession!.userId) || null;
+              if (!authoritativeUser || authoritativeUser.isDeleted || !authoritativeUser.active) {
                 activeSession.status = 'revoked';
                 activeSession = undefined;
                 found = undefined;
               } else {
-                if (db.sessionConfig.extendOnActivity) {
-                  activeSession.lastActivityAt = new Date().toISOString();
+                const authoritativeVersion = authoritativeUser.sessionVersion || 1;
+                const sessionVersion = activeSession.sessionVersion || 1;
+                if (authoritativeVersion !== sessionVersion) {
+                  activeSession.status = 'revoked';
+                  activeSession = undefined;
+                  found = undefined;
+                } else {
+                  if (db.sessionConfig.extendOnActivity) {
+                    activeSession.lastActivityAt = new Date().toISOString();
+                  }
+                  authSource = 'server_session';
+                  found = authoritativeUser;
+                  activeSession.role = authoritativeUser.role;
+                  activeSession.contractor = authoritativeUser.contractor;
                 }
-                authSource = 'server_session';
-                found = authoritativeUser;
-                // Keep session role and contractor synced with authoritative record
-                activeSession.role = authoritativeUser.role;
-                activeSession.contractor = authoritativeUser.contractor;
               }
             }
           }
@@ -1443,9 +1470,6 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
       }
     }
   }
-
-  // NOTE: Unverified header bypass (x-user-id / x-username) is removed per Security Constitution.
-  // All requests must be authenticated via valid Firebase token or verified session token.
 
   req.user = found;
   req.session = activeSession;
@@ -2624,12 +2648,11 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     if (!authRes.success || !authRes.data) {
       const errCode = authRes.error?.code || 'AUTH_FAILED';
       let statusCode = 401;
-
       if (errCode === 'DATABASE_UNAVAILABLE') {
         statusCode = 503;
       } else if (errCode === 'auth/user-not-found' || errCode === 'PROFILE_NOT_FOUND') {
         statusCode = 404;
-      } else if (errCode === 'ACCOUNT_DISABLED' || errCode === 'ACCOUNT_DELETED' || errCode === 'auth/user-disabled' || errCode === 'AUTH_UID_MISMATCH' || errCode === 'INVALID_ROLE') {
+      } else if (errCode === 'ACCOUNT_DISABLED' || errCode === 'ACCOUNT_DELETED' || errCode === 'auth/user-disabled' || errCode === 'AUTH_UID_MISMATCH' || errCode === 'INVALID_ROLE' || errCode === 'NEEDS_MAPPING') {
         statusCode = 403;
       } else if (errCode === 'INVALID_INPUT') {
         statusCode = 400;
@@ -2654,10 +2677,12 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         null,
         { level: 'critical' }
       );
+
       return res.status(statusCode).json({
         success: false,
         error: authRes.error?.message || 'Autentikasi Supabase Auth gagal.',
-        code: errCode
+        code: errCode,
+        ...(authRes.error?.details ? { details: authRes.error.details } : {})
       });
     }
 
@@ -2710,6 +2735,62 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     });
   });
 
+  // --- Admin Approval for Supabase Auth UID Mapping (Controlled Migration Path) ---
+  app.post('/api/auth/approve-mapping', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
+    const { staffId, authUserId } = req.body || {};
+    if (!staffId || !authUserId) {
+      return res.status(400).json({
+        success: false,
+        error: 'staffId dan authUserId wajib disertakan.',
+        code: 'INVALID_INPUT'
+      });
+    }
+
+    const mappingRes = await approveAuthUidMapping({
+      staffId: String(staffId).trim(),
+      authUserId: String(authUserId).trim(),
+      adminUser: req.user!
+    });
+
+    if (!mappingRes.success || !mappingRes.data) {
+      const errCode = mappingRes.error?.code || 'MAPPING_FAILED';
+      const statusCode = errCode === 'STAFF_NOT_FOUND' ? 404 :
+        (errCode === 'ACCOUNT_DELETED' || errCode === 'ACCOUNT_DISABLED' || errCode === 'FORBIDDEN') ? 403 :
+        errCode === 'AUTH_UID_ALREADY_MAPPED' ? 409 :
+        errCode === 'INVALID_INPUT' ? 400 : 500;
+
+      await logServerAuditAsync(
+        'Auth UID Mapping Failed',
+        'auth',
+        staffId,
+        `Super Admin ${req.user!.name} gagal memetakan Auth UID ${authUserId} ke staf ${staffId}: ${mappingRes.error?.message}`,
+        req.user,
+        { level: 'critical' }
+      );
+
+      return res.status(statusCode).json({
+        success: false,
+        error: mappingRes.error?.message || 'Gagal menyetujui pemetaan Auth UID.',
+        code: errCode
+      });
+    }
+
+    await logServerAuditAsync(
+      'Auth UID Mapping Approved',
+      'auth',
+      staffId,
+      `Super Admin ${req.user!.name} menyetujui pemetaan Auth UID ${authUserId} ke staf ${staffId} (Terverifikasi di database)`,
+      req.user,
+      { level: 'critical' }
+    );
+
+    res.json({
+      success: true,
+      message: 'Pemetaan Auth UID ke profil staf berhasil disetujui dan diverifikasi konsistensinya di database.',
+      data: mappingRes.data
+    });
+  });
+
   app.post('/api/auth/supabase-refresh', async (req: Request, res: Response) => {
     const { refreshToken } = req.body || {};
     if (!refreshToken) {
@@ -2723,20 +2804,68 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   app.post('/api/auth/supabase-logout', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-    await signOutSupabaseAuth();
+    const user = req.user!;
+    let verifiedVersion: number | undefined;
+
+    if (isSupabaseMode()) {
+      const userRes = await findUserInSupabaseDetailed(user.id);
+      if (!userRes.success || !userRes.data) {
+        return res.status(503).json({
+          success: false,
+          error: 'Database authoritative tidak tersedia saat pencabutan sesi. Logout dibatalkan.',
+          code: 'DATABASE_UNAVAILABLE'
+        });
+      }
+
+      const nextVersion = (userRes.data.sessionVersion || 1) + 1;
+      const updateRes = await updateUserInSupabase(user.id, { sessionVersion: nextVersion });
+      if (!updateRes.success) {
+        return res.status(500).json({
+          success: false,
+          error: 'Gagal memperbarui session version di database authoritative. Logout dibatalkan demi keamanan sesi.',
+          code: 'REVOCATION_FAILED'
+        });
+      }
+
+      const verifyRes = await findUserInSupabaseDetailed(user.id);
+      if (!verifyRes.success || !verifyRes.data || (verifyRes.data.sessionVersion || 1) !== nextVersion) {
+        return res.status(500).json({
+          success: false,
+          error: 'Verifikasi pembacaan ulang session version gagal. Sesi belum dapat dinyatakan dicabut dengan aman.',
+          code: 'REVOCATION_VERIFICATION_FAILED'
+        });
+      }
+      verifiedVersion = nextVersion;
+    } else {
+      user.sessionVersion = (user.sessionVersion || 1) + 1;
+      verifiedVersion = user.sessionVersion;
+    }
+
     if (req.session) {
       req.session.status = 'revoked';
     }
-    if (req.user) {
-      req.user.sessionVersion = (req.user.sessionVersion || 1) + 1;
-      if (isSupabaseMode()) {
-        try {
-          await updateUserInSupabase(req.user.id, { sessionVersion: req.user.sessionVersion });
-        } catch {}
+    SERVER_SESSIONS.forEach(s => {
+      if (s.userId === user.id) {
+        s.status = 'revoked';
       }
-      await logServerAuditAsync('Logout Success (Supabase Auth)', 'auth', req.user.id, `User ${req.user.name} logout dari Supabase Auth`, req.user, { level: 'critical' });
-    }
-    res.json({ success: true, message: 'Sesi Supabase Auth berhasil diakhiri.' });
+    });
+
+    await signOutSupabaseAuth();
+
+    await logServerAuditAsync(
+      'Logout Success (Supabase Auth)',
+      'auth',
+      user.id,
+      `User ${user.name} (${user.role}) logout dari Supabase Auth, sessionVersion dinaikkan ke ${verifiedVersion}`,
+      user,
+      { level: 'critical' }
+    );
+
+    res.json({
+      success: true,
+      message: 'Sesi Supabase Auth berhasil diakhiri.',
+      sessionVersion: verifiedVersion
+    });
   });
 
   app.post('/api/auth/supabase-reset-password', async (req: Request, res: Response) => {
