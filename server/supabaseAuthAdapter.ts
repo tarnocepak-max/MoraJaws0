@@ -166,7 +166,7 @@ export async function signInWithSupabaseAuth(
 
     // Phase 15A.1 Strict Requirement: DO NOT auto-link Auth UID on first login.
     // Unmapped profiles must be explicitly approved by Super Admin and marked NEEDS_MAPPING.
-    if (!authoritativeUser.authUserId && authoritativeUser.id !== authUid) {
+    if (!authoritativeUser.authUserId) {
       return {
         success: false,
         error: {
@@ -567,19 +567,27 @@ export async function approveAuthUidMapping(params: {
   // 2. Enforce 1:1 uniqueness check
   const { getUsersFromSupabase } = await import('./supabaseAdapter.ts');
   const allUsersRes = await getUsersFromSupabase(true);
-  if (allUsersRes.success && allUsersRes.data) {
-    const existingWithSameUid = allUsersRes.data.find(
-      u => !u.isDeleted && u.id !== staff.id && (u.authUserId === cleanAuthUid || (u as any).payload?.authUserId === cleanAuthUid)
-    );
-    if (existingWithSameUid) {
-      return {
-        success: false,
-        error: {
-          code: 'AUTH_UID_ALREADY_MAPPED',
-          message: `Auth UID "${cleanAuthUid}" sudah dipetakan ke profil staf lain (${existingWithSameUid.name} - ${existingWithSameUid.id}).`
-        }
-      };
-    }
+  // Fail closed: uniqueness cannot be asserted if the authoritative directory read fails.
+  if (!allUsersRes.success || !Array.isArray(allUsersRes.data)) {
+    return {
+      success: false,
+      error: {
+        code: 'MAPPING_DIRECTORY_UNAVAILABLE',
+        message: 'Pemetaan dibatalkan karena direktori staf authoritative tidak dapat diverifikasi. Coba lagi setelah koneksi database pulih.'
+      }
+    };
+  }
+  const existingWithSameUid = allUsersRes.data.find(
+    u => !u.isDeleted && u.id !== staff.id && (u.authUserId === cleanAuthUid || (u as any).payload?.authUserId === cleanAuthUid)
+  );
+  if (existingWithSameUid) {
+    return {
+      success: false,
+      error: {
+        code: 'AUTH_UID_ALREADY_MAPPED',
+        message: `Auth UID "${cleanAuthUid}" sudah dipetakan ke profil staf lain (${existingWithSameUid.name} - ${existingWithSameUid.id}).`
+      }
+    };
   }
 
   // 3. Update staff record with authUserId and approval metadata

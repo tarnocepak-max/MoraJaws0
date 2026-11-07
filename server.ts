@@ -12,7 +12,6 @@ import {
   signInWithSupabaseAuth,
   verifySupabaseAuthToken,
   refreshSupabaseAuthSession,
-  signOutSupabaseAuth,
   resetSupabaseAuthPassword,
   approveAuthUidMapping
 } from './server/supabaseAuthAdapter.ts';
@@ -2850,7 +2849,8 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       }
     });
 
-    await signOutSupabaseAuth();
+    // Supabase JWT revocation is enforced by the verified authoritative sessionVersion check.
+    // Do not call client.auth.signOut() on a shared backend client: it is not scoped to this user's token.
 
     await logServerAuditAsync(
       'Logout Success (Supabase Auth)',
@@ -2884,6 +2884,16 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   app.post('/api/auth/change-password', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     const { currentPassword, newPassword } = req.body;
+
+    // Production/Supabase accounts must never change credentials through the legacy local passwordHash path.
+    // Until the per-user Supabase Auth password-update flow is implemented and tested, fail closed.
+    if (isSupabaseMode()) {
+      return res.status(501).json({
+        success: false,
+        error: 'Perubahan kata sandi melalui jalur legacy dinonaktifkan. Gunakan alur pemulihan kata sandi Supabase Auth; fitur ganti kata sandi dalam sesi akan diaktifkan setelah integrasi token per-pengguna selesai diuji.',
+        code: 'SUPABASE_PASSWORD_CHANGE_NOT_IMPLEMENTED'
+      });
+    }
 
     if (!currentPassword || !newPassword) {
       return res.status(400).json({
