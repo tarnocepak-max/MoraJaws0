@@ -231,4 +231,58 @@ export async function logoutSupabase() {
   return { ok: res.ok, status: res.status, data };
 }
 
+/**
+ * Initiates password recovery through Express backend with canonical redirect to https://morajaws.ai.studio/
+ */
+export async function requestPasswordRecovery(identifier: string, customRedirectTo?: string) {
+  const res = await fetch('/api/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      emailOrUsername: identifier.trim(),
+      redirectTo: customRedirectTo || 'https://morajaws.ai.studio/'
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+/**
+ * Verifies recovery token, code, or hash server-side
+ */
+export async function verifyRecoverySession(params: {
+  accessToken?: string;
+  code?: string;
+  token_hash?: string;
+}) {
+  const res = await fetch('/api/auth/verify-recovery', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+/**
+ * Submits new password for recovery through Express backend
+ */
+export async function resetPasswordWithRecoveryToken(params: {
+  newPassword: string;
+  confirmPassword: string;
+  accessToken?: string;
+  code?: string;
+  token_hash?: string;
+  verifiedUserId?: string;
+}) {
+  const res = await fetch('/api/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+
 

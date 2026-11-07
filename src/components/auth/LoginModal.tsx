@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
+import { PasswordRecoveryModal } from './PasswordRecoveryModal';
 import {
   ShieldCheck,
   Shield,
@@ -36,6 +37,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isRecoveryOpen, setIsRecoveryOpen] = useState(false);
 
   if (!isOpen) return null;
 
@@ -146,6 +148,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               </div>
             </div>
 
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsRecoveryOpen(true)}
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer font-medium"
+              >
+                Lupa kata sandi?
+              </button>
+            </div>
+
             {error && (
               <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -170,6 +182,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           <span>Audit Log Login: Tercatat Otomatis</span>
         </div>
       </div>
+
+      <PasswordRecoveryModal
+        isOpen={isRecoveryOpen}
+        onClose={() => setIsRecoveryOpen(false)}
+        initialMode="request"
+      />
     </div>
   );
 };

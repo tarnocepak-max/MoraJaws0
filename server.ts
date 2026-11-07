@@ -15,6 +15,8 @@ import {
   refreshSupabaseAuthSession,
   signOutSupabaseAuth,
   resetSupabaseAuthPassword,
+  verifySupabaseRecoveryToken,
+  updateSupabaseUserPassword,
   approveAuthUidMapping
 } from './server/supabaseAuthAdapter.ts';
 import { checkFirebaseAdminHealth, verifyFirebaseIdToken } from './server/firebaseAdmin.ts';
@@ -2772,16 +2774,141 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     res.json({ success: true, message: 'Sesi Supabase Auth berhasil diakhiri.', sessionVersion: req.user?.sessionVersion });
   });
 
-  app.post('/api/auth/supabase-reset-password', async (req: Request, res: Response) => {
-    const { email } = req.body || {};
-    if (!email) {
-      return res.status(400).json({ success: false, error: 'Email wajib diisi.', code: 'INVALID_INPUT' });
+  // --- Supabase Password Recovery Flow ---
+  const handleForgotPassword = async (req: Request, res: Response) => {
+    const { email, emailOrUsername, identifier, redirectTo } = req.body || {};
+    const targetIdent = (identifier || emailOrUsername || email || '').trim();
+    if (!targetIdent) {
+      return res.status(400).json({ success: false, error: 'Email atau nama pengguna wajib diisi.', code: 'INVALID_INPUT' });
     }
-    const resetRes = await resetSupabaseAuthPassword(email);
+    const resetRes = await resetSupabaseAuthPassword(targetIdent, redirectTo);
     if (!resetRes.success) {
-      return res.status(400).json({ success: false, error: resetRes.error?.message || 'Gagal mengirim email reset kata sandi.', code: resetRes.error?.code || 'RESET_FAILED' });
+      return res.status(400).json({
+        success: false,
+        error: resetRes.error?.message || 'Gagal mengirim email reset kata sandi.',
+        code: resetRes.error?.code || 'RESET_FAILED'
+      });
     }
-    res.json({ success: true, message: `Email pemulihan kata sandi telah dikirim ke ${email}.` });
+    await logServerAuditAsync(
+      'Password Reset Requested',
+      'auth',
+      targetIdent,
+      `Permintaan pemulihan kata sandi dikirim untuk "${resetRes.data?.email}" (Redirect: ${resetRes.data?.redirectTo})`,
+      undefined,
+      { level: 'informational' }
+    );
+    res.json({
+      success: true,
+      message: `Tautan pemulihan kata sandi telah dikirim ke alamat email resmi yang terdaftar.`,
+      email: resetRes.data?.email,
+      redirectTo: resetRes.data?.redirectTo
+    });
+  };
+
+  app.post('/api/auth/supabase-reset-password', handleForgotPassword);
+  app.post('/api/auth/forgot-password', handleForgotPassword);
+
+  app.post('/api/auth/verify-recovery', async (req: Request, res: Response) => {
+    const { accessToken, code, token_hash } = req.body || {};
+    if (!accessToken && !code && !token_hash) {
+      return res.status(400).json({
+        success: false,
+        error: 'Kredensial token pemulihan (accessToken, code, atau token_hash) wajib disertakan.',
+        code: 'MISSING_RECOVERY_CREDENTIALS'
+      });
+    }
+
+    const verifyRes = await verifySupabaseRecoveryToken({ accessToken, code, token_hash });
+    if (!verifyRes.success || !verifyRes.data?.userId) {
+      return res.status(400).json({
+        success: false,
+        error: verifyRes.error?.message || 'Token pemulihan tidak valid atau telah kedaluwarsa.',
+        code: verifyRes.error?.code || 'INVALID_RECOVERY_TOKEN'
+      });
+    }
+
+    // Mask user email for privacy and security in UI
+    const rawEmail = verifyRes.data.email || '';
+    let maskedEmail = rawEmail;
+    if (rawEmail.includes('@')) {
+      const [localPart, domainPart] = rawEmail.split('@');
+      const visibleStart = localPart.slice(0, 2);
+      const maskedLocal = visibleStart + '***';
+      maskedEmail = `${maskedLocal}@${domainPart}`;
+    }
+
+    res.json({
+      success: true,
+      valid: true,
+      userId: verifyRes.data.userId,
+      email: maskedEmail
+    });
+  });
+
+  app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
+    const { newPassword, confirmPassword, accessToken, code, token_hash, verifiedUserId } = req.body || {};
+
+    if (!newPassword || typeof newPassword !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Kata sandi baru wajib diisi.',
+        code: 'INVALID_INPUT'
+      });
+    }
+
+    if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'Konfirmasi kata sandi tidak cocok dengan kata sandi baru.',
+        code: 'PASSWORD_MISMATCH'
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: 'Kata sandi baru minimal harus 8 karakter.',
+        code: 'INVALID_PASSWORD_LENGTH'
+      });
+    }
+
+    if (!accessToken && !code && !token_hash && !verifiedUserId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Sesi token pemulihan tidak sah atau tidak ditemukan.',
+        code: 'MISSING_RECOVERY_TOKEN'
+      });
+    }
+
+    const updateRes = await updateSupabaseUserPassword({
+      newPassword,
+      accessToken,
+      code,
+      token_hash,
+      verifiedUserId
+    });
+
+    if (!updateRes.success) {
+      return res.status(400).json({
+        success: false,
+        error: updateRes.error?.message || 'Gagal memperbarui kata sandi akun.',
+        code: updateRes.error?.code || 'UPDATE_PASSWORD_FAILED'
+      });
+    }
+
+    await logServerAuditAsync(
+      'Password Reset Success',
+      'auth',
+      updateRes.data?.userId || 'unknown',
+      `Kata sandi akun (${updateRes.data?.email || 'staf'}) berhasil diperbarui melalui alur pemulihan kata sandi Supabase.`,
+      undefined,
+      { level: 'critical' }
+    );
+
+    res.json({
+      success: true,
+      message: 'Kata sandi akun MoraJaws Anda berhasil diperbarui. Silakan masuk kembali menggunakan kata sandi baru.'
+    });
   });
 
   // --- Identity Mapping Approval (Super Admin Only) ---

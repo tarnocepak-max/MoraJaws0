@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import { useAnimation } from '../../context/AnimationContext';
 import { MoraJawsLogo } from '../common/MoraJawsLogo';
 import { UserRole } from '../../types/index.ts';
+import { PasswordRecoveryModal } from './PasswordRecoveryModal';
 import {
   Lock,
   User,
@@ -31,6 +32,27 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [rememberSession, setRememberSession] = useState(true);
+
+  // Password Recovery Modal State
+  const [isRecoveryOpen, setIsRecoveryOpen] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState<'request' | 'reset'>('request');
+
+  // Automatic detection of Supabase Recovery Redirect (hash #access_token or query ?code= / ?token_hash=)
+  useEffect(() => {
+    const hash = window.location.hash ? window.location.hash.substring(1) : '';
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(hash);
+
+    const hasAccessToken = Boolean(hashParams.get('access_token'));
+    const isRecoveryType = hashParams.get('type') === 'recovery' || searchParams.get('type') === 'recovery';
+    const hasCode = Boolean(searchParams.get('code'));
+    const hasTokenHash = Boolean(searchParams.get('token_hash'));
+
+    if ((hasAccessToken && isRecoveryType) || hasCode || (hasTokenHash && isRecoveryType)) {
+      setRecoveryMode('reset');
+      setIsRecoveryOpen(true);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -321,7 +343,7 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
               </div>
             </div>
 
-            {/* Remember session checkbox */}
+            {/* Remember session checkbox and Forgot Password trigger */}
             <div className="flex items-center justify-between text-xs pt-1">
               <label className="flex items-center gap-2 cursor-pointer select-none text-[#D8B4FE]/80">
                 <input
@@ -332,6 +354,17 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
                 />
                 <span>Simpan sesi aktif terproteksi</span>
               </label>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setRecoveryMode('request');
+                  setIsRecoveryOpen(true);
+                }}
+                className="text-xs text-[#D8B4FE] hover:text-white hover:underline transition-colors cursor-pointer font-medium"
+              >
+                Lupa kata sandi?
+              </button>
             </div>
 
             {/* Submit button */}
@@ -363,6 +396,17 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
           </div>
         </div>
       </div>
+
+      {/* Supabase Password Recovery Modal */}
+      <PasswordRecoveryModal
+        isOpen={isRecoveryOpen}
+        onClose={() => setIsRecoveryOpen(false)}
+        initialMode={recoveryMode}
+        onSuccessLoginRedirect={() => {
+          setIsRecoveryOpen(false);
+          toast.success('Silakan masuk dengan kata sandi baru Anda.', 'KATA SANDI DIPERBARUI');
+        }}
+      />
     </div>
   );
 };

@@ -22,7 +22,8 @@
     "test:phase15a": "tsx scripts/execute_phase15a_supabase_auth_test.ts",
     "test:phase15a.1": "tsx scripts/execute_phase15a1_session_hardening_test.ts",
     "test:reconcile": "tsx scripts/execute_phase14c2_1_reconciliation_test.ts",
-    "test:phase15a.2": "tsx scripts/verify_phase15a2_hardening.ts"
+    "test:phase15a.2": "tsx scripts/verify_phase15a2_hardening.ts",
+    "test:password-recovery": "tsx scripts/test_password_recovery_flow.ts"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",
