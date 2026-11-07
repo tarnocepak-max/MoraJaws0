@@ -12,8 +12,8 @@ import {
   signInWithSupabaseAuth,
   verifySupabaseAuthToken,
   refreshSupabaseAuthSession,
-  resetSupabaseAuthPassword,
-  approveAuthUidMapping
+  signOutSupabaseAuth,
+  resetSupabaseAuthPassword
 } from './server/supabaseAuthAdapter.ts';
 import { checkFirebaseAdminHealth, verifyFirebaseIdToken } from './server/firebaseAdmin.ts';
 import { EventEmitter } from 'events';
@@ -326,7 +326,6 @@ export interface ServerUser {
   email: string;
   altEmail?: string;
   firebaseUid?: string;
-  authUserId?: string;
   role: 'super_admin' | 'dispatch' | 'leader' | 'installer' | 'management_data' | 'it_support';
   contractor?: string;
   contractorId?: string;
@@ -345,8 +344,6 @@ export interface ServerUser {
   deletionReason?: string;
   createdAt: string;
 }
-
-export type { Ticket } from './src/types/index.ts';
 
 export interface ServerSession {
   sessionId: string;
@@ -1173,6 +1170,7 @@ function renderWhatsAppMessage(templateBody: string, ticket: any) {
     customername: ticket?.customerName || ticket?.endUserName || '',
     customer_id: ticket?.idCustomer || ticket?.customerId || '',
     customerid: ticket?.idCustomer || ticket?.customerId || '',
+    idcustomer: ticket?.idCustomer || ticket?.customerId || '',
     customer_phone: ticket?.customerPhone || '',
     customerphone: ticket?.customerPhone || '',
     wo_number: ticket?.woNumber || ticket?.workOrderNumber || '',
@@ -1193,6 +1191,7 @@ function renderWhatsAppMessage(templateBody: string, ticket: any) {
     contractor_name: ticket?.contactorName || ticket?.contractorName || '',
     contractorname: ticket?.contactorName || ticket?.contractorName || '',
     contactor_name: ticket?.contactorName || ticket?.contractorName || '',
+    contactorname: ticket?.contactorName || ticket?.contractorName || '',
     installer_name: ticket?.installerName || '',
     installername: ticket?.installerName || '',
     date: ticket?.appointmentDate || '',
@@ -1204,16 +1203,28 @@ function renderWhatsAppMessage(templateBody: string, ticket: any) {
     fatcode: ticket?.fatCode || ''
   };
 
+  if (ticket && typeof ticket === 'object') {
+    Object.entries(ticket).forEach(([k, v]) => {
+      if (typeof v === 'string' || typeof v === 'number') {
+        const lk = k.toLowerCase();
+        varMap[lk] = String(v);
+        varMap[lk.replace(/_/g, '')] = String(v);
+      }
+    });
+  }
+
   if (ticket?.additionalFields) {
     Object.entries(ticket.additionalFields).forEach(([k, v]) => {
-      varMap[k.toLowerCase()] = String(v || '');
+      const lk = k.toLowerCase();
+      varMap[lk] = String(v || '');
+      varMap[lk.replace(/_/g, '')] = String(v || '');
     });
   }
 
   const rendered = (templateBody || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match: string, varName: string) => {
-    const rawKey = varName.toLowerCase();
-    const cleanKey = rawKey.replace(/_/g, '');
-    const val = varMap[rawKey] !== undefined ? varMap[rawKey] : varMap[cleanKey];
+    const key = varName.toLowerCase();
+    const normalizedKey = key.replace(/_/g, '');
+    const val = varMap[key] !== undefined ? varMap[key] : varMap[normalizedKey];
     if (val === undefined || val === null || val.trim() === '') {
       missingVariables.push(varName);
       return '';
@@ -1273,195 +1284,116 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
       });
     }
 
-    // Explicit check for Firebase token in production mode:
-    const isFirebaseIndicator = req.headers['x-auth-provider'] === 'firebase' ||
-      (token.length > 500 && !token.startsWith('eyJ')) ||
-      req.headers['x-firebase-client'] !== undefined;
-
-    if (!isLocalJsonModeAllowed() && isFirebaseIndicator) {
-      return res.status(403).json({
-        error: 'Firebase Authentication dinonaktifkan pada lingkungan produksi MoraJaws. Gunakan login resmi dengan Supabase Auth via /api/auth/supabase-login.',
-        code: 'FIREBASE_AUTH_DISABLED_PRODUCTION'
-      });
-    }
-
-    // PRODUCTION MODE: Strictly enforce Supabase Auth JWT tokens.
-    // Local session tokens (mora_..., sess_...) and arbitrary tokens are rejected immediately.
-    if (!isLocalJsonModeAllowed()) {
-      if (!token.startsWith('eyJ')) {
-        return res.status(401).json({
-          error: 'Token autentikasi lokal ditolak pada lingkungan produksi. Gunakan access token Supabase Auth yang valid.',
-          code: 'LOCAL_AUTH_DISABLED_PRODUCTION'
-        });
-      }
-
+    // 1. Supabase Auth JWT Token Verification (Sole Production Authentication Mechanism)
+    if (token.startsWith('eyJ')) {
       try {
         const saRes = await verifySupabaseAuthToken(token, knownSession?.sessionVersion);
         if (saRes.success && saRes.data) {
           authSource = 'supabase_auth';
           found = saRes.data as ServerUser;
-          activeSession = knownSession;
-        } else if (saRes.error) {
-          const errCode = saRes.error.code;
-          if (errCode === 'SESSION_REVOKED') {
-            return res.status(401).json({
-              error: 'Sesi login telah dicabut karena perubahan akun atau logout.',
-              code: 'SESSION_REVOKED'
-            });
-          }
-          if (errCode === 'TOKEN_EXPIRED') {
-            return res.status(401).json({
-              error: 'Token autentikasi telah kedaluwarsa. Silakan perbarui sesi login Anda.',
-              code: 'TOKEN_EXPIRED'
-            });
-          }
-          if (errCode === 'TOKEN_INVALID' || errCode === 'INVALID_TOKEN') {
-            return res.status(401).json({
-              error: 'Token autentikasi tidak valid.',
-              code: 'TOKEN_INVALID'
-            });
-          }
-          if (errCode === 'ACCOUNT_DISABLED') {
-            return res.status(403).json({
-              error: 'Akun staf telah dinonaktifkan oleh Administrator.',
-              code: 'ACCOUNT_DISABLED'
-            });
-          }
-          if (errCode === 'ACCOUNT_DELETED') {
-            return res.status(403).json({
-              error: 'Akun staf telah dihapus dari sistem.',
-              code: 'ACCOUNT_DELETED'
-            });
-          }
-          if (errCode === 'AUTH_UID_MISMATCH') {
-            return res.status(403).json({
-              error: 'Auth UID tidak cocok dengan profil staf.',
-              code: 'AUTH_UID_MISMATCH'
-            });
-          }
-          if (errCode === 'NEEDS_MAPPING') {
-            return res.status(403).json({
-              error: 'Profil staf belum memiliki pemetaan Supabase Auth UID yang disetujui.',
-              code: 'NEEDS_MAPPING'
-            });
-          }
-          if (errCode === 'PROFILE_NOT_FOUND') {
-            return res.status(404).json({
-              error: 'Profil staf tidak ditemukan dalam database authoritative.',
-              code: 'PROFILE_NOT_FOUND'
-            });
-          }
-          // Default fail-closed for any other error or unconfigured Supabase
-          return res.status(503).json({
-            error: 'Database authoritative Supabase tidak tersedia saat verifikasi token.',
-            code: 'DATABASE_UNAVAILABLE'
+        } else if (saRes.error?.code === 'SESSION_REVOKED') {
+          return res.status(401).json({
+            error: 'Sesi login telah dicabut karena perubahan akun atau logout.',
+            code: 'SESSION_REVOKED'
           });
         }
       } catch (saErr) {
-        return res.status(503).json({
-          error: 'Terjadi kegagalan koneksi database authoritative saat verifikasi token.',
-          code: 'DATABASE_UNAVAILABLE'
-        });
+        // Fallback to server session check
       }
-    } else {
-      // DEVELOPMENT / LOCAL JSON MODE:
-      // 1. Supabase Auth JWT Token Verification if available
-      if (token.startsWith('eyJ')) {
-        try {
-          const saRes = await verifySupabaseAuthToken(token, knownSession?.sessionVersion);
-          if (saRes.success && saRes.data) {
-            authSource = 'supabase_auth';
-            found = saRes.data as ServerUser;
-            activeSession = knownSession;
-          } else if (saRes.error) {
-            const errCode = saRes.error.code;
-            if (errCode === 'SESSION_REVOKED') {
-              return res.status(401).json({ error: 'Sesi login telah dicabut.', code: 'SESSION_REVOKED' });
-            }
-            if (errCode === 'TOKEN_EXPIRED') {
-              return res.status(401).json({ error: 'Token autentikasi telah kedaluwarsa.', code: 'TOKEN_EXPIRED' });
-            }
-            if (errCode === 'TOKEN_INVALID' || errCode === 'INVALID_TOKEN') {
-              return res.status(401).json({ error: 'Token autentikasi tidak valid.', code: 'TOKEN_INVALID' });
-            }
-            if (errCode === 'ACCOUNT_DISABLED') {
-              return res.status(403).json({ error: 'Akun staf telah dinonaktifkan.', code: 'ACCOUNT_DISABLED' });
-            }
-            if (errCode === 'ACCOUNT_DELETED') {
-              return res.status(403).json({ error: 'Akun staf telah dihapus.', code: 'ACCOUNT_DELETED' });
-            }
-            if (errCode === 'AUTH_UID_MISMATCH') {
-              return res.status(403).json({ error: 'Auth UID tidak cocok.', code: 'AUTH_UID_MISMATCH' });
-            }
-            if (errCode === 'NEEDS_MAPPING') {
-              return res.status(403).json({ error: 'Profil belum memiliki pemetaan Auth UID yang disetujui.', code: 'NEEDS_MAPPING' });
-            }
-          }
-        } catch (saErr) {
-          // Dev fallback
-        }
-      }
+    }
 
-      // 1.B. Firebase Admin ID Token Verification (Dev only)
-      if (!found) {
-        try {
-          const decodedFirebaseToken = await verifyFirebaseIdToken(token);
-          if (decodedFirebaseToken && decodedFirebaseToken.uid) {
-            authSource = 'firebase_token';
-            verifiedDecodedFirebaseToken = decodedFirebaseToken;
-            const cleanEmail = (decodedFirebaseToken.email || '').toLowerCase().trim();
-            found = db.users.find(u =>
-              !u.isDeleted && u.active && (
-                (u.firebaseUid && u.firebaseUid === decodedFirebaseToken.uid) ||
-                (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail) ||
-                (cleanEmail && u.altEmail && u.altEmail.toLowerCase().includes(cleanEmail))
-              )
-            );
-            if (found && !found.firebaseUid) {
-              found.firebaseUid = decodedFirebaseToken.uid;
-              saveDatabaseToDisk();
-            }
-          }
-        } catch (fbErr) {
-          console.warn('[Auth Middleware] Firebase token check warning (dev only):', fbErr);
-        }
-      }
+    // 1.B. Firebase Admin ID Token Verification (Strictly disabled in production per Phase 13E)
+    if (!found && isLocalJsonModeAllowed()) {
+      try {
+        const decodedFirebaseToken = await verifyFirebaseIdToken(token);
+        if (decodedFirebaseToken && decodedFirebaseToken.uid) {
+          authSource = 'firebase_token';
+          verifiedDecodedFirebaseToken = decodedFirebaseToken;
 
-      // 2. Server Session Verification (Dev only)
-      if (!found) {
-        activeSession = SERVER_SESSIONS.find(s => s.token === token && s.status === 'active');
-        if (activeSession) {
-          if (new Date(activeSession.expiresAt).getTime() < now) {
+          const cleanEmail = (decodedFirebaseToken.email || '').toLowerCase().trim();
+          found = db.users.find(u =>
+            !u.isDeleted && u.active && (
+              (u.firebaseUid && u.firebaseUid === decodedFirebaseToken.uid) ||
+              (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail) ||
+              (cleanEmail && u.altEmail && u.altEmail.toLowerCase().includes(cleanEmail))
+            )
+          );
+
+          if (found && !found.firebaseUid) {
+            found.firebaseUid = decodedFirebaseToken.uid;
+            saveDatabaseToDisk();
+          }
+        }
+      } catch (fbErr) {
+        console.warn('[Auth Middleware] Firebase token check warning (dev only):', fbErr);
+      }
+    }
+
+    // 2. Server Session Verification with strict sessionVersion checking
+    if (!found) {
+      activeSession = SERVER_SESSIONS.find(s => s.token === token && s.status === 'active');
+      if (activeSession) {
+        if (new Date(activeSession.expiresAt).getTime() < now) {
+          activeSession.status = 'expired';
+          activeSession = undefined;
+        } else {
+          const lastAct = new Date(activeSession.lastActivityAt).getTime();
+          const idleLimitMs = (db.sessionConfig.idleTimeoutMinutes || 60) * 60 * 1000;
+          if (now - lastAct > idleLimitMs) {
             activeSession.status = 'expired';
             activeSession = undefined;
           } else {
-            const lastAct = new Date(activeSession.lastActivityAt).getTime();
-            const idleLimitMs = (db.sessionConfig.idleTimeoutMinutes || 60) * 60 * 1000;
-            if (now - lastAct > idleLimitMs) {
-              activeSession.status = 'expired';
+            // Retrieve authoritative user state
+            let authoritativeUser: ServerUser | null = null;
+            if (isSupabaseMode()) {
+              try {
+                const sbRes = await findUserInSupabaseDetailed(activeSession.userId);
+                if (sbRes.success && sbRes.data) {
+                  authoritativeUser = sbRes.data;
+                } else if (!sbRes.success && !isLocalJsonModeAllowed()) {
+                  // Fail closed: Database is down or rejected query in production
+                  return res.status(503).json({
+                    error: 'Database authoritative tidak tersedia saat verifikasi kredensial sesi.',
+                    code: 'DATABASE_UNAVAILABLE'
+                  });
+                }
+              } catch {
+                if (!isLocalJsonModeAllowed()) {
+                  return res.status(503).json({
+                    error: 'Database authoritative gagal diakses.',
+                    code: 'DATABASE_UNAVAILABLE'
+                  });
+                }
+              }
+            }
+
+            if (!authoritativeUser && isLocalJsonModeAllowed()) {
+              authoritativeUser = db.users.find(u => u.id === activeSession!.userId) || null;
+            }
+
+            if (!authoritativeUser || authoritativeUser.isDeleted || !authoritativeUser.active) {
+              activeSession.status = 'revoked';
               activeSession = undefined;
+              found = undefined;
             } else {
-              let authoritativeUser: ServerUser | null = db.users.find(u => u.id === activeSession!.userId) || null;
-              if (!authoritativeUser || authoritativeUser.isDeleted || !authoritativeUser.active) {
+              // Authoritative sessionVersion check
+              const authoritativeVersion = authoritativeUser.sessionVersion || 1;
+              const sessionVersion = activeSession.sessionVersion || 1;
+
+              if (authoritativeVersion !== sessionVersion) {
+                // Token has been revoked due to account change or logout
                 activeSession.status = 'revoked';
                 activeSession = undefined;
                 found = undefined;
               } else {
-                const authoritativeVersion = authoritativeUser.sessionVersion || 1;
-                const sessionVersion = activeSession.sessionVersion || 1;
-                if (authoritativeVersion !== sessionVersion) {
-                  activeSession.status = 'revoked';
-                  activeSession = undefined;
-                  found = undefined;
-                } else {
-                  if (db.sessionConfig.extendOnActivity) {
-                    activeSession.lastActivityAt = new Date().toISOString();
-                  }
-                  authSource = 'server_session';
-                  found = authoritativeUser;
-                  activeSession.role = authoritativeUser.role;
-                  activeSession.contractor = authoritativeUser.contractor;
+                if (db.sessionConfig.extendOnActivity) {
+                  activeSession.lastActivityAt = new Date().toISOString();
                 }
+                authSource = 'server_session';
+                found = authoritativeUser;
+                // Keep session role and contractor synced with authoritative record
+                activeSession.role = authoritativeUser.role;
+                activeSession.contractor = authoritativeUser.contractor;
               }
             }
           }
@@ -1469,6 +1401,9 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
       }
     }
   }
+
+  // NOTE: Unverified header bypass (x-user-id / x-username) is removed per Security Constitution.
+  // All requests must be authenticated via valid Firebase token or verified session token.
 
   req.user = found;
   req.session = activeSession;
@@ -2339,7 +2274,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       });
     }
 
-    // Return safe identity mapping (NEVER expose email, passwordHash, or secret credentials)
+    // Return safe identity mapping (NEVER expose passwordHash or secret credentials)
     res.json({
       success: true,
       found: true,
@@ -2347,10 +2282,12 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       user: {
         id: user.id,
         username: user.username,
+        email: user.email,
         name: user.name,
         role: user.role,
         contractor: user.contractor,
-        area: user.area
+        area: user.area,
+        firebaseUid: user.firebaseUid || null
       }
     });
   });
@@ -2647,14 +2584,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     if (!authRes.success || !authRes.data) {
       const errCode = authRes.error?.code || 'AUTH_FAILED';
       let statusCode = 401;
+
       if (errCode === 'DATABASE_UNAVAILABLE') {
         statusCode = 503;
-      } else if (errCode === 'auth/user-not-found' || errCode === 'PROFILE_NOT_FOUND') {
+      } else if (errCode === 'auth/user-not-found') {
         statusCode = 404;
-      } else if (errCode === 'ACCOUNT_DISABLED' || errCode === 'ACCOUNT_DELETED' || errCode === 'auth/user-disabled' || errCode === 'AUTH_UID_MISMATCH' || errCode === 'INVALID_ROLE' || errCode === 'NEEDS_MAPPING') {
+      } else if (errCode === 'ACCOUNT_DISABLED' || errCode === 'ACCOUNT_DELETED' || errCode === 'auth/user-disabled') {
         statusCode = 403;
-      } else if (errCode === 'INVALID_INPUT') {
-        statusCode = 400;
       } else {
         const currentAttempts = (attemptInfo?.count || 0) + 1;
         let lockedUntil: number | undefined;
@@ -2676,12 +2612,10 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         null,
         { level: 'critical' }
       );
-
       return res.status(statusCode).json({
         success: false,
         error: authRes.error?.message || 'Autentikasi Supabase Auth gagal.',
-        code: errCode,
-        ...(authRes.error?.details ? { details: authRes.error.details } : {})
+        code: errCode
       });
     }
 
@@ -2734,62 +2668,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     });
   });
 
-  // --- Admin Approval for Supabase Auth UID Mapping (Controlled Migration Path) ---
-  app.post('/api/auth/approve-mapping', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
-    const { staffId, authUserId } = req.body || {};
-    if (!staffId || !authUserId) {
-      return res.status(400).json({
-        success: false,
-        error: 'staffId dan authUserId wajib disertakan.',
-        code: 'INVALID_INPUT'
-      });
-    }
-
-    const mappingRes = await approveAuthUidMapping({
-      staffId: String(staffId).trim(),
-      authUserId: String(authUserId).trim(),
-      adminUser: req.user!
-    });
-
-    if (!mappingRes.success || !mappingRes.data) {
-      const errCode = mappingRes.error?.code || 'MAPPING_FAILED';
-      const statusCode = errCode === 'STAFF_NOT_FOUND' ? 404 :
-        (errCode === 'ACCOUNT_DELETED' || errCode === 'ACCOUNT_DISABLED' || errCode === 'FORBIDDEN') ? 403 :
-        errCode === 'AUTH_UID_ALREADY_MAPPED' ? 409 :
-        errCode === 'INVALID_INPUT' ? 400 : 500;
-
-      await logServerAuditAsync(
-        'Auth UID Mapping Failed',
-        'auth',
-        staffId,
-        `Super Admin ${req.user!.name} gagal memetakan Auth UID ${authUserId} ke staf ${staffId}: ${mappingRes.error?.message}`,
-        req.user,
-        { level: 'critical' }
-      );
-
-      return res.status(statusCode).json({
-        success: false,
-        error: mappingRes.error?.message || 'Gagal menyetujui pemetaan Auth UID.',
-        code: errCode
-      });
-    }
-
-    await logServerAuditAsync(
-      'Auth UID Mapping Approved',
-      'auth',
-      staffId,
-      `Super Admin ${req.user!.name} menyetujui pemetaan Auth UID ${authUserId} ke staf ${staffId} (Terverifikasi di database)`,
-      req.user,
-      { level: 'critical' }
-    );
-
-    res.json({
-      success: true,
-      message: 'Pemetaan Auth UID ke profil staf berhasil disetujui dan diverifikasi konsistensinya di database.',
-      data: mappingRes.data
-    });
-  });
-
   app.post('/api/auth/supabase-refresh', async (req: Request, res: Response) => {
     const { refreshToken } = req.body || {};
     if (!refreshToken) {
@@ -2803,69 +2681,20 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   app.post('/api/auth/supabase-logout', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-    const user = req.user!;
-    let verifiedVersion: number | undefined;
-
-    if (isSupabaseMode()) {
-      const userRes = await findUserInSupabaseDetailed(user.id);
-      if (!userRes.success || !userRes.data) {
-        return res.status(503).json({
-          success: false,
-          error: 'Database authoritative tidak tersedia saat pencabutan sesi. Logout dibatalkan.',
-          code: 'DATABASE_UNAVAILABLE'
-        });
-      }
-
-      const nextVersion = (userRes.data.sessionVersion || 1) + 1;
-      const updateRes = await updateUserInSupabase(user.id, { sessionVersion: nextVersion });
-      if (!updateRes.success) {
-        return res.status(500).json({
-          success: false,
-          error: 'Gagal memperbarui session version di database authoritative. Logout dibatalkan demi keamanan sesi.',
-          code: 'REVOCATION_FAILED'
-        });
-      }
-
-      const verifyRes = await findUserInSupabaseDetailed(user.id);
-      if (!verifyRes.success || !verifyRes.data || (verifyRes.data.sessionVersion || 1) !== nextVersion) {
-        return res.status(500).json({
-          success: false,
-          error: 'Verifikasi pembacaan ulang session version gagal. Sesi belum dapat dinyatakan dicabut dengan aman.',
-          code: 'REVOCATION_VERIFICATION_FAILED'
-        });
-      }
-      verifiedVersion = nextVersion;
-    } else {
-      user.sessionVersion = (user.sessionVersion || 1) + 1;
-      verifiedVersion = user.sessionVersion;
-    }
-
+    await signOutSupabaseAuth();
     if (req.session) {
       req.session.status = 'revoked';
     }
-    SERVER_SESSIONS.forEach(s => {
-      if (s.userId === user.id) {
-        s.status = 'revoked';
+    if (req.user) {
+      req.user.sessionVersion = (req.user.sessionVersion || 1) + 1;
+      if (isSupabaseMode()) {
+        try {
+          await updateUserInSupabase(req.user.id, { sessionVersion: req.user.sessionVersion });
+        } catch {}
       }
-    });
-
-    // Supabase JWT revocation is enforced by the verified authoritative sessionVersion check.
-    // Do not call client.auth.signOut() on a shared backend client: it is not scoped to this user's token.
-
-    await logServerAuditAsync(
-      'Logout Success (Supabase Auth)',
-      'auth',
-      user.id,
-      `User ${user.name} (${user.role}) logout dari Supabase Auth, sessionVersion dinaikkan ke ${verifiedVersion}`,
-      user,
-      { level: 'critical' }
-    );
-
-    res.json({
-      success: true,
-      message: 'Sesi Supabase Auth berhasil diakhiri.',
-      sessionVersion: verifiedVersion
-    });
+      await logServerAuditAsync('Logout Success (Supabase Auth)', 'auth', req.user.id, `User ${req.user.name} logout dari Supabase Auth`, req.user, { level: 'critical' });
+    }
+    res.json({ success: true, message: 'Sesi Supabase Auth berhasil diakhiri.' });
   });
 
   app.post('/api/auth/supabase-reset-password', async (req: Request, res: Response) => {
@@ -2884,16 +2713,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   app.post('/api/auth/change-password', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     const { currentPassword, newPassword } = req.body;
-
-    // Production/Supabase accounts must never change credentials through the legacy local passwordHash path.
-    // Until the per-user Supabase Auth password-update flow is implemented and tested, fail closed.
-    if (isSupabaseMode()) {
-      return res.status(501).json({
-        success: false,
-        error: 'Perubahan kata sandi melalui jalur legacy dinonaktifkan. Gunakan alur pemulihan kata sandi Supabase Auth; fitur ganti kata sandi dalam sesi akan diaktifkan setelah integrasi token per-pengguna selesai diuji.',
-        code: 'SUPABASE_PASSWORD_CHANGE_NOT_IMPLEMENTED'
-      });
-    }
 
     if (!currentPassword || !newPassword) {
       return res.status(400).json({
@@ -5219,7 +5038,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     res.json({ sessions: safeSessions });
   });
 
-  app.post('/api/sessions/revoke', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/sessions/revoke', requireAuth, (req: AuthenticatedRequest, res) => {
     const { sessionId, reason } = req.body;
     const session = SERVER_SESSIONS.find(s => s.sessionId === sessionId);
     if (!session) return res.status(404).json({ error: 'Sesi tidak ditemukan.' });
@@ -5229,16 +5048,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     }
 
     session.status = 'revoked';
-    const targetUser = db.users.find(u => u.id === session.userId);
-    if (targetUser) {
-      targetUser.sessionVersion = (targetUser.sessionVersion || 1) + 1;
-    }
-    if (isSupabaseMode()) {
-      try {
-        const { updateUserInSupabase } = await import('./server/supabaseAdapter.ts');
-        await updateUserInSupabase(session.userId, { sessionVersion: (targetUser?.sessionVersion || 2) });
-      } catch {}
-    }
     logServerAudit('Session Revoked', 'session', sessionId, `Sesi dicabut oleh ${req.user!.name}. Alasan: ${reason || 'Pencabutan manual'}`, req.user);
     res.json({ success: true, message: 'Sesi berhasil dicabut.' });
   });
@@ -6055,15 +5864,30 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       return res.status(400).json({ error: 'Parameter storagePath wajib disertakan.' });
     }
 
+    let targetWo = woNumber;
+    if (!targetWo && storagePath) {
+      const match = storagePath.match(/(?:work-orders|wo_document|technical-reports|image_report|live-chat|chat_attachment)\/([a-zA-Z0-9_-]+)/);
+      if (match) targetWo = match[1];
+    }
+    let contextTickets = db.tickets;
+    if (isSupabaseMode() && targetWo) {
+      try {
+        const sbWo = await getWorkOrderByIdOrWoNumberFromSupabase(targetWo);
+        if (sbWo.success && sbWo.data) {
+          contextTickets = [sbWo.data, ...db.tickets];
+        }
+      } catch {}
+    }
+
     // Evaluate document ownership and user permissions
     const permission = evaluateFileAccessPermission(
       req.user!,
       {
         category: category || 'test-sandbox',
-        woNumber,
+        woNumber: targetWo || woNumber,
         storagePath
       },
-      db.tickets
+      contextTickets
     );
 
     if (!permission.allowed) {
@@ -6107,15 +5931,30 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       return res.status(400).json({ error: 'Query parameter storagePath wajib disertakan.' });
     }
 
+    let targetWo = woNumber;
+    if (!targetWo && storagePath) {
+      const match = storagePath.match(/(?:work-orders|wo_document|technical-reports|image_report|live-chat|chat_attachment)\/([a-zA-Z0-9_-]+)/);
+      if (match) targetWo = match[1];
+    }
+    let contextTickets = db.tickets;
+    if (isSupabaseMode() && targetWo) {
+      try {
+        const sbWo = await getWorkOrderByIdOrWoNumberFromSupabase(targetWo);
+        if (sbWo.success && sbWo.data) {
+          contextTickets = [sbWo.data, ...db.tickets];
+        }
+      } catch {}
+    }
+
     // Evaluate permissions
     const permission = evaluateFileAccessPermission(
       req.user!,
       {
         category,
-        woNumber,
+        woNumber: targetWo || woNumber,
         storagePath
       },
-      db.tickets
+      contextTickets
     );
 
     if (!permission.allowed) {
@@ -7783,8 +7622,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   // NEVER accesses production Firestore or Supabase database records.
   // ==============================================================================
 
-  // 1. Primary SSE Streaming Endpoint (Sandbox Only - Restricted to Verified Sandbox Super Admin)
-  app.get('/api/realtime/stream-sandbox', requireAuth, requireSandboxSuperAdmin, (req: AuthenticatedRequest, res: Response) => {
+  const requireRealtimeSandboxEnabled = (_req: Request, res: Response, next: NextFunction) => {
     if (!realtimeSandboxHub.isEnabled()) {
       return res.status(403).json({
         success: false,
@@ -7792,7 +7630,11 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         error: 'SSE Sandbox endpoint tidak aktif. Administrator harus mengaktifkan ENABLE_SSE_SANDBOX=true pada environment.'
       });
     }
+    next();
+  };
 
+  // 1. Primary SSE Streaming Endpoint (Sandbox Only - Restricted to Verified Sandbox Super Admin)
+  app.get('/api/realtime/stream-sandbox', requireAuth, requireRealtimeSandboxEnabled, requireSandboxSuperAdmin, (req: AuthenticatedRequest, res: Response) => {
     const lastEventId = (
       req.headers['last-event-id'] ||
       req.query.lastEventId ||
@@ -7813,14 +7655,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   // 2. Dummy Event Publisher (Sandbox Only - Restricted to Verified Sandbox Super Admin)
-  app.post('/api/realtime/publish-sandbox', requireAuth, requireSandboxSuperAdmin, (req: AuthenticatedRequest, res: Response) => {
-    if (!realtimeSandboxHub.isEnabled()) {
-      return res.status(403).json({
-        success: false,
-        code: 'FEATURE_DISABLED',
-        error: 'SSE Sandbox endpoint tidak aktif. Administrator harus mengaktifkan ENABLE_SSE_SANDBOX=true pada environment.'
-      });
-    }
+  app.post('/api/realtime/publish-sandbox', requireAuth, requireRealtimeSandboxEnabled, requireSandboxSuperAdmin, (req: AuthenticatedRequest, res: Response) => {
 
     const { eventType, recordId, payload } = req.body || {};
     if (!eventType || !recordId) {
@@ -7867,6 +7702,18 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   // Protected by requireAuth, requireSandboxSuperAdmin, and ENABLE_SSE_SANDBOX check
   // ==============================================================================
 
+  const requireSandboxEnabled = (_req: Request, res: Response, next: NextFunction) => {
+    const isEnabled = process.env.ENABLE_SSE_SANDBOX === 'true';
+    if (!isEnabled) {
+      return res.status(403).json({
+        success: false,
+        code: 'SANDBOX_DISABLED',
+        error: 'Phase 9F Sandbox endpoints tidak aktif. Set ENABLE_SSE_SANDBOX=true pada environment untuk mengaktifkan sandbox laboratorium.'
+      });
+    }
+    next();
+  };
+
   const checkSandboxEnabled = (res: Response): boolean => {
     const isEnabled = process.env.ENABLE_SSE_SANDBOX === 'true';
     if (!isEnabled) {
@@ -7881,8 +7728,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   };
 
   // 1. Mutasi Dummy & Atomic Journal Test
-  app.post('/api/sandbox/journal/mutate', requireAuth, requireSandboxSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
-    if (!checkSandboxEnabled(res)) return;
+  app.post('/api/sandbox/journal/mutate', requireAuth, requireSandboxEnabled, requireSandboxSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { aggregateId, eventType, eventVersion, payload, contractorId, areaName, assignedInstallerId } = req.body;
       const user = req.user!;
@@ -7904,7 +7750,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   // 2. Chunked Batch Import Test (Max 200 items per chunk)
-  app.post('/api/sandbox/journal/import-chunked', requireAuth, requireSandboxSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/sandbox/journal/import-chunked', requireAuth, requireSandboxEnabled, requireSandboxSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
     if (!checkSandboxEnabled(res)) return;
     try {
       const { items } = req.body;
@@ -8054,8 +7900,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   // 6. Automated Chaos Test Suite Trigger
-  app.post('/api/sandbox/test/chaos', requireAuth, requireSandboxSuperAdmin, async (_req: AuthenticatedRequest, res: Response) => {
-    if (!checkSandboxEnabled(res)) return;
+  app.post('/api/sandbox/test/chaos', requireAuth, requireSandboxEnabled, requireSandboxSuperAdmin, async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const testReport = await sandboxChaosTestRunner.runAllTests();
       res.json({
@@ -8745,6 +8590,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const result = renderWhatsAppMessage(templateBody, ticket);
       const urlResult = buildWhatsAppClickToChatUrl(ticket?.customerPhone || '', result.renderedText);
       res.json({
+        success: true,
         renderedText: result.renderedText,
         missingVariables: result.missingVariables,
         url: urlResult.url,
@@ -8783,33 +8629,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   // ---------------------------------------------------------------------------
-  // PHASE 9L-6 & PHASE 14C.2.3 Security: Block direct public access to backup files & archives
+  // PHASE 9L-6 Security: Block direct public access to backup files
   // ---------------------------------------------------------------------------
   app.all('/morajaws_production_firestore_backup.json', (_req, res) => {
     return res.status(404).json({ error: 'File tidak ditemukan', code: 'NOT_FOUND' });
   });
   app.all('/data/morajaws_production_firestore_backup.json', (_req, res) => {
     return res.status(404).json({ error: 'File tidak ditemukan', code: 'NOT_FOUND' });
-  });
-  app.use((req, res, next) => {
-    const rawUrl = (req.path || '').toLowerCase();
-    if (
-      !rawUrl.startsWith('/api/') && (
-        rawUrl.endsWith('.zip') ||
-        rawUrl.endsWith('.bak') ||
-        rawUrl.endsWith('.sql') ||
-        rawUrl.endsWith('.sqlite') ||
-        rawUrl.endsWith('.dump') ||
-        rawUrl.includes('backup') ||
-        rawUrl.includes('quarantine') ||
-        rawUrl.includes('morajaws_database') ||
-        rawUrl.startsWith('/assets/aistudio') ||
-        rawUrl.startsWith('/data/')
-      )
-    ) {
-      return res.status(404).json({ error: 'File tidak ditemukan', code: 'NOT_FOUND' });
-    }
-    next();
   });
 
   // Mount Vite middleware in development or serve static in production

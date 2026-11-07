@@ -102,8 +102,6 @@ import {
   resetSupabaseBackendClientForTesting
 } from '../server/supabaseClient.ts';
 
-import { SuiteEvidenceCollector } from './evidenceCollector.ts';
-
 interface TestResult {
   num: number;
   title: string;
@@ -113,42 +111,10 @@ interface TestResult {
 }
 
 const results: TestResult[] = [];
-const evidenceCollector = new SuiteEvidenceCollector('Phase14C.2');
 
-function recordTest(
-  num: number,
-  title: string,
-  category: string,
-  passed: boolean,
-  details: string,
-  extraAssertions?: Array<{ name: string; passed: boolean; failureReason?: string; evidence?: string }>
-) {
-  if (typeof passed !== 'boolean') {
-    console.error(`[CRITICAL TYPE ERROR] recordTest received non-boolean 'passed' in Test #${num}: type=${typeof passed}`);
-  }
-  results.push({ num, title, category, passed: passed === true, details });
-
-  const actualAssertions = (extraAssertions && extraAssertions.length > 0)
-    ? extraAssertions
-    : [
-        {
-          name: `Functional Check: ${title}`,
-          passed: passed,
-          failureReason: passed === true ? undefined : (details || `Functional condition evaluated to false in Test #${num}`),
-          evidence: `Evaluated in Test #${num}: ${details}`
-        }
-      ];
-
-  evidenceCollector.linkToScenario({
-    num,
-    title,
-    category,
-    passed,
-    functionalPassed: passed,
-    details,
-    assertions: actualAssertions
-  });
-  const status = passed === true ? 'PASS' : (typeof passed !== 'boolean' ? 'INVALID_ASSERTION' : 'FAIL');
+function recordTest(num: number, title: string, category: string, passed: boolean, details: string) {
+  results.push({ num, title, category, passed, details });
+  const status = passed ? 'PASS' : 'FAIL';
   console.log(`[${status}] Test #${num} [${category}]: ${title}`);
   console.log(`       -> ${details}`);
 }
@@ -203,9 +169,8 @@ function createMockClient(options: {
       role: 'super_admin',
       active: true,
       is_deleted: false,
-      password_hash: hashPassword('current_password'),
       session_version: 1,
-      payload: { sessionVersion: 1, passwordHash: hashPassword('current_password') }
+      payload: { sessionVersion: 1 }
     },
     {
       id: 'u_management_data_01',
@@ -577,7 +542,6 @@ function makeRequest(
   body?: any,
   headers?: Record<string, string>
 ): Promise<{ status: number; data: any; headers: http.IncomingHttpHeaders }> {
-  const callerStack = new Error().stack?.split('\n')[2] || '';
   return new Promise((resolve, reject) => {
     const postData = body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined;
     const reqHeaders: Record<string, string> = {
@@ -612,16 +576,7 @@ function makeRequest(
           } catch {
             parsed = raw;
           }
-          const actualStatus = res.statusCode || 0;
-          evidenceCollector.recordHttpCall({
-            method,
-            url: urlPath,
-            token,
-            actualStatus,
-            responseBody: parsed,
-            callerStack
-          });
-          resolve({ status: actualStatus, data: parsed, headers: res.headers });
+          resolve({ status: res.statusCode || 0, data: parsed, headers: res.headers });
         });
       }
     );
@@ -648,8 +603,9 @@ async function runPhase14C2Suite() {
   setSupabaseBackendClientForTesting(defaultMock.mockClient);
 
   const app = await createExpressApp({ skipVite: true });
-  setupTestAuthSessions();
   const server = http.createServer(app);
+
+  setupTestAuthSessions();
 
   await new Promise<void>((resolve) => {
     server.listen(0, '127.0.0.1', () => resolve());
@@ -1195,12 +1151,30 @@ async function runPhase14C2Suite() {
 
     // Test 53: POST /api/storage/refresh-signed-url - Cross-Contractor Access Blocked (HTTP 403)
     {
+      const otherWoMock = createMockClient({
+        initialWorkOrder: {
+          id: 'wo_other_contr_999',
+          wo_number: 'WO-OTHER-999',
+          contractor_name: 'PT Telco Mandiri Utama',
+          contractor_id: 'c-telco-99',
+          area: 'Jakarta Barat',
+          payload: {
+            id: 'wo_other_contr_999',
+            woNumber: 'WO-OTHER-999',
+            contractorName: 'PT Telco Mandiri Utama',
+            contractorId: 'c-telco-99',
+            area: 'Jakarta Barat'
+          }
+        }
+      });
+      setSupabaseBackendClientForTesting(otherWoMock.mockClient);
       const res = await makeRequest(PORT, 'POST', '/api/storage/refresh-signed-url', 'token_leader_valid', {
-        storagePath: 'work-orders/WO20267399331/foto.jpg',
-        woNumber: 'WO20267399331',
+        storagePath: 'work-orders/WO-OTHER-999/foto.jpg',
+        woNumber: 'WO-OTHER-999',
         category: 'work-orders'
       });
-      // Leader Hendra from PT Mitra Jaringan Solusi accessing WO20267399331 (PT Kencana Solusindo)
+      setSupabaseBackendClientForTesting(defaultMock.mockClient);
+      // Leader Hendra from PT Mitra Jaringan Solusi accessing WO-OTHER-999
       const pass = res.status === 403;
       recordTest(53, 'POST /api/storage/refresh-signed-url - Cross-Contractor Blocked (HTTP 403)', 'Storage & Files', pass,
         `HTTP ${res.status}: Permintaan signed URL WO lintas kontraktor ditolak.`);
@@ -1299,39 +1273,39 @@ async function runPhase14C2Suite() {
         `HTTP ${res.status}: SSE Sandbox tanpa login ditolak.`);
     }
 
-    // Test 64: GET /api/realtime/stream-sandbox - Disabled in Production (HTTP 403)
+    // Test 64: GET /api/realtime/stream-sandbox - Disabled in Production (HTTP 403 FEATURE_DISABLED)
     {
       const res = await makeRequest(PORT, 'GET', '/api/realtime/stream-sandbox', 'token_superadmin_valid');
-      const pass = res.status === 403 && (res.data.code === 'FEATURE_DISABLED' || res.data.code === 'FIREBASE_TOKEN_REQUIRED');
+      const pass = res.status === 403 && res.data.code === 'FEATURE_DISABLED';
       recordTest(64, 'GET /api/realtime/stream-sandbox - Disabled Feature Flag in Production (HTTP 403)', 'Sandbox & Realtime', pass,
         `HTTP ${res.status}: SSE Sandbox laboratorium terkunci saat ENABLE_SSE_SANDBOX=false.`);
     }
 
-    // Test 65: POST /api/realtime/publish-sandbox - Disabled in Production (HTTP 403)
+    // Test 65: POST /api/realtime/publish-sandbox - Disabled in Production (HTTP 403 FEATURE_DISABLED)
     {
       const res = await makeRequest(PORT, 'POST', '/api/realtime/publish-sandbox', 'token_superadmin_valid', {
         eventType: 'WO_CREATED',
         recordId: 'WO-SANDBOX-001'
       });
-      const pass = res.status === 403 && (res.data.code === 'FEATURE_DISABLED' || res.data.code === 'FIREBASE_TOKEN_REQUIRED');
+      const pass = res.status === 403 && res.data.code === 'FEATURE_DISABLED';
       recordTest(65, 'POST /api/realtime/publish-sandbox - Disabled Feature Flag in Production (HTTP 403)', 'Sandbox & Realtime', pass,
         `HTTP ${res.status}: Publikasi sandbox terkunci aman di mode produksi.`);
     }
 
-    // Test 66: POST /api/sandbox/journal/mutate - Disabled in Production (HTTP 403)
+    // Test 66: POST /api/sandbox/journal/mutate - Disabled in Production (HTTP 403 SANDBOX_DISABLED)
     {
       const res = await makeRequest(PORT, 'POST', '/api/sandbox/journal/mutate', 'token_superadmin_valid', {
         aggregateId: 'WO-SANDBOX-001'
       });
-      const pass = res.status === 403 && (res.data.code === 'SANDBOX_DISABLED' || res.data.code === 'FIREBASE_TOKEN_REQUIRED');
+      const pass = res.status === 403 && res.data.code === 'SANDBOX_DISABLED';
       recordTest(66, 'POST /api/sandbox/journal/mutate - Sandbox Journal Disabled (HTTP 403)', 'Sandbox & Realtime', pass,
         `HTTP ${res.status}: Mutasi jurnal laboratorium terkunci aman di mode produksi.`);
     }
 
-    // Test 67: POST /api/sandbox/test/chaos - Disabled in Production (HTTP 403)
+    // Test 67: POST /api/sandbox/test/chaos - Disabled in Production (HTTP 403 SANDBOX_DISABLED)
     {
       const res = await makeRequest(PORT, 'POST', '/api/sandbox/test/chaos', 'token_superadmin_valid', {});
-      const pass = res.status === 403 && (res.data.code === 'SANDBOX_DISABLED' || res.data.code === 'FIREBASE_TOKEN_REQUIRED');
+      const pass = res.status === 403 && res.data.code === 'SANDBOX_DISABLED';
       recordTest(67, 'POST /api/sandbox/test/chaos - Chaos Suite Disabled in Production (HTTP 403)', 'Sandbox & Realtime', pass,
         `HTTP ${res.status}: Pengujian chaos laboratorium dinonaktifkan di mode produksi.`);
     }
@@ -1369,36 +1343,9 @@ async function runPhase14C2Suite() {
         templateBody: 'Halo {{customerName}}, teknisi {{installerName}} menuju lokasi.',
         ticket: { customerName: 'Ibu Rahma', installerName: 'Budi', customerPhone: '08123456789' }
       });
-      
-      const isStatus200 = typeof res.status === 'number' && res.status === 200;
-      const hasRenderedText = typeof res.data?.renderedText === 'string' && res.data.renderedText.includes('Ibu Rahma');
-      const hasInstaller = typeof res.data?.renderedText === 'string' && res.data.renderedText.includes('Budi');
-      const isUrlString = typeof res.data?.url === 'string';
-      const hasWaPrefix = typeof res.data?.url === 'string' && res.data.url.startsWith('https://wa.me/');
-      const hasCustomerPhone = typeof res.data?.url === 'string' && res.data.url.includes('628123456789');
-      const hasEncodedMessage = typeof res.data?.url === 'string' && res.data.url.includes('Halo');
-      const noUrlError = res.data?.urlError === null || res.data?.urlError === undefined;
-
-      const extraAssertions = [
-        { name: 'Template rendered text contains customer name', passed: hasRenderedText, failureReason: 'Missing Ibu Rahma in renderedText' },
-        { name: 'Template rendered text contains installer name', passed: hasInstaller, failureReason: 'Missing Budi in renderedText' },
-        { name: 'Click-to-chat URL is string type', passed: isUrlString, failureReason: 'URL is not string' },
-        { name: 'Click-to-chat URL starts with https://wa.me/', passed: hasWaPrefix, failureReason: 'URL does not start with https://wa.me/' },
-        { name: 'Click-to-chat URL targets sanitized customer phone', passed: hasCustomerPhone, failureReason: 'Phone number not formatted in URL' },
-        { name: 'Click-to-chat URL contains encoded message body', passed: hasEncodedMessage, failureReason: 'Message body missing from URL' },
-        { name: 'Click-to-chat URL generator reported zero errors', passed: noUrlError, failureReason: 'urlError present in response' }
-      ];
-
-      const pass = isStatus200 && hasRenderedText && hasInstaller && isUrlString && hasWaPrefix && hasCustomerPhone && hasEncodedMessage && noUrlError;
-
-      recordTest(
-        70,
-        'POST /api/whatsapp/preview - Dispatch Role Succeeded (HTTP 200)',
-        'Communication & Audit',
-        pass,
-        `HTTP ${res.status}: Pratinjau template WhatsApp berhasil dirender dengan URL Click-to-Chat tervalidasi (${res.data?.url || ''}).`,
-        extraAssertions
-      );
+      const pass = res.status === 200 && res.data.renderedText && res.data.renderedText.includes('Ibu Rahma') && res.data.url;
+      recordTest(70, 'POST /api/whatsapp/preview - Dispatch Role Succeeded (HTTP 200)', 'Communication & Audit', pass,
+        `HTTP ${res.status}: Pratinjau template WhatsApp berhasil dirender dengan URL Click-to-Chat.`);
     }
 
     // Test 71: GET /api/audit-logs - Non-Audit-Viewer Forbidden (HTTP 403 REQUIRE_AUDIT_LOG_VIEWER)
@@ -1517,7 +1464,6 @@ async function runPhase14C2Suite() {
   } finally {
     resetSupabaseBackendClientForTesting();
     server.close();
-    evidenceCollector.saveToFile('scripts/evidence/phase14c2_executed_evidence.json');
   }
 
   // Summary

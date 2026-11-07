@@ -57,13 +57,14 @@ import { WhatsAppSendModal } from './components/whatsapp/WhatsAppSendModal';
 
 import { Ticket } from './types';
 import { Menu, Database } from 'lucide-react';
+import { MoraJawsErrorBoundary } from './components/common/MoraJawsErrorBoundary';
 
 const MainLayout: React.FC = () => {
   const { currentUser, isLoggedIn, tickets, openOfflineSyncCenter, getTicketUnreadCount } = useApp();
   const { config, setSidebarState, isMobileView } = useUIConfig();
   const { toast } = useToast();
 
-  const isInstaller = currentUser.role === 'installer';
+  const isInstaller = Boolean(isLoggedIn && currentUser?.role === 'installer');
 
   const installerAllowedTabs = useMemo(
     () => [
@@ -83,9 +84,11 @@ const MainLayout: React.FC = () => {
 
   // Initial active tab resolution: URL hash > localStorage > Role Default
   const getInitialActiveTab = (): string => {
+    if (!isLoggedIn) return 'dashboard';
+    const role = currentUser?.role;
     try {
       const hash = window.location.hash.replace('#', '').trim();
-      const saved = localStorage.getItem(`morajaws_active_tab_${currentUser.id || currentUser.role}`);
+      const saved = localStorage.getItem(`morajaws_active_tab_${currentUser?.id || role}`);
 
       if (isInstaller) {
         if (hash && installerAllowedTabs.includes(hash)) return hash;
@@ -97,10 +100,10 @@ const MainLayout: React.FC = () => {
       if (saved) return saved;
     } catch (e) {}
 
-    if (currentUser.role === 'installer') return 'installer_dashboard';
-    if (currentUser.role === 'leader') return 'wo_assignment';
-    if (currentUser.role === 'management_data') return 'management_data_portal';
-    if (currentUser.role === 'dispatch') return 'tickets';
+    if (role === 'installer') return 'installer_dashboard';
+    if (role === 'leader') return 'wo_assignment';
+    if (role === 'management_data') return 'management_data_portal';
+    if (role === 'dispatch') return 'tickets';
     return 'dashboard';
   };
 
@@ -186,8 +189,8 @@ const MainLayout: React.FC = () => {
 
   // Scoped unassigned tickets count for Leader's contractor
   const leaderUnassignedCount = useMemo(() => {
-    if (currentUser.role !== 'leader') return 0;
-    const myContractor = (currentUser.contractor || '').toLowerCase().trim();
+    if (!isLoggedIn || currentUser?.role !== 'leader') return 0;
+    const myContractor = (currentUser?.contractor || '').toLowerCase().trim();
     return tickets.filter(t => {
       if (t.isArchived || t.isDeleted) return false;
       if (t.installerName) return false;
@@ -195,7 +198,7 @@ const MainLayout: React.FC = () => {
       const tContractor = (t.contactorName || t.contractorName || '').toLowerCase().trim();
       return tContractor.includes(myContractor) || myContractor.includes(tContractor);
     }).length;
-  }, [tickets, currentUser]);
+  }, [isLoggedIn, tickets, currentUser]);
 
   // Helper matching for logged-in technician
   const isInstallerMatch = (ticketInstaller: string | undefined, installerName: string) => {
@@ -211,14 +214,14 @@ const MainLayout: React.FC = () => {
 
   // Scoped pending tickets count for logged-in Installer
   const installerPendingCount = useMemo(() => {
-    if (!isInstaller) return 0;
-    const myName = (currentUser.name || '').toLowerCase().trim();
-    const myId = currentUser.id || '';
-    const myUsername = (currentUser.username || '').toLowerCase().trim();
+    if (!isLoggedIn || !isInstaller) return 0;
+    const myName = (currentUser?.name || '').toLowerCase().trim();
+    const myId = currentUser?.id || '';
+    const myUsername = (currentUser?.username || '').toLowerCase().trim();
 
     return tickets.filter(t => {
       if (t.isArchived || t.isDeleted) return false;
-      const assigned = t.assignedTo === myId || t.assignedTo === myUsername;
+      const assigned = (myId && t.assignedTo === myId) || (myUsername && t.assignedTo === myUsername);
       const tInst = (t.installerName || '').toLowerCase().trim();
       const nameMatch =
         (myName && (tInst === myName || isInstallerMatch(t.installerName, myName))) ||
@@ -228,18 +231,18 @@ const MainLayout: React.FC = () => {
       const cat = classifyInstallerStatus(t);
       return cat === 'pending';
     }).length;
-  }, [isInstaller, tickets, currentUser]);
+  }, [isLoggedIn, isInstaller, tickets, currentUser]);
 
   // Scoped unread chat count for logged-in Installer
   const installerUnreadChatCount = useMemo(() => {
-    if (!isInstaller) return 0;
-    const myName = (currentUser.name || '').toLowerCase().trim();
-    const myId = currentUser.id || '';
-    const myUsername = (currentUser.username || '').toLowerCase().trim();
+    if (!isLoggedIn || !isInstaller) return 0;
+    const myName = (currentUser?.name || '').toLowerCase().trim();
+    const myId = currentUser?.id || '';
+    const myUsername = (currentUser?.username || '').toLowerCase().trim();
 
     return tickets.reduce((total, t) => {
       if (t.isArchived || t.isDeleted) return total;
-      const assigned = t.assignedTo === myId || t.assignedTo === myUsername;
+      const assigned = (myId && t.assignedTo === myId) || (myUsername && t.assignedTo === myUsername);
       const tInst = (t.installerName || '').toLowerCase().trim();
       const nameMatch =
         (myName && (tInst === myName || isInstallerMatch(t.installerName, myName))) ||
@@ -248,7 +251,7 @@ const MainLayout: React.FC = () => {
 
       return total + (getTicketUnreadCount(t.id) > 0 ? 1 : 0);
     }, 0);
-  }, [isInstaller, tickets, currentUser, getTicketUnreadCount]);
+  }, [isLoggedIn, isInstaller, tickets, currentUser, getTicketUnreadCount]);
 
   // Unauthenticated Staff Protection: Render dedicated Staff Login Portal
   if (!isLoggedIn) {
@@ -816,7 +819,9 @@ export default function App() {
           <MoraJawsSoundProvider>
             <AppProvider>
               <UIConfigProvider>
-                <MainLayout />
+                <MoraJawsErrorBoundary fallbackTitle="Kendala Antarmuka MoraJaws">
+                  <MainLayout />
+                </MoraJawsErrorBoundary>
               </UIConfigProvider>
             </AppProvider>
           </MoraJawsSoundProvider>
