@@ -97,7 +97,7 @@ export async function signInWithSupabaseAuth(
       };
     }
 
-    // Strict account status checks before calling Supabase Auth
+    // Strict account status and role checks before calling Supabase Auth
     if (authoritativeUser.isDeleted) {
       return {
         success: false,
@@ -118,6 +118,24 @@ export async function signInWithSupabaseAuth(
       };
     }
 
+    const VALID_MORAJAWS_ROLES: ServerUser['role'][] = [
+      'super_admin',
+      'dispatch',
+      'leader',
+      'installer',
+      'management_data',
+      'it_support'
+    ];
+    if (!VALID_MORAJAWS_ROLES.includes(authoritativeUser.role)) {
+      return {
+        success: false,
+        error: {
+          code: 'INVALID_ROLE',
+          message: 'Peran akun staf tidak valid atau tidak memiliki otorisasi akses ke MoraJaws.'
+        }
+      };
+    }
+
     // 2. Perform Supabase Auth Sign In with password
     const { data: authData, error: authError } = await client.auth.signInWithPassword({
       email: targetEmail,
@@ -128,13 +146,60 @@ export async function signInWithSupabaseAuth(
       return {
         success: false,
         error: {
-          code: authError?.status === 400 ? 'auth/wrong-password' : (authError?.status ? `AUTH_${authError.status}` : 'AUTH_INVALID_CREDENTIALS'),
+          code: 'auth/wrong-password',
           message: 'Autentikasi gagal. Kredensial kata sandi salah. Pastikan kata sandi yang Anda masukkan benar.'
         }
       };
     }
 
-    const { passwordHash: _, ...safeUser } = authoritativeUser;
+    // 3. Validate Auth UID against authoritative staff profile
+    const authUid = authData.user.id;
+    if (authoritativeUser.authUserId && authoritativeUser.authUserId !== authUid) {
+      return {
+        success: false,
+        error: {
+          code: 'AUTH_UID_MISMATCH',
+          message: 'Auth UID tidak cocok dengan profil staf terdaftar. Akses ditolak demi integritas keamanan.'
+        }
+      };
+    }
+
+    // Associate Auth UID if not yet linked
+    if (!authoritativeUser.authUserId && authoritativeUser.id !== authUid) {
+      authoritativeUser.authUserId = authUid;
+      try {
+        const { updateUserInSupabase } = await import('./supabaseAdapter.ts');
+        await updateUserInSupabase(authoritativeUser.id, { authUserId: authUid } as any);
+      } catch {}
+    }
+
+    // 4. Fetch fresh staff profile from users table (Step 8)
+    const freshRes = await findUserInSupabaseDetailed(authoritativeUser.id);
+    if (!freshRes.success || !freshRes.data) {
+      return {
+        success: false,
+        error: {
+          code: 'PROFILE_NOT_FOUND',
+          message: 'Profil staf MoraJaws tidak ditemukan dalam direktori authoritative.'
+        }
+      };
+    }
+
+    const freshProfile = freshRes.data;
+    if (freshProfile.isDeleted) {
+      return {
+        success: false,
+        error: { code: 'ACCOUNT_DELETED', message: 'Akun Anda telah dihapus dari sistem MoraJaws.' }
+      };
+    }
+    if (!freshProfile.active) {
+      return {
+        success: false,
+        error: { code: 'ACCOUNT_DISABLED', message: 'Akun Anda telah dinonaktifkan oleh Administrator.' }
+      };
+    }
+
+    const { passwordHash: _, ...safeUser } = freshProfile;
     const sessionTokens: SupabaseAuthTokens = {
       accessToken: authData.session.access_token,
       refreshToken: authData.session.refresh_token,
@@ -147,10 +212,10 @@ export async function signInWithSupabaseAuth(
       success: true,
       data: {
         tokens: sessionTokens,
-        authUserId: authData.user.id,
+        authUserId: authUid,
         email: authData.user.email || targetEmail,
         user: safeUser,
-        sessionVersion: authoritativeUser.sessionVersion || 1
+        sessionVersion: freshProfile.sessionVersion || 1
       }
     };
   } catch (err: any) {
@@ -167,6 +232,7 @@ export async function signInWithSupabaseAuth(
 /**
  * Verifies a Supabase Auth JWT token and resolves the authoritative MoraJaws user profile.
  * - Verifies cryptographic token validity with Supabase Auth (getUser).
+ * - Distinguishes TOKEN_EXPIRED from TOKEN_INVALID.
  * - Queries authoritative PostgreSQL record (never trusts unverified JWT claims).
  * - Enforces account active status and soft-delete checks.
  * - Enforces sessionVersion validity.
@@ -195,11 +261,15 @@ export async function verifySupabaseAuthToken(
     const { data: userData, error: userError } = await client.auth.getUser(token.trim());
 
     if (userError || !userData?.user) {
+      const errMsg = (userError?.message || '').toLowerCase();
+      const isExpired = errMsg.includes('expired');
       return {
         success: false,
         error: {
-          code: 'TOKEN_INVALID',
-          message: userError?.message || 'Token Supabase Auth tidak valid atau telah kedaluwarsa.'
+          code: isExpired ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID',
+          message: isExpired
+            ? 'Token Supabase Auth telah kedaluwarsa. Silakan login kembali.'
+            : (userError?.message || 'Token Supabase Auth tidak valid atau telah kedaluwarsa.')
         }
       };
     }
@@ -228,6 +298,17 @@ export async function verifySupabaseAuthToken(
       };
     }
 
+    // 2.B. Validate Auth UID consistency
+    if (profile.authUserId && profile.authUserId !== authUser.id) {
+      return {
+        success: false,
+        error: {
+          code: 'AUTH_UID_MISMATCH',
+          message: 'Auth UID token tidak cocok dengan profil staf terdaftar.'
+        }
+      };
+    }
+
     // 3. Verify Active and Not Deleted
     if (profile.isDeleted) {
       return {
@@ -244,7 +325,8 @@ export async function verifySupabaseAuthToken(
     }
 
     // 4. Session version check if expected
-    if (expectedSessionVersion !== undefined && (profile.sessionVersion || 1) !== expectedSessionVersion) {
+    const authoritativeVersion = profile.sessionVersion || 1;
+    if (expectedSessionVersion !== undefined && authoritativeVersion !== expectedSessionVersion) {
       return {
         success: false,
         error: { code: 'SESSION_REVOKED', message: 'Sesi login telah dicabut karena perubahan akun atau logout.' }

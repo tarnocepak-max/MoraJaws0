@@ -1,8 +1,8 @@
 {
   "suite": "Phase14C.2",
-  "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+  "test_run_id": "run_phase14c2_1794035702213_dq9oww",
   "environment": "isolated_mock_staging_loopback",
-  "generated_at": "2026-11-06T21:56:37.017Z",
+  "generated_at": "2026-11-07T07:15:02.470Z",
   "total_http_calls_executed": 80,
   "all_passed": true,
   "evidence": [
@@ -27,17 +27,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.804Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.273Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/bootstrap - Unauthenticated returns safe sanitized response",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.805Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.273Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.803Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.271Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -61,17 +61,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.809Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.277Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/bootstrap - Database Failure Returns HTTP 503 Fail-Closed",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.809Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.277Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.809Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.277Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -96,17 +96,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.832Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.295Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/auth/supabase-login - Missing Credentials Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.832Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.295Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.832Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.294Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "INVALID_INPUT"
     },
@@ -131,17 +131,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.835Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.298Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/auth/supabase-refresh - Missing Token Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.836Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.298Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.835Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.298Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "INVALID_INPUT"
     },
@@ -166,17 +166,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.839Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.301Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/auth/supabase-logout - Unauthenticated Rejected (HTTP 401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.839Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.301Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.839Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.301Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -201,17 +201,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.843Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.305Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/auth/supabase-logout - Authenticated Logout Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.843Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.305Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.843Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.305Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Sesi Supabase Auth berhasil diakhiri."
     },
@@ -236,17 +236,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.845Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.308Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/auth/supabase-reset-password - Missing Email Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.845Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.308Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.845Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.308Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "INVALID_INPUT"
     },
@@ -271,17 +271,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.848Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.310Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/auth/change-password - Password < 8 Chars Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.848Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.310Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.848Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.310Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "PASSWORD_TOO_SHORT"
     },
@@ -306,17 +306,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.851Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.314Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/auth/change-password - Default Password Prohibited (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.851Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.314Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.851Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.314Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "CANNOT_USE_DEFAULT_PASSWORD"
     },
@@ -341,17 +341,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.853Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.316Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/auth/me - Unauthenticated Rejected (HTTP 401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.853Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.316Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.853Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.316Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -376,17 +376,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.855Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.318Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/auth/me - Returns Safe Profile Without Password Hash (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.855Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.318Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.855Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.318Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -410,17 +410,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.858Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.321Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/tickets/search - Unauthenticated Rejected (HTTP 401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.858Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.321Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.858Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.320Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -445,17 +445,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.860Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.323Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/tickets/search - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.860Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.323Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.860Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.323Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_ADMIN_OR_DISPATCH"
     },
@@ -480,17 +480,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.887Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.344Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/tickets/search - Dispatch Role Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.887Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.344Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.887Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.344Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -514,17 +514,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.890Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.346Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/tickets/search - DB Failure Returns HTTP 503 Fail-Closed",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.890Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.346Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.890Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.346Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -549,17 +549,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.892Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.348Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/tickets/sameday - Unauthenticated Rejected (HTTP 401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.892Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.348Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.892Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.348Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -584,17 +584,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.895Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.350Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/tickets/sameday - Leader Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.895Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.350Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.895Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.350Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_DISPATCH_ROLE"
     },
@@ -619,17 +619,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.897Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.352Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/tickets/sameday - Incomplete Fields Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.897Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.352Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.896Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.352Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Field wajib WO Number, Nama Pelanggan, dan No. HP harus diisi."
     },
@@ -654,17 +654,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.899Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.355Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/tickets/bulk-delete - Non-Management-Data Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.899Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.355Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.899Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.355Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_MANAGEMENT_DATA"
     },
@@ -689,17 +689,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.901Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.357Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/tickets/bulk-delete - Reason < 5 Chars Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.901Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.357Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.901Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.357Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Alasan penghapusan massal wajib minimal 5 karakter."
     },
@@ -724,17 +724,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.903Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.359Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/tickets/bulk-delete - Protected WO Immutably Shielded (Count 0)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.903Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.359Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.903Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.359Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Berhasil menghapus 0 Work Order."
     },
@@ -759,17 +759,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.905Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.361Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/tickets/purge-by-date - Leader Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.905Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.361Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.905Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.360Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_MANAGEMENT_DATA"
     },
@@ -794,17 +794,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.907Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.363Z"
         },
         {
           "assertion_name": "Functional Check: DELETE /api/tickets/batch/:date - Missing Reason Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.907Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.363Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.907Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.363Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Alasan penghapusan batch wajib diisi minimal 5 karakter."
     },
@@ -829,17 +829,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.910Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.366Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/work-orders - Unauthenticated Rejected (HTTP 401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.910Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.366Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.910Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.366Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -864,17 +864,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.914Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.370Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/work-orders/:id - Leader Cross-Contractor Access Blocked (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.914Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.370Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.914Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.370Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Anda tidak memiliki wewenang untuk melihat data Work Order ini."
     },
@@ -899,17 +899,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.916Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.372Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/work-orders/:id/assign - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.916Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.372Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.916Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.372Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_LEADER_ROLE"
     },
@@ -934,17 +934,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.919Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.375Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/work-orders/:id/assign - Protected WO Shielded (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.919Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.375Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.918Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.375Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "PROTECTED_PRODUCTION_RECORD"
     },
@@ -969,17 +969,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.921Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.377Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/work-orders/:id/reassign - Reason < 5 Chars Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.921Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.377Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.921Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.377Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Alasan reassign wajib minimal 5 karakter."
     },
@@ -1004,17 +1004,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.923Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.378Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/sessions - Unauthenticated Rejected (HTTP 401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.923Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.378Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.923Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.378Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -1039,17 +1039,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.924Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.379Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/sessions - Leader Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.924Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.379Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.924Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.379Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_SUPER_ADMIN"
     },
@@ -1074,17 +1074,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.927Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.381Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/sessions - Super Admin Gets Sanitized Sessions (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.927Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.381Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.926Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.381Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1108,17 +1108,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.928Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.383Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/sessions/revoke - Cross-User Revocation Blocked (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.928Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.383Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.928Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.383Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Anda hanya dapat mencabut sesi Anda sendiri."
     },
@@ -1143,17 +1143,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.930Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.385Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/sessions/config - Dispatch Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.930Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.385Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.930Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.385Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_SUPER_ADMIN"
     },
@@ -1178,17 +1178,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.932Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.387Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/sessions/config - Super Admin Updates Config (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.932Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.387Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.932Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.387Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Konfigurasi sesi berhasil diperbarui."
     },
@@ -1213,17 +1213,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.934Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.388Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/admin/backup/download - Query ?token= Strictly Forbidden (HTTP 401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.934Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.388Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.934Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.388Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "QUERY_TOKEN_FORBIDDEN"
     },
@@ -1248,17 +1248,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.936Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.390Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/admin/backup/download - Leader Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.936Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.390Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.936Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.390Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_BACKUP_PERMISSION"
     },
@@ -1283,17 +1283,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.938Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.391Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/system/operational-date - Public Read Operational Date (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.938Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.391Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.937Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.391Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1317,17 +1317,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.939Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.393Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/system/operational-date - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.939Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.393Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.939Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.393Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Perubahan tanggal operasional hanya dapat dilakukan oleh Super Admin atau Dispatch."
     },
@@ -1352,17 +1352,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.940Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.394Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/sheets/config - Dispatch Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.940Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.394Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.940Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.394Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_SUPER_ADMIN"
     },
@@ -1387,17 +1387,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.942Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.396Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/sheets/config - Super Admin Updates Config (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.942Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.396Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.942Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.396Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1421,17 +1421,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.944Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.398Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/integrations/google-sheets/status - Unauthenticated Rejected (HTTP 401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.944Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.398Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.943Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.398Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -1456,17 +1456,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.945Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.399Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/integrations/google-sheets/status - Authenticated Safe Read (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.945Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.399Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.945Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.399Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1490,17 +1490,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.947Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.401Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/integrations/google-sheets/test - Leader Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.947Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.401Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.946Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.401Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_SUPER_ADMIN"
     },
@@ -1525,17 +1525,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.948Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.403Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/integrations/google-sheets/test - Empty ID Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.948Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.403Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.948Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.403Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Spreadsheet ID atau URL spreadsheet wajib diisi."
     },
@@ -1560,17 +1560,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.950Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.405Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/integrations/google-sheets/sync - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.950Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.405Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.950Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.404Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_SUPER_ADMIN"
     },
@@ -1595,17 +1595,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.952Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.407Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/sync/run - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.952Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.407Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.952Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.407Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Hanya Super Admin, Dispatch, dan Management Data yang dapat menjalankan sinkronisasi."
     },
@@ -1630,19 +1630,19 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.954Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.409Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/sync/run - Dispatch Role Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.954Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.409Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.954Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.409Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
-      "response_summary": "Verifikasi data operasional internal selesai: 5 Work Orders aktif, 10 pengguna terverifikasi."
+      "response_summary": "Verifikasi data operasional internal selesai: 9 Work Orders aktif, 16 pengguna terverifikasi."
     },
     {
       "suite": "Phase14C.2",
@@ -1665,17 +1665,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.955Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.411Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/sync/status - Authenticated Returns Status (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.955Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.411Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.955Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.411Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1699,17 +1699,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.957Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.412Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/attachments - Unauthenticated Rejected (HTTP 401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.957Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.412Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.957Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.412Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -1734,17 +1734,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (415)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.960Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.414Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/attachments - Disallowed Executable MIME Rejected (HTTP 415)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.960Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.414Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.960Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.414Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Format file tidak diizinkan (application/x-msdownload). Hanya file gambar (JPG, PNG, WEBP), PDF, dan dokumen teks yang diizinkan."
     },
@@ -1769,17 +1769,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.961Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.416Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/attachments - Valid Image Attachment Upload Succeeded (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.961Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.416Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.961Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.416Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1803,17 +1803,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.963Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.418Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/storage/test-upload - Magic Byte Disguise Blocked (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.963Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.418Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.963Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.418Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Integritas file tidak valid: header file bukan format JPEG yang sah."
     },
@@ -1838,17 +1838,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.965Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.420Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/storage/refresh-signed-url - Cross-Contractor Blocked (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.965Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.420Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.965Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.420Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Ditolak: Work Order WO20267399331 dikelola oleh kontraktor \"pt kencana solusindo\", di luar wewenang Leader \"PT Mitra Jaringan Solusi\"."
     },
@@ -1873,17 +1873,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.966Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.421Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/storage/download - Missing Storage Path Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.966Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.421Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.966Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.421Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Query parameter storagePath wajib disertakan."
     },
@@ -1908,17 +1908,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.968Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.423Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/storage/adapter/config - Public Inspection Zero Secrets (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.968Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.423Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.968Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.423Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1942,17 +1942,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.969Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.424Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/supabase/work-orders/:id/archive - Leader Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.969Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.424Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.969Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.424Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_ARCHIVE_PERMISSION"
     },
@@ -1977,17 +1977,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.971Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.426Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/supabase/work-orders/:id/archive - Protected Record Shielded (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.971Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.426Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.971Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.426Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "PROTECTED_RECORD"
     },
@@ -2012,17 +2012,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.973Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.428Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/supabase/work-orders/:id/restore - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.973Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.428Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.973Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.428Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_RESTORE_PERMISSION"
     },
@@ -2047,17 +2047,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.975Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.429Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/supabase/work-orders/:id/restore - Protected Record Shielded (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.975Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.429Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.974Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.429Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "PROTECTED_RECORD"
     },
@@ -2082,17 +2082,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.977Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.431Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/supabase/work-orders/bulk-import - Leader Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.977Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.431Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.977Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.431Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_IMPORT_PERMISSION"
     },
@@ -2117,17 +2117,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.978Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.433Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/supabase/users/:id/reset-password - Leader Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.978Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.433Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.978Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.432Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_SUPER_ADMIN"
     },
@@ -2152,17 +2152,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.980Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.434Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/supabase/phase8-shadow-dryrun - Dispatch Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.980Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.434Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.980Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.434Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_SUPER_ADMIN"
     },
@@ -2187,17 +2187,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.982Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.436Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/realtime/stream-sandbox - Unauthenticated Rejected (HTTP 401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.982Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.436Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.982Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.435Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -2222,17 +2222,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.983Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.437Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/realtime/stream-sandbox - Disabled Feature Flag in Production (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.983Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.437Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.983Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.437Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "FIREBASE_TOKEN_REQUIRED"
     },
@@ -2257,17 +2257,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.985Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.439Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/realtime/publish-sandbox - Disabled Feature Flag in Production (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.985Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.439Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.985Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.439Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "FIREBASE_TOKEN_REQUIRED"
     },
@@ -2292,17 +2292,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.987Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.440Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/sandbox/journal/mutate - Sandbox Journal Disabled (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.987Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.440Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.986Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.440Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "FIREBASE_TOKEN_REQUIRED"
     },
@@ -2327,17 +2327,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.988Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.442Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/sandbox/test/chaos - Chaos Suite Disabled in Production (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.988Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.442Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.988Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.442Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "FIREBASE_TOKEN_REQUIRED"
     },
@@ -2362,17 +2362,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.990Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.444Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/whatsapp/preview - Unauthenticated Rejected (HTTP 401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.990Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.444Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.990Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.444Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -2397,17 +2397,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.993Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.446Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/whatsapp/preview - Leader Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.993Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.446Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.993Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.445Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_TEMPLATE_MANAGER"
     },
@@ -2432,47 +2432,47 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.995Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.448Z"
         },
         {
           "assertion_name": "Template rendered text contains customer name",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.995Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.448Z"
         },
         {
           "assertion_name": "Template rendered text contains installer name",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.995Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.448Z"
         },
         {
           "assertion_name": "Click-to-chat URL is string type",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.995Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.448Z"
         },
         {
           "assertion_name": "Click-to-chat URL starts with https://wa.me/",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.995Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.448Z"
         },
         {
           "assertion_name": "Click-to-chat URL targets sanitized customer phone",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.995Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.448Z"
         },
         {
           "assertion_name": "Click-to-chat URL contains encoded message body",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.995Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.448Z"
         },
         {
           "assertion_name": "Click-to-chat URL generator reported zero errors",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.995Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.448Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.995Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.448Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2496,17 +2496,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.997Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.450Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/audit-logs - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.997Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.450Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.997Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.450Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_AUDIT_LOG_VIEWER"
     },
@@ -2531,17 +2531,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.999Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.452Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/audit-logs - IT Support Role Succeeded (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:36.999Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.452Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:36.999Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.451Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2565,17 +2565,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.001Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.453Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/audit-logs - Database Failure Handled Fail-Closed (HTTP 503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.001Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.453Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:37.000Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.453Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -2600,17 +2600,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (405)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.002Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.455Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/audit-logs - Direct HTTP Write Blocked (HTTP 405)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.002Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.455Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:37.002Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.455Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "METHOD_NOT_ALLOWED"
     },
@@ -2635,17 +2635,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.004Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.457Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/settings - Authenticated Succeeded (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.004Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.457Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:37.004Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.457Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2669,17 +2669,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.006Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.459Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/reports - Technical Reports Scoped by Role (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.006Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.459Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:37.006Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.459Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2703,17 +2703,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.008Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.461Z"
         },
         {
           "assertion_name": "Functional Check: GET /api/tickets/:id/messages - Leader Cross-Contractor Chat Blocked (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.008Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.461Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:37.008Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.461Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Leader hanya dapat memantau percakapan dalam cakupan contractor dan area yang ditetapkan."
     },
@@ -2738,17 +2738,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.010Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.463Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/tickets/:id/messages - Leader Sending Chat Blocked (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.010Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.463Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:37.010Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.463Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "LEADER_READ_ONLY_CHAT"
     },
@@ -2773,17 +2773,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.014Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.467Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/tickets/:id/messages - Installer Progress Chat Succeeded (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.014Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.467Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:37.014Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.466Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "[object Object]"
     },
@@ -2808,17 +2808,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.016Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.468Z"
         },
         {
           "assertion_name": "Functional Check: POST /api/tickets/:id/messages - Database Failure Handled Fail-Closed (HTTP 503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T21:56:37.016Z"
+          "assertion_timestamp": "2026-11-07T07:15:02.468Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T21:56:37.016Z",
-      "test_run_id": "run_phase14c2_1794002196735_j9r1h8",
+      "timestamp": "2026-11-07T07:15:02.468Z",
+      "test_run_id": "run_phase14c2_1794035702213_dq9oww",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     }

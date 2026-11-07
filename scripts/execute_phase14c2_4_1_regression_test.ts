@@ -919,7 +919,10 @@ async function runPhase14C241Suite() {
   for (const item of c1Json.evidence) {
     // If scenario only has the synthetic single functional assertion generated from passed: true:
     const funcAssertions = item.assertion_results?.slice(1) || [];
-    const hasOnlySyntheticAssertion = funcAssertions.length === 1 && funcAssertions[0].assertion_name.startsWith('Functional Assertion:');
+    const hasOnlySyntheticAssertion = funcAssertions.length === 1 && (
+      funcAssertions[0].assertion_name.startsWith('Functional Assertion:') ||
+      funcAssertions[0].assertion_name.startsWith('Functional Check:')
+    );
     if (hasOnlySyntheticAssertion) {
       c1LegacyNonCompliant++;
     }
@@ -927,7 +930,10 @@ async function runPhase14C241Suite() {
 
   for (const item of c2Json.evidence) {
     const funcAssertions = item.assertion_results?.slice(1) || [];
-    const hasOnlySyntheticAssertion = funcAssertions.length === 1 && funcAssertions[0].assertion_name.startsWith('Functional Assertion:');
+    const hasOnlySyntheticAssertion = funcAssertions.length === 1 && (
+      funcAssertions[0].assertion_name.startsWith('Functional Assertion:') ||
+      funcAssertions[0].assertion_name.startsWith('Functional Check:')
+    );
     if (hasOnlySyntheticAssertion) {
       c2LegacyNonCompliant++;
     }

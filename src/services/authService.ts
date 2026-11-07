@@ -198,3 +198,37 @@ export function getAuthHeaders(): Record<string, string> {
   return headers;
 }
 
+/**
+ * Official MoraJaws Supabase Auth client methods communicating through Express backend
+ */
+export async function loginWithSupabase(identifier: string, password: string) {
+  const res = await fetch('/api/auth/supabase-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier: identifier.trim(), password })
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+export async function refreshSupabaseSession(refreshToken: string) {
+  const res = await fetch('/api/auth/supabase-refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken })
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+export async function logoutSupabase() {
+  const headers = getAuthHeaders();
+  const res = await fetch('/api/auth/supabase-logout', {
+    method: 'POST',
+    headers
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+

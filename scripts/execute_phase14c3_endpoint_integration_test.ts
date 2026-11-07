@@ -514,7 +514,7 @@ function createPhase14C3MockClient(options: {
           const file = uploadedStorageFiles.get(storagePath);
           const buf = file ? file.buffer : Buffer.from('mock report file binary content');
           return {
-            data: new Blob([buf], { type: 'image/jpeg' }),
+            data: new Blob([new Uint8Array(buf)], { type: 'image/jpeg' }),
             error: null
           };
         },

@@ -5,6 +5,7 @@ export type DataSyncStatus = 'LOADING' | 'SYNCING' | 'SAVED' | 'OFFLINE' | 'ERRO
 export interface User {
   id: string;
   userId?: string;
+  authUserId?: string;
   name: string;
   username: string;
   email?: string;

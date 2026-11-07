@@ -17,14 +17,12 @@ import {
   KeyRound,
   CheckCircle2
 } from 'lucide-react';
-import { signInStaffWithGoogle } from '../../services/googleSheetsService.ts';
-
 interface StaffLoginPortalProps {
   onLoginSuccess?: (role: UserRole) => void;
 }
 
 export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSuccess }) => {
-  const { login, loginWithFirebase } = useApp();
+  const { login } = useApp();
   const { toast } = useToast();
   const { startLoading, stopLoading, showGlobalError } = useAnimation();
   const [username, setUsername] = useState('');
@@ -32,7 +30,6 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [rememberSession, setRememberSession] = useState(true);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -152,61 +149,6 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setError(null);
-    setGoogleLoading(true);
-    startLoading({
-      title: 'VERIFIKASI GOOGLE AUTH...',
-      subtitle: 'Menghubungkan akun Google ke direktori staf MoraJaws'
-    });
-
-    try {
-      const authResult = await signInStaffWithGoogle();
-      if (!authResult?.user) {
-        throw new Error('Autentikasi Google dibatalkan atau tidak menerima profil.');
-      }
-
-      const email = authResult.user.email || '';
-      const uid = authResult.user.uid || '';
-      const displayName = authResult.user.displayName || '';
-
-      let idToken: string | undefined;
-      try {
-        if (typeof (authResult.user as any).getIdToken === 'function') {
-          idToken = await (authResult.user as any).getIdToken();
-        }
-      } catch (tErr) {}
-
-      const res = await loginWithFirebase({ email, uid, displayName, idToken });
-      if (res.success && res.user) {
-        toast.success(`Berhasil masuk dengan akun Google: ${email}`, 'LOGIN BERHASIL');
-        onLoginSuccess?.(res.user.role);
-      } else {
-        const errDesc = res.error || `Akun Google (${email}) belum didaftarkan di MoraJaws. Hubungi Administrator.`;
-        setError(errDesc);
-        showGlobalError({
-          errorCode: 'MJ-AUTH-001',
-          module: 'Authentication',
-          operation: 'Google Staff SSO',
-          description: 'Akun Google belum terdaftar dalam sistem.',
-          message: 'Akun Google belum terdaftar dalam sistem.',
-          technicalDetails: errDesc,
-          severity: 'MEDIUM',
-          status: 'OPEN'
-        });
-      }
-    } catch (err: any) {
-      const msg = err?.message || '';
-      const sanitized = msg.includes('verifikasi') || msg.includes('verification') || msg.includes('access_denied')
-        ? 'Akses Google dibatasi. Anda dapat masuk langsung menggunakan nama pengguna/email dan kata sandi resmi pada formulir di bawah.'
-        : err?.message || 'Gagal masuk dengan akun Google.';
-      setError(sanitized);
-    } finally {
-      setGoogleLoading(false);
-      stopLoading();
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#160D29] flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 relative overflow-hidden transition-colors selection:bg-[#7135B5] selection:text-white">
       {/* Background ambient lighting in MoraJaws Dark Purple Gloss + Lilac palette */}
@@ -230,7 +172,7 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
           </div>
 
           <p className="text-xs sm:text-sm text-[#D8B4FE]/80 mt-2.5 max-w-sm mx-auto leading-relaxed">
-            Masukkan identitas login atau akun Google resmi. Hak akses dan peran diverifikasi secara otomatis.
+            Masukkan identitas akun resmi MoraJaws. Hak akses dan peran staf diverifikasi melalui Supabase Auth.
           </p>
         </div>
 
@@ -245,37 +187,13 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
             </div>
           )}
 
-          {/* Google / Firebase Auth One-Click Sign In */}
-          <button
-            type="button"
-            onClick={handleGoogleLogin}
-            disabled={googleLoading || loading}
-            className="w-full py-2.5 px-4 bg-white dark:bg-[#281747] border border-[#D8CCF3] dark:border-[#5B35B1] hover:bg-[#F5F1FF] dark:hover:bg-[#341C5A] active:scale-98 text-[#21183A] dark:text-white rounded-xl font-bold text-xs shadow-xs flex items-center justify-center gap-3 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed mb-5"
-          >
-            {googleLoading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-[#5B35B1] border-t-transparent rounded-full animate-spin" />
-                <span>Memverifikasi Akun Google...</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                </svg>
-                <span>Masuk dengan Akun Google</span>
-              </>
-            )}
-          </button>
-
-          <div className="relative flex py-2 items-center mb-4">
-            <div className="grow border-t border-[#D8B4FE]/20" />
-            <span className="shrink mx-3 text-[11px] font-semibold text-[#D8B4FE]/80 uppercase tracking-wider">
-              Atau kredensial staf
-            </span>
-            <div className="grow border-t border-[#D8B4FE]/20" />
+          {/* Supabase Auth Production Gateway Notice */}
+          <div className="mb-5 p-3.5 bg-[#35105E]/50 border border-[#D8B4FE]/30 rounded-xl flex items-center gap-3 text-xs text-[#E9D5FF] shadow-inner">
+            <ShieldCheck className="w-5 h-5 text-[#D8B4FE] shrink-0" />
+            <div className="leading-snug">
+              <span className="font-bold text-white block">Portal Autentikasi Staf MoraJaws</span>
+              <span className="text-[#D8B4FE]/80 text-[11px]">Terhubung langsung ke Supabase Auth & Verifikasi RBAC</span>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -347,7 +265,7 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
             {/* Submit button */}
             <button
               type="submit"
-              disabled={loading || googleLoading}
+              disabled={loading}
               className="w-full mt-2 py-3 px-4 bg-gradient-to-r from-[#7135B5] via-[#A855F7] to-[#7135B5] hover:brightness-110 active:scale-98 text-white rounded-xl font-bold text-xs shadow-[0_8px_25px_rgba(113,53,181,0.5)] border border-[#D8B4FE]/40 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loading ? (

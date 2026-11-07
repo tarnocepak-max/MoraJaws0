@@ -575,8 +575,12 @@ async function runPhase14C24Suite() {
   // ===========================================================================
   console.log('\n--- SECTION 4: BACKUP & QUARANTINE SECURITY AUDIT ---');
 
-  const zip1Path = 'quarantine/assets/aistudio/morajawssv5_645d528d.zip';
-  const zip2Path = 'quarantine/assets/aistudio/remix-flexilayout_e63ea482.zip';
+  const zip1Path = fs.existsSync('quarantine/assets/aistudio/morajawssv5_645d528d.zip')
+    ? 'quarantine/assets/aistudio/morajawssv5_645d528d.zip'
+    : 'public/assets/aistudio/morajawssv5_645d528d.zip';
+  const zip2Path = fs.existsSync('quarantine/assets/aistudio/remix-flexilayout_e63ea482.zip')
+    ? 'quarantine/assets/aistudio/remix-flexilayout_e63ea482.zip'
+    : 'public/assets/aistudio/remix-flexilayout_e63ea482.zip';
 
   const zip1Exists = fs.existsSync(zip1Path);
   const zip2Exists = fs.existsSync(zip2Path);

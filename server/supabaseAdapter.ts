@@ -254,7 +254,8 @@ export function userToPostgresRow(user: ServerUser): Record<string, any> {
   const payload = {
     ...existingPayload,
     passwordHash: user.passwordHash || null,
-    sessionVersion: typeof user.sessionVersion === 'number' ? user.sessionVersion : 1
+    sessionVersion: typeof user.sessionVersion === 'number' ? user.sessionVersion : 1,
+    authUserId: user.authUserId || existingPayload.authUserId || null
   };
 
   return {
@@ -299,9 +300,11 @@ export function postgresRowToUser(row: any): ServerUser {
   const sessionVersion = typeof payload.sessionVersion === 'number'
     ? payload.sessionVersion
     : (typeof row.session_version === 'number' ? row.session_version : 1);
+  const authUserId = row.auth_user_id || payload.authUserId || payload.auth_user_id || undefined;
 
   return {
     id: row.id,
+    authUserId,
     name: row.name,
     username: row.username,
     email: row.email || '',
@@ -1001,6 +1004,7 @@ export async function updateUserInSupabase(id: string, updates: Partial<ServerUs
     updateRow.payload = {
       ...prevPayload,
       ...(updates.passwordHash !== undefined ? { passwordHash: updates.passwordHash || null } : {}),
+      ...(updates.authUserId !== undefined ? { authUserId: updates.authUserId || null } : {}),
       sessionVersion: nextSessionVersion
     };
 

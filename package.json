@@ -19,6 +19,7 @@
     "test:phase14c.2.4": "tsx scripts/execute_phase14c2_4_assertion_integrity_test.ts",
     "test:phase14c.2.4.1": "tsx scripts/execute_phase14c2_4_1_regression_test.ts",
     "test:phase14c.3": "tsx scripts/execute_phase14c3_endpoint_integration_test.ts",
+    "test:phase15a": "tsx scripts/execute_phase15a_supabase_auth_test.ts",
     "test:reconcile": "tsx scripts/execute_phase14c2_1_reconciliation_test.ts"
   },
   "dependencies": {
