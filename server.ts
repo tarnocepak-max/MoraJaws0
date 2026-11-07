@@ -10,6 +10,12 @@ export type { Ticket };
 
 import { checkSupabaseConnection, getLastSupabaseHealthStatus, getSupabaseBackendClient } from './server/supabaseClient.ts';
 import {
+  getAppEnvironment,
+  getEnvironmentConfig,
+  getSessionCookieName,
+  validateEnvironmentStartup
+} from './server/environmentConfig.ts';
+import {
   signInWithSupabaseAuth,
   verifySupabaseAuthToken,
   refreshSupabaseAuthSession,
@@ -353,6 +359,7 @@ export interface ServerUser {
 export interface ServerSession {
   sessionId: string;
   token: string;
+  refreshToken?: string;
   userId: string;
   username: string;
   name: string;
@@ -1291,6 +1298,112 @@ export function validateCsrfProtection(req: { method?: string; headers?: Record<
   return { valid: true };
 }
 
+/**
+ * Extracts and decodes cookies from incoming request headers without requiring external dependencies.
+ */
+export function parseRequestCookies(req: Request): Record<string, string> {
+  const list: Record<string, string> = {};
+  const rc = req.headers.cookie;
+  if (rc) {
+    rc.split(';').forEach(cookie => {
+      const parts = cookie.split('=');
+      if (parts.length >= 2) {
+        const name = parts[0].trim();
+        const val = parts.slice(1).join('=').trim();
+        list[name] = decodeURIComponent(val);
+      }
+    });
+  }
+  return list;
+}
+
+/**
+ * Issues a partitioned, HttpOnly, secure cookie suitable for cross-origin iframes and standard browsers.
+ */
+export function setSecureSessionCookie(
+  res: Response,
+  cookieName: string,
+  tokenValue: string,
+  maxAgeMs: number,
+  isHttps: boolean
+): void {
+  const cookieOptions: express.CookieOptions = {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: isHttps ? 'none' : 'lax',
+    path: '/',
+    maxAge: maxAgeMs
+  };
+  if (isHttps) {
+    (cookieOptions as any).partitioned = true;
+  }
+  res.cookie(cookieName, tokenValue, cookieOptions);
+}
+
+/**
+ * Clears the session cookie safely across environments.
+ */
+export function clearSecureSessionCookie(
+  res: Response,
+  cookieName: string,
+  isHttps: boolean
+): void {
+  const cookieOptions: express.CookieOptions = {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: isHttps ? 'none' : 'lax',
+    path: '/'
+  };
+  if (isHttps) {
+    (cookieOptions as any).partitioned = true;
+  }
+  res.clearCookie(cookieName, cookieOptions);
+}
+
+/**
+ * Validates that active environment and Supabase project binding are fail-closed.
+ * Rejects auth operations with HTTP 503 if environment configuration is invalid.
+ */
+export function checkAuthEnvironmentValid(res: Response): boolean {
+  const validation = validateEnvironmentStartup();
+  if (!validation.valid) {
+    res.status(503).json({
+      success: false,
+      error: 'Environment konfigurasi server tidak valid atau terjadi pelanggaran isolasi antar-lingkungan.',
+      code: 'ENVIRONMENT_INVALID',
+      details: validation.errors
+    });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Accurately detects whether an incoming request originates from a browser client.
+ * Browser requests are NEVER sent raw tokens in JSON; instead they receive HttpOnly cookies.
+ */
+export function isBrowserClientRequest(req: Request): boolean {
+  const clientHeader = (req.headers['x-morajaws-client'] as string || '').toLowerCase();
+  if (clientHeader === 'browser' || clientHeader === 'web-browser') {
+    return true;
+  }
+  if (
+    req.headers['sec-fetch-dest'] !== undefined ||
+    req.headers['sec-fetch-mode'] !== undefined ||
+    req.headers['sec-fetch-site'] !== undefined
+  ) {
+    return true;
+  }
+  const userAgent = (req.headers['user-agent'] as string || '');
+  if (/Mozilla|Chrome|Safari|Firefox|Edge|Android|iPhone|iPad/i.test(userAgent)) {
+    return true;
+  }
+  if (req.headers['x-suppress-tokens'] === 'true') {
+    return true;
+  }
+  return false;
+}
+
 async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   // Production Cutover Guard: Block Firebase auth indicator in production
   if (!isLocalJsonModeAllowed() && req.headers['x-auth-provider'] === 'firebase') {
@@ -1307,7 +1420,17 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
   const now = Date.now();
 
   const authHeader = req.headers['authorization'];
-  const rawToken = (authHeader && authHeader.startsWith('Bearer ')) ? authHeader.substring(7).trim() : undefined;
+  let rawToken = (authHeader && authHeader.startsWith('Bearer ')) ? authHeader.substring(7).trim() : undefined;
+
+  // HttpOnly Session Cookie Support (Phase 15A.7.3)
+  // Evaluates environment-specific cookie (morajaws_session_staging | morajaws_session_prod | morajaws_session_dev)
+  if (!rawToken) {
+    const cookies = parseRequestCookies(req);
+    const cookieName = getSessionCookieName();
+    if (cookies[cookieName]) {
+      rawToken = cookies[cookieName];
+    }
+  }
 
   if (rawToken) {
     const token = rawToken;
@@ -1336,6 +1459,7 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
         if (saRes.success && saRes.data) {
           authSource = 'supabase_auth';
           found = saRes.data as ServerUser;
+          activeSession = knownSession;
         } else if (saRes.error?.code === 'SESSION_REVOKED') {
           return res.status(401).json({
             error: 'Sesi login telah dicabut karena perubahan akun atau logout.',
@@ -1970,6 +2094,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
   // Current Auth Session Endpoint
   app.get('/api/auth/session', (req: AuthenticatedRequest, res) => {
+    if (!checkAuthEnvironmentValid(res)) return;
     if (!req.user) {
       return res.json({
         authenticated: false,
@@ -1978,10 +2103,25 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       });
     }
     const { passwordHash: _, ...safeUser } = req.user;
+    const safeSession = req.session ? {
+      sessionId: req.session.sessionId,
+      userId: req.session.userId,
+      username: req.session.username,
+      name: req.session.name,
+      role: req.session.role,
+      contractor: req.session.contractor,
+      sessionVersion: req.session.sessionVersion,
+      loginAt: req.session.loginAt,
+      lastActivityAt: req.session.lastActivityAt,
+      expiresAt: req.session.expiresAt,
+      status: req.session.status,
+      deviceType: req.session.deviceType
+    } : null;
+
     res.json({
       authenticated: true,
       user: safeUser,
-      session: req.session || null
+      session: safeSession
     });
   });
 
@@ -2613,11 +2753,37 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       }
       await logServerAuditAsync('Logout Success', 'auth', req.user.id, `User ${req.user.name} (${req.user.role}) logout dari sistem`, req.user, { level: 'critical' });
     }
+    const cookieName = getSessionCookieName();
+    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || getAppEnvironment() !== 'development';
+    res.clearCookie(cookieName, {
+      httpOnly: true,
+      secure: isHttps,
+      sameSite: 'lax',
+      path: '/'
+    });
     res.json({ success: true, message: 'Sesi berhasil diakhiri' });
   });
 
   // --- Supabase Authentication Backend Endpoints (Production Architecture Target) ---
   app.post('/api/auth/supabase-login', async (req: Request, res: Response) => {
+    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
+    if (!checkAuthEnvironmentValid(res)) return;
+
+    // CRITICAL SECURITY ENFORCEMENT: Reject any client attempt to specify environment or Supabase target project
+    if (
+      req.body?.environment !== undefined ||
+      req.body?.supabaseUrl !== undefined ||
+      req.body?.projectId !== undefined ||
+      req.body?.targetProjectId !== undefined ||
+      req.body?.appEnv !== undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: 'Permintaan tidak valid: Penentuan environment atau target project dari browser dilarang demi keamanan.',
+        code: 'UNAUTHORIZED_ENVIRONMENT_MANIPULATION'
+      });
+    }
+
     const { identifier, email, password } = req.body || {};
     const targetIdent = identifier || email;
 
@@ -2710,7 +2876,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
     const { user, tokens, sessionVersion } = authRes.data;
 
-    // Create tracking server session for unified revocation support
+    // Create tracking server session for unified revocation and backend token handling
     const sessionId = 'sess_' + Date.now() + '_' + crypto.randomBytes(6).toString('hex');
     const nowIso = new Date().toISOString();
     const expiresIso = new Date(Date.now() + (tokens.expiresIn || 3600) * 1000).toISOString();
@@ -2720,6 +2886,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     SERVER_SESSIONS.unshift({
       sessionId,
       token: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       userId: user.id,
       username: user.username,
       name: user.name,
@@ -2744,6 +2911,24 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       { level: 'critical' }
     );
 
+    // Set secure HttpOnly session cookie isolated by environment (with Partitioned support for iframes)
+    const cookieName = getSessionCookieName();
+    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || getAppEnvironment() !== 'development';
+    const maxAgeMs = (tokens.expiresIn || 3600) * 1000;
+
+    setSecureSessionCookie(res, cookieName, tokens.accessToken, maxAgeMs, isHttps);
+
+    // Audit Remediation (Phase 15A.7.4): Browser clients NEVER receive tokens in JSON response
+    if (isBrowserClientRequest(req)) {
+      return res.json({
+        success: true,
+        authSystem: 'Supabase Auth',
+        sessionId,
+        user,
+        sessionVersion
+      });
+    }
+
     res.json({
       success: true,
       authSystem: 'Supabase Auth',
@@ -2755,21 +2940,85 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   app.post('/api/auth/supabase-refresh', async (req: Request, res: Response) => {
-    const { refreshToken } = req.body || {};
-    if (!refreshToken) {
-      return res.status(400).json({ success: false, error: 'refreshToken wajib disertakan.', code: 'INVALID_INPUT' });
+    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
+    if (!checkAuthEnvironmentValid(res)) return;
+
+    // CRITICAL SECURITY ENFORCEMENT: Reject any client attempt to specify environment or Supabase target project
+    if (
+      req.body?.environment !== undefined ||
+      req.body?.supabaseUrl !== undefined ||
+      req.body?.projectId !== undefined ||
+      req.body?.targetProjectId !== undefined ||
+      req.body?.appEnv !== undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: 'Permintaan tidak valid: Penentuan environment atau target project dari browser dilarang demi keamanan.',
+        code: 'UNAUTHORIZED_ENVIRONMENT_MANIPULATION'
+      });
     }
-    const refreshRes = await refreshSupabaseAuthSession(refreshToken);
+
+    let targetRefreshToken = req.body?.refreshToken;
+    const cookieName = getSessionCookieName();
+    const cookies = parseRequestCookies(req);
+    const incomingToken = (req.headers['authorization']?.startsWith('Bearer ') ? req.headers['authorization'].substring(7).trim() : undefined) || cookies[cookieName];
+
+    let activeSession = incomingToken ? SERVER_SESSIONS.find(s => (s.sessionId === incomingToken || s.token === incomingToken) && s.status === 'active') : undefined;
+
+    if (!targetRefreshToken && activeSession?.refreshToken) {
+      targetRefreshToken = activeSession.refreshToken;
+    }
+
+    if (!targetRefreshToken) {
+      return res.status(400).json({ success: false, error: 'refreshToken atau sesi aktif wajib disertakan.', code: 'INVALID_INPUT' });
+    }
+
+    const refreshRes = await refreshSupabaseAuthSession(targetRefreshToken);
     if (!refreshRes.success || !refreshRes.data) {
       return res.status(401).json({ success: false, error: refreshRes.error?.message || 'Gagal memperbarui token.', code: refreshRes.error?.code || 'REFRESH_FAILED' });
     }
+
+    if (activeSession && refreshRes.data.accessToken) {
+      activeSession.token = refreshRes.data.accessToken;
+      if (refreshRes.data.refreshToken) {
+        activeSession.refreshToken = refreshRes.data.refreshToken;
+      }
+      activeSession.lastActivityAt = new Date().toISOString();
+      activeSession.expiresAt = new Date(Date.now() + (refreshRes.data.expiresIn || 3600) * 1000).toISOString();
+    }
+
+    if (refreshRes.data.accessToken) {
+      const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || getAppEnvironment() !== 'development';
+      const maxAgeMs = (refreshRes.data.expiresIn || 3600) * 1000;
+      setSecureSessionCookie(res, cookieName, refreshRes.data.accessToken, maxAgeMs, isHttps);
+    }
+
+    // Audit Remediation (Phase 15A.7.4): Browser clients NEVER receive tokens in JSON response
+    if (isBrowserClientRequest(req)) {
+      return res.json({
+        success: true,
+        message: 'Sesi Supabase Auth berhasil diperbarui via backend.',
+        sessionVersion: activeSession?.sessionVersion || 1
+      });
+    }
+
     res.json({ success: true, tokens: refreshRes.data });
   });
 
   app.post('/api/auth/supabase-logout', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
+    if (!checkAuthEnvironmentValid(res)) return;
+
     // Do not call client.auth.signOut() on a shared backend client
     if (req.session) {
       req.session.status = 'revoked';
+    }
+    const currentToken = (req.headers['authorization']?.startsWith('Bearer ') ? req.headers['authorization'].substring(7).trim() : undefined) || parseRequestCookies(req)[getSessionCookieName()];
+    if (currentToken) {
+      const matched = SERVER_SESSIONS.find(s => s.token === currentToken || s.sessionId === currentToken);
+      if (matched) {
+        matched.status = 'revoked';
+      }
     }
     if (req.user) {
       const nextVersion = (req.user.sessionVersion || 1) + 1;
@@ -2786,6 +3035,11 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       }
       await logServerAuditAsync('Logout Success (Supabase Auth)', 'auth', req.user.id, `User ${req.user.name} logout dari Supabase Auth`, req.user, { level: 'critical' });
     }
+
+    const cookieName = getSessionCookieName();
+    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || getAppEnvironment() !== 'development';
+    clearSecureSessionCookie(res, cookieName, isHttps);
+
     res.json({ success: true, message: 'Sesi Supabase Auth berhasil diakhiri.', sessionVersion: req.user?.sessionVersion });
   });
 
@@ -9069,6 +9323,15 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 }
 
 export async function startServer() {
+  const envValidation = validateEnvironmentStartup();
+  if (!envValidation.valid) {
+    console.error('[FATAL CONFIGURATION ERROR] Validasi environment gagal pada startup:');
+    envValidation.errors.forEach(err => console.error(` - ${err}`));
+    if (getAppEnvironment() === 'production' || getAppEnvironment() === 'staging') {
+      throw new Error(`Environment startup validation failed: ${envValidation.errors.join('; ')}`);
+    }
+  }
+
   const app = await createExpressApp();
   const PORT = 3000;
 

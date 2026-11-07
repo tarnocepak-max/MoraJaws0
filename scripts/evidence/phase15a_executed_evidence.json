@@ -1,8 +1,8 @@
 {
   "suite": "Phase15A",
-  "test_run_id": "run_phase15a_1794066913614_jcxly6",
+  "test_run_id": "run_phase15a_1794077625184_b9hq9e",
   "environment": "isolated_mock_staging_loopback",
-  "generated_at": "2026-11-07T15:55:13.751Z",
+  "generated_at": "2026-11-07T18:53:45.330Z",
   "total_http_calls_executed": 38,
   "all_passed": false,
   "evidence": [
@@ -27,17 +27,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.667Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.257Z"
         },
         {
           "assertion_name": "Functional Check: Login dengan username valid",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.667Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.257Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.666Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.255Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -61,17 +61,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.670Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.261Z"
         },
         {
           "assertion_name": "Functional Check: Login dengan email valid",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.670Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.261Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.670Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.261Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -95,17 +95,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.672Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.265Z"
         },
         {
           "assertion_name": "Functional Check: Password salah",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.672Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.265Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.672Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.264Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "AUTH_INVALID_CREDENTIALS"
     },
@@ -130,17 +130,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.674Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.268Z"
         },
         {
           "assertion_name": "Functional Check: Username tidak ditemukan",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.674Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.268Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.674Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.268Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "auth/user-not-found"
     },
@@ -165,17 +165,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.678Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.271Z"
         },
         {
           "assertion_name": "Functional Check: Akun tidak aktif",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.678Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.271Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.678Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.271Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "ACCOUNT_DISABLED"
     },
@@ -200,17 +200,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.681Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.273Z"
         },
         {
           "assertion_name": "Functional Check: Profil staff tidak ditemukan",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.681Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.273Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.681Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.273Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "auth/user-not-found"
     },
@@ -235,17 +235,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.686Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.275Z"
         },
         {
           "assertion_name": "Functional Check: Auth UID tidak cocok",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.686Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.275Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.686Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.274Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "AUTH_UID_MISMATCH"
     },
@@ -270,17 +270,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.688Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.277Z"
         },
         {
           "assertion_name": "Functional Check: Token tidak valid",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.688Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.277Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.688Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.277Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -305,17 +305,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.693Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.280Z"
         },
         {
           "assertion_name": "Functional Check: Token kedaluwarsa",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.693Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.280Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.693Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.279Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "TOKEN_EXPIRED"
     },
@@ -340,17 +340,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.697Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.282Z"
         },
         {
           "assertion_name": "Functional Check: Refresh token",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.697Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.282Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.697Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.282Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -375,17 +375,17 @@
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": false,
           "assertion_failure_reason": "HTTP status mismatch: expected 401, received 200",
-          "assertion_timestamp": "2026-11-07T15:55:13.704Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.288Z"
         },
         {
           "assertion_name": "Functional Check: Logout",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.704Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.288Z"
         }
       ],
       "result": "FAIL",
-      "timestamp": "2026-11-07T15:55:13.700Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.284Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "HTTP status mismatch: expected 401, received 200"
@@ -413,17 +413,17 @@
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": false,
           "assertion_failure_reason": "HTTP status mismatch: expected 401, received 200",
-          "assertion_timestamp": "2026-11-07T15:55:13.704Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.288Z"
         },
         {
           "assertion_name": "Functional Check: Logout",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.704Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.288Z"
         }
       ],
       "result": "FAIL",
-      "timestamp": "2026-11-07T15:55:13.702Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.287Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Sesi Supabase Auth berhasil diakhiri.",
       "failure_reasons": [
@@ -451,17 +451,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.704Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.288Z"
         },
         {
           "assertion_name": "Functional Check: Logout",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.704Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.288Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.703Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.288Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "SESSION_REVOKED"
     },
@@ -487,17 +487,17 @@
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": false,
           "assertion_failure_reason": "HTTP status mismatch: expected 401, received 200",
-          "assertion_timestamp": "2026-11-07T15:55:13.711Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.295Z"
         },
         {
           "assertion_name": "Functional Check: Session revocation",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.295Z"
         }
       ],
       "result": "FAIL",
-      "timestamp": "2026-11-07T15:55:13.707Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.290Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "HTTP status mismatch: expected 401, received 200"
@@ -525,17 +525,17 @@
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": false,
           "assertion_failure_reason": "HTTP status mismatch: expected 401, received 200",
-          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.295Z"
         },
         {
           "assertion_name": "Functional Check: Session revocation",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.295Z"
         }
       ],
       "result": "FAIL",
-      "timestamp": "2026-11-07T15:55:13.708Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.291Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "HTTP status mismatch: expected 401, received 200"
@@ -563,17 +563,17 @@
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": false,
           "assertion_failure_reason": "HTTP status mismatch: expected 401, received 200",
-          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.295Z"
         },
         {
           "assertion_name": "Functional Check: Session revocation",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.295Z"
         }
       ],
       "result": "FAIL",
-      "timestamp": "2026-11-07T15:55:13.711Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.294Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Sesi berhasil dicabut.",
       "failure_reasons": [
@@ -601,17 +601,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.295Z"
         },
         {
           "assertion_name": "Functional Check: Session revocation",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.295Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.711Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.295Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "SESSION_REVOKED"
     },
@@ -636,17 +636,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.304Z"
         },
         {
           "assertion_name": "Functional Check: Login seluruh role",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.304Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.713Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.297Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -670,17 +670,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.304Z"
         },
         {
           "assertion_name": "Functional Check: Login seluruh role",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.304Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.714Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.298Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -704,17 +704,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.304Z"
         },
         {
           "assertion_name": "Functional Check: Login seluruh role",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.304Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.716Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.300Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -738,17 +738,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.304Z"
         },
         {
           "assertion_name": "Functional Check: Login seluruh role",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.304Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.717Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.301Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -772,17 +772,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.304Z"
         },
         {
           "assertion_name": "Functional Check: Login seluruh role",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.304Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.718Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.303Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -806,17 +806,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.304Z"
         },
         {
           "assertion_name": "Functional Check: Login seluruh role",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.304Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.719Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.304Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -841,17 +841,17 @@
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": false,
           "assertion_failure_reason": "HTTP status mismatch: expected 403, received 200",
-          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.314Z"
         },
         {
           "assertion_name": "Functional Check: Hak akses endpoint setiap role",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.314Z"
         }
       ],
       "result": "FAIL",
-      "timestamp": "2026-11-07T15:55:13.721Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.305Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "HTTP status mismatch: expected 403, received 200"
@@ -879,17 +879,17 @@
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": false,
           "assertion_failure_reason": "HTTP status mismatch: expected 403, received 200",
-          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.314Z"
         },
         {
           "assertion_name": "Functional Check: Hak akses endpoint setiap role",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.314Z"
         }
       ],
       "result": "FAIL",
-      "timestamp": "2026-11-07T15:55:13.726Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.307Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "HTTP status mismatch: expected 403, received 200"
@@ -917,17 +917,17 @@
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": false,
           "assertion_failure_reason": "HTTP status mismatch: expected 403, received 200",
-          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.314Z"
         },
         {
           "assertion_name": "Functional Check: Hak akses endpoint setiap role",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.314Z"
         }
       ],
       "result": "FAIL",
-      "timestamp": "2026-11-07T15:55:13.729Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.310Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "HTTP status mismatch: expected 403, received 200"
@@ -954,17 +954,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.314Z"
         },
         {
           "assertion_name": "Functional Check: Hak akses endpoint setiap role",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.314Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.731Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.311Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_CONFIG_PERMISSION"
     },
@@ -990,17 +990,17 @@
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": false,
           "assertion_failure_reason": "HTTP status mismatch: expected 403, received 200",
-          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.314Z"
         },
         {
           "assertion_name": "Functional Check: Hak akses endpoint setiap role",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.314Z"
         }
       ],
       "result": "FAIL",
-      "timestamp": "2026-11-07T15:55:13.732Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.312Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "HTTP status mismatch: expected 403, received 200"
@@ -1027,17 +1027,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.314Z"
         },
         {
           "assertion_name": "Functional Check: Hak akses endpoint setiap role",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.314Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.733Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.314Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Anda tidak memiliki wewenang untuk membuat akun ini."
     },
@@ -1063,17 +1063,17 @@
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": false,
           "assertion_failure_reason": "HTTP status mismatch: expected 403, received 200",
-          "assertion_timestamp": "2026-11-07T15:55:13.739Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.318Z"
         },
         {
           "assertion_name": "Functional Check: Installer mencoba mengakses WO milik Installer lain",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.739Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.318Z"
         }
       ],
       "result": "FAIL",
-      "timestamp": "2026-11-07T15:55:13.736Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.315Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "HTTP status mismatch: expected 403, received 200"
@@ -1100,17 +1100,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.739Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.318Z"
         },
         {
           "assertion_name": "Functional Check: Installer mencoba mengakses WO milik Installer lain",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.739Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.318Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.739Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.318Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Anda hanya berwenang menyimpan laporan untuk tiket yang di-assign kepada Anda."
     },
@@ -1136,17 +1136,17 @@
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": false,
           "assertion_failure_reason": "HTTP status mismatch: expected 403, received 200",
-          "assertion_timestamp": "2026-11-07T15:55:13.743Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.321Z"
         },
         {
           "assertion_name": "Functional Check: Leader mencoba mengakses contractor lain",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.743Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.321Z"
         }
       ],
       "result": "FAIL",
-      "timestamp": "2026-11-07T15:55:13.741Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.319Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "HTTP status mismatch: expected 403, received 200"
@@ -1173,17 +1173,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.743Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.321Z"
         },
         {
           "assertion_name": "Functional Check: Leader mencoba mengakses contractor lain",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.743Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.321Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.743Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.321Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "SCOPE_MISMATCH"
     },
@@ -1208,17 +1208,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.746Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.324Z"
         },
         {
           "assertion_name": "Functional Check: Firebase token ditolak pada mode produksi",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.746Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.324Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.745Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.323Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "FIREBASE_AUTH_DISABLED_PRODUCTION"
     },
@@ -1243,17 +1243,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.746Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.324Z"
         },
         {
           "assertion_name": "Functional Check: Firebase token ditolak pada mode produksi",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.746Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.324Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.746Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.324Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "FIREBASE_AUTH_DISABLED_PRODUCTION"
     },
@@ -1278,17 +1278,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.750Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.328Z"
         },
         {
           "assertion_name": "Functional Check: Password dan secret tidak muncul pada response/log",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.750Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.328Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.747Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.325Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1312,17 +1312,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.750Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.328Z"
         },
         {
           "assertion_name": "Functional Check: Password dan secret tidak muncul pada response/log",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.750Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.328Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.748Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.327Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1346,17 +1346,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.750Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.328Z"
         },
         {
           "assertion_name": "Functional Check: Password dan secret tidak muncul pada response/log",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T15:55:13.750Z"
+          "assertion_timestamp": "2026-11-07T18:53:45.328Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T15:55:13.749Z",
-      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "timestamp": "2026-11-07T18:53:45.328Z",
+      "test_run_id": "run_phase15a_1794077625184_b9hq9e",
       "environment": "isolated_mock_staging_loopback"
     }
   ]

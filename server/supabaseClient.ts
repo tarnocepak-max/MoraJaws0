@@ -213,8 +213,8 @@ export function getSupabaseBackendClient(): SupabaseClient | null {
 
   if (envConfig.env === 'staging') {
     const extractedId = extractSupabaseProjectId(supabaseUrl);
-    // Staging must not target production
-    if (extractedId && extractedId !== STAGING_SUPABASE_PROJECT_ID && !supabaseUrl.includes('staging') && !supabaseUrl.includes('lvytgqsvxntnvlohmrxi')) {
+    // Staging must strictly match staging project ID and not target production
+    if (!extractedId || extractedId !== STAGING_SUPABASE_PROJECT_ID) {
       console.warn('[Supabase Backend Security Alert] Staging environment attempting to connect to non-staging Supabase project.');
       return null;
     }

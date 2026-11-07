@@ -799,4 +799,45 @@ export class SuiteEvidenceCollector {
     console.log(`[EvidenceCollector] Wrote ${this.completedEvidence.length} schema-validated real HTTP evidence records to ${filePath}`);
     return output;
   }
+
+  private customAssertions: Array<{
+    assertion_name: string;
+    assertion_passed: boolean;
+    assertion_failure_reason?: string | null;
+    evidence_proof?: any;
+  }> = [];
+
+  createAssertion(opts: {
+    assertionName: string;
+    passed: boolean;
+    evidenceProof?: any;
+    failureReason?: string | null;
+  }) {
+    this.customAssertions.push({
+      assertion_name: opts.assertionName,
+      assertion_passed: opts.passed,
+      assertion_failure_reason: opts.failureReason,
+      evidence_proof: opts.evidenceProof
+    });
+  }
+
+  exportReport(name: string, meta?: any) {
+    const total = this.customAssertions.length;
+    const passed = this.customAssertions.filter(a => a.assertion_passed).length;
+    const failed = total - passed;
+    return {
+      name,
+      meta,
+      summary: {
+        total,
+        passed,
+        failed,
+        missing_evidence: 0
+      },
+      assertion_results: this.customAssertions
+    };
+  }
 }
+
+export const evidenceCollector = new SuiteEvidenceCollector('General');
+

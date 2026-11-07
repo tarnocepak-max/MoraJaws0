@@ -110,21 +110,20 @@ export function getEnvironmentConfig(envOverride?: AppEnvironment): EnvironmentC
 
     // Cross-environment safety: Staging must NOT use production project ID
     const extractedId = extractSupabaseProjectId(supabaseUrl);
-    if (extractedId && extractedId !== STAGING_SUPABASE_PROJECT_ID && !supabaseUrl.includes('staging')) {
+    if (extractedId !== STAGING_SUPABASE_PROJECT_ID) {
       console.warn('[EnvironmentConfig] Warning: Staging Supabase URL does not match designated staging project ID.');
     }
 
     // 2. Resolve Staging Credentials (Server-side only)
+    // Strictly isolate: Staging NEVER falls back to production SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY
     const serviceRoleKey = (
       process.env.STAGING_SUPABASE_SERVICE_ROLE_KEY ||
       process.env.STAGING_SUPABASE_SECRET_KEY ||
-      (process.env.APP_ENV === 'staging' ? (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY) : '') ||
       ''
     ).trim();
 
     const anonKey = (
       process.env.STAGING_SUPABASE_ANON_KEY ||
-      (process.env.APP_ENV === 'staging' ? process.env.SUPABASE_ANON_KEY : '') ||
       ''
     ).trim();
 
@@ -399,3 +398,57 @@ export function resolveAuthRedirectUrl(customRedirect?: string, envOverride?: Ap
 
   return config.recoveryCallbackUrl;
 }
+
+/**
+ * Returns canonical session cookie name isolated per environment.
+ * Prevents cookie collisions between production, staging, and development.
+ */
+export function getSessionCookieName(envOverride?: AppEnvironment): string {
+  const env = envOverride || getAppEnvironment();
+  if (env === 'staging') {
+    return 'morajaws_session_staging';
+  }
+  if (env === 'production') {
+    return 'morajaws_session_prod';
+  }
+  return 'morajaws_session_dev';
+}
+
+/**
+ * Validates active environment boundary isolation on server startup.
+ * Fails closed if cross-environment violations are detected.
+ */
+export function validateEnvironmentStartup(envOverride?: AppEnvironment): { valid: boolean; errors: string[] } {
+  const config = getEnvironmentConfig(envOverride);
+  const errors: string[] = [];
+
+  if (config.env === 'staging') {
+    if (config.supabaseProjectId !== STAGING_SUPABASE_PROJECT_ID) {
+      errors.push(`Staging Project ID wajib "${STAGING_SUPABASE_PROJECT_ID}", ditemukan: "${config.supabaseProjectId}".`);
+    }
+    const extracted = extractSupabaseProjectId(config.supabaseUrl);
+    if (!extracted || extracted !== STAGING_SUPABASE_PROJECT_ID) {
+      errors.push(`Staging Supabase URL (${config.supabaseUrl}) tidak cocok dengan project ID staging "${STAGING_SUPABASE_PROJECT_ID}".`);
+    }
+    if (config.supabaseProjectId !== extracted) {
+      errors.push(`Staging Project ID ("${config.supabaseProjectId}") tidak sama dengan hasil ekstraksi URL ("${extracted}").`);
+    }
+    if (config.supabaseUrl.includes('morajaws.ai.studio') || (process.env.PRODUCTION_SUPABASE_URL && config.supabaseUrl === process.env.PRODUCTION_SUPABASE_URL.trim())) {
+      errors.push('Cross-environment violation: URL project produksi dilarang digunakan oleh staging.');
+    }
+  } else if (config.env === 'production') {
+    if (config.supabaseProjectId === STAGING_SUPABASE_PROJECT_ID) {
+      errors.push(`Cross-environment violation: Project ID staging "${STAGING_SUPABASE_PROJECT_ID}" dilarang digunakan di production.`);
+    }
+    const extracted = extractSupabaseProjectId(config.supabaseUrl);
+    if (extracted === STAGING_SUPABASE_PROJECT_ID) {
+      errors.push(`Cross-environment violation: Production Supabase URL (${config.supabaseUrl}) mengarah ke project staging.`);
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+

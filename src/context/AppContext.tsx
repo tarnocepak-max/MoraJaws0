@@ -386,15 +386,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const getAuthHeaders = (): Record<string, string> => {
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'X-Morajaws-Client': 'browser'
     };
     try {
       const sessionStr = localStorage.getItem('morajaws_auth_session');
       if (sessionStr) {
         const sess = JSON.parse(sessionStr);
         if (sess.token) headers['Authorization'] = `Bearer ${sess.token}`;
-        if (sess.userId) headers['x-user-id'] = sess.userId;
-        if (sess.username) headers['x-username'] = sess.username;
+        if (sess.sessionId) headers['x-session-id'] = sess.sessionId;
       }
     } catch (e) {}
     return headers;
@@ -950,7 +950,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDataLoadError(null);
     try {
       const headers = getAuthHeaders();
-      const res = await fetch('/api/bootstrap', { headers });
+      const res = await fetch('/api/bootstrap', { headers, credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         if (data && data.success) {
@@ -959,7 +959,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           if (data.currentUser && data.isAuthenticated) {
             setCurrentUser(prev => ({ ...prev, ...data.currentUser }));
-          } else if (data.isAuthenticated === false && headers['Authorization']) {
+            setIsLoggedIn(true);
+          } else if (data.isAuthenticated === false) {
             setIsLoggedIn(false);
             setCurrentUser(UNAUTHENTICATED_USER);
             try {
@@ -1231,7 +1232,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Primary Production Authentication Gateway: /api/auth/supabase-login
       const serverRes = await fetch('/api/auth/supabase-login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Morajaws-Client': 'browser'
+        },
+        credentials: 'include',
         body: JSON.stringify({
           identifier: cleanUser,
           password
@@ -1292,11 +1297,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentUser(authedUser);
       setIsLoggedIn(true);
 
-      const accessToken = data.tokens?.accessToken || data.token;
-      const refreshToken = data.tokens?.refreshToken;
-      const expiresIn = data.tokens?.expiresIn;
-      const expiresAt = data.tokens?.expiresAt || (expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : undefined);
-
+      // Audit Remediation (Phase 15A.7.4): Tokens are stored strictly in server HttpOnly cookies.
+      // ZERO tokens (accessToken / refreshToken) are placed in browser localStorage.
       try {
         localStorage.setItem('morajaws_logged_in', 'true');
         localStorage.setItem('morajaws_auth_session', JSON.stringify({
@@ -1307,12 +1309,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           contractor: authedUser.contractor,
           area: authedUser.area,
           loginAt: authedUser.lastLoginAt,
-          token: accessToken,
-          accessToken,
-          refreshToken,
           sessionId: data.sessionId,
-          sessionVersion: data.sessionVersion || (authedUser as any).sessionVersion || 1,
-          expiresAt
+          sessionVersion: data.sessionVersion || (authedUser as any).sessionVersion || 1
         }));
       } catch (e) {}
 
@@ -1332,30 +1330,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshAuthSession = async (): Promise<boolean> => {
     try {
-      const sessionStr = localStorage.getItem('morajaws_auth_session');
-      if (!sessionStr) return false;
-      const sess = JSON.parse(sessionStr);
-      if (!sess?.refreshToken) return false;
-
       const res = await fetch('/api/auth/supabase-refresh', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: sess.refreshToken })
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Morajaws-Client': 'browser'
+        },
+        credentials: 'include',
+        body: JSON.stringify({})
       });
       if (!res.ok) return false;
-      const data = await res.json();
-      if (data.success && data.tokens) {
-        const updatedSess = {
-          ...sess,
-          token: data.tokens.accessToken,
-          accessToken: data.tokens.accessToken,
-          refreshToken: data.tokens.refreshToken || sess.refreshToken,
-          expiresAt: data.tokens.expiresAt
-        };
-        localStorage.setItem('morajaws_auth_session', JSON.stringify(updatedSess));
-        return true;
-      }
-      return false;
+      const data = await res.json().catch(() => ({}));
+      return data.success === true;
     } catch {
       return false;
     }
@@ -1383,9 +1369,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Morajaws-Client': 'browser',
         ...authHeaders
-      }
+      },
+      credentials: 'include'
     }).catch(() => {});
+
+    // Reload public bootstrap after logout
+    loadCentralData();
 
     // Reload public bootstrap after logout
     loadCentralData();

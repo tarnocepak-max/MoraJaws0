@@ -182,7 +182,8 @@ export function getRoleDisplayName(role: UserRole): string {
  */
 export function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'X-Morajaws-Client': 'browser'
   };
   try {
     const sessionStr = localStorage.getItem('morajaws_auth_session');
@@ -190,6 +191,9 @@ export function getAuthHeaders(): Record<string, string> {
       const sess = JSON.parse(sessionStr);
       if (sess?.token) {
         headers['Authorization'] = `Bearer ${sess.token}`;
+      }
+      if (sess?.sessionId) {
+        headers['x-session-id'] = sess.sessionId;
       }
     }
   } catch (err) {
@@ -204,18 +208,31 @@ export function getAuthHeaders(): Record<string, string> {
 export async function loginWithSupabase(identifier: string, password: string) {
   const res = await fetch('/api/auth/supabase-login', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Morajaws-Client': 'browser'
+    },
+    credentials: 'include',
     body: JSON.stringify({ identifier: identifier.trim(), password })
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
 }
 
-export async function refreshSupabaseSession(refreshToken: string) {
+export async function refreshSupabaseSession(refreshToken?: string) {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Morajaws-Client': 'browser'
+  };
+  const bodyObj: Record<string, any> = {};
+  if (refreshToken) {
+    bodyObj.refreshToken = refreshToken;
+  }
   const res = await fetch('/api/auth/supabase-refresh', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken })
+    headers,
+    credentials: 'include',
+    body: JSON.stringify(bodyObj)
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
@@ -225,7 +242,8 @@ export async function logoutSupabase() {
   const headers = getAuthHeaders();
   const res = await fetch('/api/auth/supabase-logout', {
     method: 'POST',
-    headers
+    headers,
+    credentials: 'include'
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
