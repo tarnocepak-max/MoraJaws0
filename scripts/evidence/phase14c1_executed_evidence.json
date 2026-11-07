@@ -1,10 +1,10 @@
 {
   "suite": "Phase14C.1",
-  "test_run_id": "run_phase14c1_1793980480755_2fua25",
+  "test_run_id": "run_phase14c1_1794002190306_41xqhp",
   "environment": "isolated_mock_staging_loopback",
-  "generated_at": "2026-11-06T15:54:41.199Z",
-  "total_http_calls_executed": 70,
-  "all_passed": true,
+  "generated_at": "2026-11-06T21:56:30.834Z",
+  "total_http_calls_executed": 71,
+  "all_passed": false,
   "evidence": [
     {
       "suite": "Phase14C.1",
@@ -15,7 +15,7 @@
       "method": "POST",
       "url": "/api/tickets/assign",
       "normalized_route": "/api/tickets/assign",
-      "source_line": 779,
+      "source_line": 791,
       "token_role": "leader",
       "expected_status": 200,
       "actual_status": 200,
@@ -27,17 +27,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.856Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.419Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Berhasil menugaskan WO ke Teknisi Baru Joko.",
+          "assertion_name": "Functional Check: POST /api/tickets/assign - Success HTTP 200",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.856Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.420Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.855Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.419Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Berhasil menugaskan 1 Work Order ke teknisi Teknisi Baru Joko"
     },
@@ -50,7 +50,7 @@
       "method": "POST",
       "url": "/api/tickets/assign",
       "normalized_route": "/api/tickets/assign",
-      "source_line": 794,
+      "source_line": 806,
       "token_role": "leader",
       "expected_status": 500,
       "actual_status": 500,
@@ -62,17 +62,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (500)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.864Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.430Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 500: Gagal ditangani bersih tanpa false success (55P03).",
+          "assertion_name": "Functional Check: POST /api/tickets/assign - Supabase Failure Handled (No False Success)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.864Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.430Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.864Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.430Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "55P03"
     },
@@ -85,7 +85,7 @@
       "method": "POST",
       "url": "/api/tickets/assign",
       "normalized_route": "/api/tickets/assign",
-      "source_line": 807,
+      "source_line": 819,
       "token_role": "leader",
       "expected_status": 400,
       "actual_status": 400,
@@ -97,17 +97,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.871Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.438Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 400: Input installerName kosong ditolak (Nama teknisi tujuan wajib diisi.).",
+          "assertion_name": "Functional Check: POST /api/tickets/assign - Invalid Input Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.871Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.438Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.871Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.438Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "INVALID_INPUT"
     },
@@ -120,7 +120,7 @@
       "method": "POST",
       "url": "/api/tickets/assign",
       "normalized_route": "/api/tickets/assign",
-      "source_line": 819,
+      "source_line": 831,
       "token_role": "installer",
       "expected_status": 403,
       "actual_status": 403,
@@ -132,17 +132,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.877Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.445Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Role installer ditolak menugaskan tiket (REQUIRE_LEADER_ROLE).",
+          "assertion_name": "Functional Check: POST /api/tickets/assign - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.877Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.445Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.877Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.445Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_LEADER_ROLE"
     },
@@ -155,7 +155,7 @@
       "method": "POST",
       "url": "/api/tickets/reassign",
       "normalized_route": "/api/tickets/reassign",
-      "source_line": 835,
+      "source_line": 847,
       "token_role": "leader",
       "expected_status": 200,
       "actual_status": 200,
@@ -167,17 +167,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.884Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.454Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Reassign berhasil diproses ke Teknisi Reassign Sukses.",
+          "assertion_name": "Functional Check: POST /api/tickets/reassign - Success HTTP 200",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.884Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.454Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.884Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.454Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Work Order WO-TEST-MOCK-101 berhasil dialihkan ke teknisi Teknisi Reassign Sukses."
     },
@@ -190,7 +190,7 @@
       "method": "POST",
       "url": "/api/tickets/reassign",
       "normalized_route": "/api/tickets/reassign",
-      "source_line": 855,
+      "source_line": 867,
       "token_role": "leader",
       "expected_status": 500,
       "actual_status": 500,
@@ -202,17 +202,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (500)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.890Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.463Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 500: Partial failure rollback gagal dilaporkan jujur (REASSIGN_PARTIAL_FAILURE_INCONSISTENT).",
+          "assertion_name": "Functional Check: POST /api/tickets/reassign - Partial Failure Flagged (HTTP 500)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.890Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.463Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.890Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.463Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REASSIGN_PARTIAL_FAILURE_INCONSISTENT"
     },
@@ -225,7 +225,7 @@
       "method": "POST",
       "url": "/api/tickets/reassign",
       "normalized_route": "/api/tickets/reassign",
-      "source_line": 872,
+      "source_line": 884,
       "token_role": "leader",
       "expected_status": 400,
       "actual_status": 400,
@@ -237,17 +237,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.894Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.471Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 400: Alasan reassign pendek ditolak tegas (Alasan reassign wajib diisi minimal 5 karakter untuk keperluan audit.).",
+          "assertion_name": "Functional Check: POST /api/tickets/reassign - Invalid Reason Length Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.894Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.471Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.894Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.471Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "INVALID_REASON"
     },
@@ -260,7 +260,7 @@
       "method": "POST",
       "url": "/api/tickets/reassign",
       "normalized_route": "/api/tickets/reassign",
-      "source_line": 888,
+      "source_line": 900,
       "token_role": "installer",
       "expected_status": 403,
       "actual_status": 403,
@@ -272,17 +272,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.899Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.476Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Role installer ditolak mereassign WO.",
+          "assertion_name": "Functional Check: POST /api/tickets/reassign - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.899Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.476Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.899Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.476Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_LEADER_ROLE"
     },
@@ -295,7 +295,7 @@
       "method": "POST",
       "url": "/api/tickets/wo_test_mock_101/report",
       "normalized_route": "/api/tickets/wo_test_mock_101/report",
-      "source_line": 908,
+      "source_line": 920,
       "token_role": "installer",
       "expected_status": 200,
       "actual_status": 200,
@@ -307,17 +307,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.907Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.487Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Laporan teknis tersimpan dan status WO terupdate.",
+          "assertion_name": "Functional Check: POST /api/tickets/:id/report - Technical Report Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.907Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.488Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.907Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.487Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -329,7 +329,7 @@
       "method": "POST",
       "url": "/api/tickets/wo_test_mock_101/report",
       "normalized_route": "/api/tickets/wo_test_mock_101/report",
-      "source_line": 932,
+      "source_line": 944,
       "token_role": "installer",
       "expected_status": 503,
       "actual_status": 503,
@@ -341,17 +341,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.914Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.497Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 503: Fail-closed saat update ke Supabase gagal.",
+          "assertion_name": "Functional Check: POST /api/tickets/:id/report - Supabase Failure Handled Fail-Closed (HTTP 503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.914Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.497Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.914Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.497Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -364,7 +364,7 @@
       "method": "POST",
       "url": "/api/tickets/wo_non_existent_999/report",
       "normalized_route": "/api/tickets/wo_non_existent_999/report",
-      "source_line": 947,
+      "source_line": 959,
       "token_role": "installer",
       "expected_status": 404,
       "actual_status": 404,
@@ -376,17 +376,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.919Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.501Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 404: Tiket tidak ditemukan ditangani tepat.",
+          "assertion_name": "Functional Check: POST /api/tickets/:id/report - Non-Existent Ticket (HTTP 404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.919Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.501Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.919Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.501Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Work Order tidak ditemukan."
     },
@@ -399,7 +399,7 @@
       "method": "POST",
       "url": "/api/tickets/wo_test_mock_101/report",
       "normalized_route": "/api/tickets/wo_test_mock_101/report",
-      "source_line": 962,
+      "source_line": 974,
       "token_role": "installer",
       "expected_status": 403,
       "actual_status": 403,
@@ -411,17 +411,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.923Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.506Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Teknisi yang tidak di-assign ditolak mengisi laporan.",
+          "assertion_name": "Functional Check: POST /api/tickets/:id/report - Unassigned Installer Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.923Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.506Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.923Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.506Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Anda tidak memiliki wewenang untuk menyimpan laporan untuk tiket ini."
     },
@@ -434,7 +434,7 @@
       "method": "POST",
       "url": "/api/tickets/wo_test_mock_101/progress-report",
       "normalized_route": "/api/tickets/wo_test_mock_101/progress-report",
-      "source_line": 979,
+      "source_line": 991,
       "token_role": "installer",
       "expected_status": 200,
       "actual_status": 200,
@@ -446,17 +446,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.928Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.512Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Progress report berhasil disimpan.",
+          "assertion_name": "Functional Check: POST /api/tickets/:id/progress-report - Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.928Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.512Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.928Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.512Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -468,7 +468,7 @@
       "method": "POST",
       "url": "/api/tickets/wo_test_mock_101/progress-report",
       "normalized_route": "/api/tickets/wo_test_mock_101/progress-report",
-      "source_line": 998,
+      "source_line": 1010,
       "token_role": "installer",
       "expected_status": 503,
       "actual_status": 503,
@@ -480,17 +480,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.933Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.519Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 503: Fail-closed saat DB error.",
+          "assertion_name": "Functional Check: POST /api/tickets/:id/progress-report - DB Failure Handled Fail-Closed (HTTP 503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.933Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.519Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.933Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.519Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -503,7 +503,7 @@
       "method": "POST",
       "url": "/api/tickets/wo_unknown_404/progress-report",
       "normalized_route": "/api/tickets/wo_unknown_404/progress-report",
-      "source_line": 1013,
+      "source_line": 1025,
       "token_role": "installer",
       "expected_status": 404,
       "actual_status": 404,
@@ -515,17 +515,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.937Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.524Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 404: Tiket tidak ditemukan.",
+          "assertion_name": "Functional Check: POST /api/tickets/:id/progress-report - Not Found (HTTP 404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.937Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.524Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.937Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.524Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Work Order tidak ditemukan."
     },
@@ -538,7 +538,7 @@
       "method": "POST",
       "url": "/api/tickets/wo_test_mock_101/progress-report",
       "normalized_route": "/api/tickets/wo_test_mock_101/progress-report",
-      "source_line": 1028,
+      "source_line": 1040,
       "token_role": "installer",
       "expected_status": 403,
       "actual_status": 403,
@@ -550,17 +550,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.940Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.527Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Teknisi tidak berwenang ditolak menyimpan progress.",
+          "assertion_name": "Functional Check: POST /api/tickets/:id/progress-report - Unassigned Installer Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.940Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.527Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.940Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.527Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Anda hanya berwenang menyimpan laporan untuk tiket yang di-assign kepada Anda."
     },
@@ -573,7 +573,7 @@
       "method": "POST",
       "url": "/api/tickets/bulk-import",
       "normalized_route": "/api/tickets/bulk-import",
-      "source_line": 1045,
+      "source_line": 1057,
       "token_role": "dispatch",
       "expected_status": 200,
       "actual_status": 200,
@@ -585,17 +585,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.946Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.535Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Bulk import diproses di Supabase (batchId: batch_1793980480943).",
+          "assertion_name": "Functional Check: POST /api/tickets/bulk-import - Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.946Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.535Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.946Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.535Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -607,7 +607,7 @@
       "method": "POST",
       "url": "/api/tickets/bulk-import",
       "normalized_route": "/api/tickets/bulk-import",
-      "source_line": 1077,
+      "source_line": 1089,
       "token_role": "dispatch",
       "expected_status": 503,
       "actual_status": 503,
@@ -619,17 +619,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.950Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.538Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 503: Kegagalan import dilaporkan bersih.",
+          "assertion_name": "Functional Check: POST /api/tickets/bulk-import - Supabase Failure Handled (HTTP 500/503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.950Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.538Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.950Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.538Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -642,7 +642,7 @@
       "method": "POST",
       "url": "/api/tickets/bulk-import",
       "normalized_route": "/api/tickets/bulk-import",
-      "source_line": 1090,
+      "source_line": 1102,
       "token_role": "dispatch",
       "expected_status": 400,
       "actual_status": 400,
@@ -654,17 +654,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.953Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.543Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 400: Tiket kosong ditolak tegas (INVALID_INPUT).",
+          "assertion_name": "Functional Check: POST /api/tickets/bulk-import - Empty Array Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.953Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.543Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.953Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.543Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "INVALID_INPUT"
     },
@@ -677,7 +677,7 @@
       "method": "POST",
       "url": "/api/tickets/bulk-import",
       "normalized_route": "/api/tickets/bulk-import",
-      "source_line": 1102,
+      "source_line": 1114,
       "token_role": "installer",
       "expected_status": 403,
       "actual_status": 403,
@@ -689,17 +689,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.957Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.549Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Role installer ditolak melakukan import.",
+          "assertion_name": "Functional Check: POST /api/tickets/bulk-import - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.957Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.549Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.957Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.549Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_IMPORT_PERMISSION"
     },
@@ -712,7 +712,7 @@
       "method": "GET",
       "url": "/api/users",
       "normalized_route": "/api/users",
-      "source_line": 1118,
+      "source_line": 1130,
       "token_role": "super_admin",
       "expected_status": 200,
       "actual_status": 200,
@@ -724,17 +724,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.967Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.559Z"
         },
         {
-          "assertion_name": "Functional Assertion: GET 200 OK & POST 201 Created: Pembuatan user berhasil via Supabase.",
+          "assertion_name": "Functional Check: GET & POST /api/users - Success (HTTP 200 & 201)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.967Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.559Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.962Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.554Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -746,7 +746,7 @@
       "method": "POST",
       "url": "/api/users",
       "normalized_route": "/api/users",
-      "source_line": 1119,
+      "source_line": 1131,
       "token_role": "super_admin",
       "expected_status": 201,
       "actual_status": 201,
@@ -758,17 +758,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (201)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.967Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.559Z"
         },
         {
-          "assertion_name": "Functional Assertion: GET 200 OK & POST 201 Created: Pembuatan user berhasil via Supabase.",
+          "assertion_name": "Functional Check: GET & POST /api/users - Success (HTTP 200 & 201)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.967Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.559Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.967Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.559Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -780,7 +780,7 @@
       "method": "GET",
       "url": "/api/users",
       "normalized_route": "/api/users",
-      "source_line": 1140,
+      "source_line": 1152,
       "token_role": "super_admin",
       "expected_status": 503,
       "actual_status": 503,
@@ -792,17 +792,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.970Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.562Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 503: Database unavailable ditangani fail-closed.",
+          "assertion_name": "Functional Check: GET /api/users - DB Failure Handled Fail-Closed (HTTP 503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.970Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.562Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.970Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.562Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -815,7 +815,7 @@
       "method": "POST",
       "url": "/api/users",
       "normalized_route": "/api/users",
-      "source_line": 1149,
+      "source_line": 1161,
       "token_role": "super_admin",
       "expected_status": 400,
       "actual_status": 400,
@@ -827,17 +827,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.974Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.568Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 400: Input tidak lengkap ditolak.",
+          "assertion_name": "Functional Check: POST /api/users - Missing Required Fields Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.974Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.568Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.974Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.568Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Nama, username, dan role akun wajib diisi."
     },
@@ -850,7 +850,7 @@
       "method": "POST",
       "url": "/api/users",
       "normalized_route": "/api/users",
-      "source_line": 1161,
+      "source_line": 1173,
       "token_role": "installer",
       "expected_status": 403,
       "actual_status": 403,
@@ -862,17 +862,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.978Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.572Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Role installer ditolak membuat user.",
+          "assertion_name": "Functional Check: POST /api/users - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.978Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.572Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.978Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.572Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Anda tidak memiliki wewenang untuk membuat akun ini."
     },
@@ -885,7 +885,7 @@
       "method": "GET",
       "url": "/api/users/u-test-01",
       "normalized_route": "/api/users/u-test-01",
-      "source_line": 1177,
+      "source_line": 1189,
       "token_role": "super_admin",
       "expected_status": 200,
       "actual_status": 200,
@@ -897,17 +897,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.987Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.587Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: User dimuat dan diperbarui via Supabase.",
+          "assertion_name": "Functional Check: GET & PUT /api/users/:id - Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.987Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.587Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.983Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.581Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -919,7 +919,7 @@
       "method": "PUT",
       "url": "/api/users/u-test-01",
       "normalized_route": "/api/users/u-test-01",
-      "source_line": 1178,
+      "source_line": 1190,
       "token_role": "super_admin",
       "expected_status": 200,
       "actual_status": 200,
@@ -931,17 +931,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.987Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.587Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: User dimuat dan diperbarui via Supabase.",
+          "assertion_name": "Functional Check: GET & PUT /api/users/:id - Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.987Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.587Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.987Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.587Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Data pengguna berhasil diperbarui."
     },
@@ -954,7 +954,7 @@
       "method": "GET",
       "url": "/api/users/u-test-01",
       "normalized_route": "/api/users/u-test-01",
-      "source_line": 1193,
+      "source_line": 1205,
       "token_role": "super_admin",
       "expected_status": 503,
       "actual_status": 503,
@@ -966,17 +966,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.991Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.591Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 503: Database error ditangani fail-closed.",
+          "assertion_name": "Functional Check: GET /api/users/:id - DB Failure Handled Fail-Closed (HTTP 503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.991Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.591Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.991Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.591Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -989,7 +989,7 @@
       "method": "GET",
       "url": "/api/users/u_non_existent_999",
       "normalized_route": "/api/users/u_non_existent_999",
-      "source_line": 1204,
+      "source_line": 1216,
       "token_role": "super_admin",
       "expected_status": 404,
       "actual_status": 404,
@@ -1001,17 +1001,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.995Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.595Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 404: User tidak ditemukan.",
+          "assertion_name": "Functional Check: GET /api/users/:id - User Not Found (HTTP 404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:40.995Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.595Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:40.995Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.595Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "NOT_FOUND"
     },
@@ -1024,7 +1024,7 @@
       "method": "PUT",
       "url": "/api/users/u-test-01",
       "normalized_route": "/api/users/u-test-01",
-      "source_line": 1216,
+      "source_line": 1228,
       "token_role": "installer",
       "expected_status": 403,
       "actual_status": 403,
@@ -1036,17 +1036,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.000Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.598Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Upaya mengubah role oleh installer ditolak server.",
+          "assertion_name": "Functional Check: PUT /api/users/:id - Unauthorized Role Escalation Blocked (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.000Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.598Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.000Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.598Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Anda tidak memiliki izin untuk mengedit akun ini."
     },
@@ -1059,7 +1059,7 @@
       "method": "POST",
       "url": "/api/users/u-test-01/toggle",
       "normalized_route": "/api/users/u-test-01/toggle",
-      "source_line": 1233,
+      "source_line": 1245,
       "token_role": "super_admin",
       "expected_status": 200,
       "actual_status": 200,
@@ -1071,17 +1071,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.004Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.603Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Status user berhasil di-toggle.",
+          "assertion_name": "Functional Check: POST /api/users/:id/toggle - Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.004Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.603Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.004Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.603Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1093,7 +1093,7 @@
       "method": "POST",
       "url": "/api/users/u-test-01/toggle",
       "normalized_route": "/api/users/u-test-01/toggle",
-      "source_line": 1247,
+      "source_line": 1259,
       "token_role": "super_admin",
       "expected_status": 503,
       "actual_status": 503,
@@ -1105,17 +1105,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.008Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.606Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 503: Database error ditangani fail-closed.",
+          "assertion_name": "Functional Check: POST /api/users/:id/toggle - DB Failure Handled Fail-Closed (HTTP 503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.008Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.606Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.008Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.606Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -1128,7 +1128,7 @@
       "method": "POST",
       "url": "/api/users/u_ghost_user_999/toggle",
       "normalized_route": "/api/users/u_ghost_user_999/toggle",
-      "source_line": 1261,
+      "source_line": 1273,
       "token_role": "super_admin",
       "expected_status": 404,
       "actual_status": 404,
@@ -1140,17 +1140,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.012Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.610Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 404: User tidak ditemukan.",
+          "assertion_name": "Functional Check: POST /api/users/:id/toggle - User Not Found (HTTP 404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.012Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.610Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.012Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.610Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Pengguna tidak ditemukan."
     },
@@ -1163,7 +1163,7 @@
       "method": "POST",
       "url": "/api/users/u-test-01/toggle",
       "normalized_route": "/api/users/u-test-01/toggle",
-      "source_line": 1273,
+      "source_line": 1285,
       "token_role": "leader",
       "expected_status": 403,
       "actual_status": 403,
@@ -1175,17 +1175,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.014Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.614Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Hanya Super Admin yang diizinkan men-toggle akun.",
+          "assertion_name": "Functional Check: POST /api/users/:id/toggle - Non-Admin Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.014Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.614Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.014Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.614Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_SUPER_ADMIN"
     },
@@ -1198,7 +1198,7 @@
       "method": "POST",
       "url": "/api/users/u-test-01/reset-password",
       "normalized_route": "/api/users/u-test-01/reset-password",
-      "source_line": 1288,
+      "source_line": 1300,
       "token_role": "super_admin",
       "expected_status": 200,
       "actual_status": 200,
@@ -1210,17 +1210,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.016Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.619Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Password di-reset ke default.",
+          "assertion_name": "Functional Check: POST /api/users/:id/reset-password - Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.016Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.619Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.016Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.619Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Password berhasil di-reset ke default 12345678."
     },
@@ -1233,7 +1233,7 @@
       "method": "POST",
       "url": "/api/users/u-test-01/reset-password",
       "normalized_route": "/api/users/u-test-01/reset-password",
-      "source_line": 1302,
+      "source_line": 1314,
       "token_role": "super_admin",
       "expected_status": 503,
       "actual_status": 503,
@@ -1245,17 +1245,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.019Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.623Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 503: Database error ditangani fail-closed.",
+          "assertion_name": "Functional Check: POST /api/users/:id/reset-password - DB Failure Handled Fail-Closed (HTTP 503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.019Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.623Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.019Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.623Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -1268,7 +1268,7 @@
       "method": "POST",
       "url": "/api/users/u_non_existent/reset-password",
       "normalized_route": "/api/users/u_non_existent/reset-password",
-      "source_line": 1316,
+      "source_line": 1328,
       "token_role": "super_admin",
       "expected_status": 404,
       "actual_status": 404,
@@ -1280,17 +1280,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.023Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.625Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 404: User tidak ditemukan.",
+          "assertion_name": "Functional Check: POST /api/users/:id/reset-password - User Not Found (HTTP 404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.023Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.625Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.023Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.625Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Pengguna tidak ditemukan."
     },
@@ -1303,7 +1303,7 @@
       "method": "POST",
       "url": "/api/users/u-test-01/reset-password",
       "normalized_route": "/api/users/u-test-01/reset-password",
-      "source_line": 1328,
+      "source_line": 1340,
       "token_role": "installer",
       "expected_status": 403,
       "actual_status": 403,
@@ -1315,17 +1315,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.027Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.630Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Role installer ditolak mereset password.",
+          "assertion_name": "Functional Check: POST /api/users/:id/reset-password - Installer Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.027Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.630Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.027Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.630Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_SUPER_ADMIN"
     },
@@ -1338,7 +1338,7 @@
       "method": "GET",
       "url": "/api/contractors",
       "normalized_route": "/api/contractors",
-      "source_line": 1343,
+      "source_line": 1355,
       "token_role": "super_admin",
       "expected_status": 200,
       "actual_status": 200,
@@ -1350,17 +1350,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.035Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.638Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Kontraktor dimuat dan ditambahkan via Supabase.",
+          "assertion_name": "Functional Check: GET & POST /api/contractors - Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.035Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.638Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.031Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.634Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1372,7 +1372,7 @@
       "method": "POST",
       "url": "/api/contractors",
       "normalized_route": "/api/contractors",
-      "source_line": 1344,
+      "source_line": 1356,
       "token_role": "super_admin",
       "expected_status": 200,
       "actual_status": 200,
@@ -1384,17 +1384,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.035Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.638Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Kontraktor dimuat dan ditambahkan via Supabase.",
+          "assertion_name": "Functional Check: GET & POST /api/contractors - Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.035Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.638Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.035Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.638Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1406,7 +1406,7 @@
       "method": "GET",
       "url": "/api/contractors",
       "normalized_route": "/api/contractors",
-      "source_line": 1359,
+      "source_line": 1371,
       "token_role": "super_admin",
       "expected_status": 503,
       "actual_status": 503,
@@ -1418,17 +1418,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.039Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.641Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 503: Database error ditangani fail-closed.",
+          "assertion_name": "Functional Check: GET /api/contractors - DB Failure Handled Fail-Closed (HTTP 503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.039Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.641Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.039Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.641Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -1441,7 +1441,7 @@
       "method": "POST",
       "url": "/api/contractors",
       "normalized_route": "/api/contractors",
-      "source_line": 1368,
+      "source_line": 1380,
       "token_role": "super_admin",
       "expected_status": 400,
       "actual_status": 400,
@@ -1453,17 +1453,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.043Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.645Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 400: Input kontraktor kosong ditolak.",
+          "assertion_name": "Functional Check: POST /api/contractors - Missing Data Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.043Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.645Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.043Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.645Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Data kontraktor wajib disertakan."
     },
@@ -1476,7 +1476,7 @@
       "method": "POST",
       "url": "/api/contractors",
       "normalized_route": "/api/contractors",
-      "source_line": 1380,
+      "source_line": 1392,
       "token_role": "installer",
       "expected_status": 403,
       "actual_status": 403,
@@ -1488,17 +1488,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.047Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.648Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Role installer ditolak menambah kontraktor.",
+          "assertion_name": "Functional Check: POST /api/contractors - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.047Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.648Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.047Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.648Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Hanya Super Admin dan Dispatch yang dapat menambah kontraktor."
     },
@@ -1511,7 +1511,7 @@
       "method": "GET",
       "url": "/api/coverage-areas",
       "normalized_route": "/api/coverage-areas",
-      "source_line": 1396,
+      "source_line": 1408,
       "token_role": "super_admin",
       "expected_status": 200,
       "actual_status": 200,
@@ -1523,17 +1523,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.054Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.658Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Coverage area dimuat dan ditambahkan via Supabase.",
+          "assertion_name": "Functional Check: GET & POST /api/coverage-areas - Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.054Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.658Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.050Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.653Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1545,7 +1545,7 @@
       "method": "POST",
       "url": "/api/coverage-areas",
       "normalized_route": "/api/coverage-areas",
-      "source_line": 1397,
+      "source_line": 1409,
       "token_role": "super_admin",
       "expected_status": 200,
       "actual_status": 200,
@@ -1557,17 +1557,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.054Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.658Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Coverage area dimuat dan ditambahkan via Supabase.",
+          "assertion_name": "Functional Check: GET & POST /api/coverage-areas - Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.054Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.658Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.054Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.658Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1579,7 +1579,7 @@
       "method": "GET",
       "url": "/api/coverage-areas",
       "normalized_route": "/api/coverage-areas",
-      "source_line": 1412,
+      "source_line": 1424,
       "token_role": "super_admin",
       "expected_status": 503,
       "actual_status": 503,
@@ -1591,17 +1591,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.058Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.661Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 503: Database error ditangani fail-closed.",
+          "assertion_name": "Functional Check: GET /api/coverage-areas - DB Failure Handled Fail-Closed (HTTP 503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.058Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.661Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.058Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.661Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -1614,7 +1614,7 @@
       "method": "POST",
       "url": "/api/coverage-areas",
       "normalized_route": "/api/coverage-areas",
-      "source_line": 1421,
+      "source_line": 1433,
       "token_role": "super_admin",
       "expected_status": 400,
       "actual_status": 400,
@@ -1626,17 +1626,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.062Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.665Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 400: Input area kosong ditolak.",
+          "assertion_name": "Functional Check: POST /api/coverage-areas - Missing Data Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.062Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.665Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.062Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.665Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Data coverage area wajib disertakan."
     },
@@ -1649,7 +1649,7 @@
       "method": "POST",
       "url": "/api/coverage-areas",
       "normalized_route": "/api/coverage-areas",
-      "source_line": 1433,
+      "source_line": 1445,
       "token_role": "installer",
       "expected_status": 403,
       "actual_status": 403,
@@ -1661,17 +1661,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.066Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.668Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Role installer ditolak menambah coverage area.",
+          "assertion_name": "Functional Check: POST /api/coverage-areas - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.066Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.668Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.066Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.668Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Hanya Super Admin dan Dispatch yang dapat menambah coverage area."
     },
@@ -1684,7 +1684,7 @@
       "method": "GET",
       "url": "/api/config/global",
       "normalized_route": "/api/config/global",
-      "source_line": 1449,
+      "source_line": 1461,
       "token_role": null,
       "expected_status": 200,
       "actual_status": 200,
@@ -1696,17 +1696,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.074Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.677Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Konfigurasi global terbaca dan tersimpan.",
+          "assertion_name": "Functional Check: GET & POST /api/config/global - Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.074Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.677Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.070Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.672Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1718,7 +1718,7 @@
       "method": "POST",
       "url": "/api/config/global",
       "normalized_route": "/api/config/global",
-      "source_line": 1450,
+      "source_line": 1462,
       "token_role": "super_admin",
       "expected_status": 200,
       "actual_status": 200,
@@ -1730,17 +1730,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.074Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.677Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Konfigurasi global terbaca dan tersimpan.",
+          "assertion_name": "Functional Check: GET & POST /api/config/global - Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.074Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.677Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.074Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.677Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1752,7 +1752,7 @@
       "method": "POST",
       "url": "/api/config/global",
       "normalized_route": "/api/config/global",
-      "source_line": 1465,
+      "source_line": 1477,
       "token_role": "super_admin",
       "expected_status": 503,
       "actual_status": 503,
@@ -1764,17 +1764,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.078Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.681Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 503: Database error ditangani fail-closed.",
+          "assertion_name": "Functional Check: POST /api/config/global - DB Failure Handled Fail-Closed (HTTP 503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.078Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.681Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.078Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.681Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -1787,7 +1787,7 @@
       "method": "POST",
       "url": "/api/config/global",
       "normalized_route": "/api/config/global",
-      "source_line": 1478,
+      "source_line": 1490,
       "token_role": "super_admin",
       "expected_status": 400,
       "actual_status": 400,
@@ -1799,17 +1799,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.082Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.683Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 400: Format config bukan objek ditolak (INVALID_INPUT).",
+          "assertion_name": "Functional Check: POST /api/config/global - Invalid Format Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.082Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.683Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.082Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.683Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "INVALID_INPUT"
     },
@@ -1822,7 +1822,7 @@
       "method": "POST",
       "url": "/api/config/global",
       "normalized_route": "/api/config/global",
-      "source_line": 1490,
+      "source_line": 1502,
       "token_role": "installer",
       "expected_status": 403,
       "actual_status": 403,
@@ -1834,17 +1834,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.086Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.687Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Role installer ditolak mengubah config global.",
+          "assertion_name": "Functional Check: POST /api/config/global - Installer Role Forbidden (HTTP 403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.086Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.687Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.086Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.687Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_CONFIG_PERMISSION"
     },
@@ -1857,7 +1857,7 @@
       "method": "GET",
       "url": "/api/assignment-history?woNumber=WO-TEST-MOCK-101",
       "normalized_route": "/api/assignment-history",
-      "source_line": 1506,
+      "source_line": 1518,
       "token_role": "leader",
       "expected_status": 200,
       "actual_status": 200,
@@ -1869,17 +1869,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.091Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.694Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 200 OK: Riwayat penugasan berhasil dimuat.",
+          "assertion_name": "Functional Check: GET /api/assignment-history - Success (HTTP 200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.091Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.694Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.091Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.694Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1891,7 +1891,7 @@
       "method": "GET",
       "url": "/api/assignment-history?woNumber=WO-TEST-MOCK-101",
       "normalized_route": "/api/assignment-history",
-      "source_line": 1519,
+      "source_line": 1531,
       "token_role": "leader",
       "expected_status": 503,
       "actual_status": 503,
@@ -1903,17 +1903,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.095Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.696Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 503: Database error ditangani fail-closed.",
+          "assertion_name": "Functional Check: GET /api/assignment-history - DB Failure Handled Fail-Closed (HTTP 503)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.095Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.696Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.095Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.696Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DATABASE_UNAVAILABLE"
     },
@@ -1926,7 +1926,7 @@
       "method": "GET",
       "url": "/api/assignment-history",
       "normalized_route": "/api/assignment-history",
-      "source_line": 1530,
+      "source_line": 1542,
       "token_role": "leader",
       "expected_status": 400,
       "actual_status": 400,
@@ -1938,17 +1938,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.098Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.699Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 400: Nomor WO wajib disertakan (INVALID_INPUT).",
+          "assertion_name": "Functional Check: GET /api/assignment-history - Empty WO Rejected (HTTP 400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.098Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.699Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.098Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.699Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "INVALID_INPUT"
     },
@@ -1961,41 +1961,6 @@
       "method": "GET",
       "url": "/api/assignment-history?woNumber=WO-TEST-MOCK-101",
       "normalized_route": "/api/assignment-history",
-      "source_line": 1540,
-      "token_role": null,
-      "expected_status": 401,
-      "actual_status": 401,
-      "status_assertion_passed": true,
-      "functional_assertion_passed": true,
-      "assertion_count": 2,
-      "failed_assertion_count": 0,
-      "assertion_results": [
-        {
-          "assertion_name": "HTTP Status Code matches expected (401)",
-          "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.101Z"
-        },
-        {
-          "assertion_name": "Functional Assertion: HTTP 401: Request tanpa autentikasi ditolak (UNAUTHENTICATED).",
-          "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.101Z"
-        }
-      ],
-      "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.101Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
-      "environment": "isolated_mock_staging_loopback",
-      "response_code": "UNAUTHENTICATED"
-    },
-    {
-      "suite": "Phase14C.1",
-      "scenario": "Auth Check: Request Without Token Returns HTTP 401",
-      "test_scenario": "Auth Check: Request Without Token Returns HTTP 401",
-      "scenario_number": 53,
-      "category": "Auth & RBAC",
-      "method": "GET",
-      "url": "/api/work-orders",
-      "normalized_route": "/api/work-orders",
       "source_line": 1552,
       "token_role": null,
       "expected_status": 401,
@@ -2008,17 +1973,52 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.104Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.703Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 401 UNAUTHENTICATED: Request tanpa header Authorization ditolak.",
+          "assertion_name": "Functional Check: GET /api/assignment-history - Unauthenticated Rejected (HTTP 401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.104Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.703Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.104Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.703Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "UNAUTHENTICATED"
+    },
+    {
+      "suite": "Phase14C.1",
+      "scenario": "Auth Check: Request Without Token Returns HTTP 401",
+      "test_scenario": "Auth Check: Request Without Token Returns HTTP 401",
+      "scenario_number": 53,
+      "category": "Auth & RBAC",
+      "method": "GET",
+      "url": "/api/work-orders",
+      "normalized_route": "/api/work-orders",
+      "source_line": 1564,
+      "token_role": null,
+      "expected_status": 401,
+      "actual_status": 401,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (401)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-06T21:56:30.708Z"
+        },
+        {
+          "assertion_name": "Functional Check: Auth Check: Request Without Token Returns HTTP 401",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-06T21:56:30.708Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-06T21:56:30.708Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -2031,7 +2031,7 @@
       "method": "GET",
       "url": "/api/work-orders",
       "normalized_route": "/api/work-orders",
-      "source_line": 1560,
+      "source_line": 1572,
       "token_role": "authenticated",
       "expected_status": 401,
       "actual_status": 401,
@@ -2043,17 +2043,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.108Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.713Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 401 UNAUTHENTICATED: Token palsu/rusak ditolak tegas.",
+          "assertion_name": "Functional Check: Auth Check: Corrupted Bearer Token Returns HTTP 401",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.108Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.713Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.108Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.713Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -2066,7 +2066,7 @@
       "method": "GET",
       "url": "/api/work-orders",
       "normalized_route": "/api/work-orders",
-      "source_line": 1568,
+      "source_line": 1580,
       "token_role": "authenticated",
       "expected_status": 401,
       "actual_status": 401,
@@ -2078,17 +2078,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.111Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.715Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 401 UNAUTHENTICATED: Sesi kedaluwarsa ditolak.",
+          "assertion_name": "Functional Check: Auth Check: Expired Session Returns HTTP 401",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.111Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.715Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.111Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.715Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -2101,7 +2101,7 @@
       "method": "POST",
       "url": "/api/tickets/assign",
       "normalized_route": "/api/tickets/assign",
-      "source_line": 1592,
+      "source_line": 1604,
       "token_role": "leader",
       "expected_status": 403,
       "actual_status": 403,
@@ -2113,17 +2113,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.119Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.725Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403 SCOPE_MISMATCH: Leader dibatasi ketat hanya pada kontraktornya.",
+          "assertion_name": "Functional Check: RBAC: Leader Accessing Another Contractor Rejected (SCOPE_MISMATCH)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.119Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.725Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.119Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.725Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "SCOPE_MISMATCH"
     },
@@ -2136,7 +2136,7 @@
       "method": "POST",
       "url": "/api/tickets/wo_test_mock_101/messages",
       "normalized_route": "/api/tickets/wo_test_mock_101/messages",
-      "source_line": 1609,
+      "source_line": 1621,
       "token_role": "leader",
       "expected_status": 403,
       "actual_status": 403,
@@ -2148,17 +2148,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.124Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.729Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403 LEADER_READ_ONLY_CHAT: Leader hanya dapat memantau percakapan.",
+          "assertion_name": "Functional Check: RBAC: Leader Live Chat Locked Read-Only (LEADER_READ_ONLY_CHAT)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.124Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.729Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.124Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.729Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "LEADER_READ_ONLY_CHAT"
     },
@@ -2171,7 +2171,7 @@
       "method": "PUT",
       "url": "/api/users/u-installer-01",
       "normalized_route": "/api/users/u-installer-01",
-      "source_line": 1625,
+      "source_line": 1637,
       "token_role": "installer",
       "expected_status": 403,
       "actual_status": 403,
@@ -2183,17 +2183,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.127Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.734Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: User non-admin tidak dapat mengubah role akun sendiri.",
+          "assertion_name": "Functional Check: RBAC: Self-Role Elevation Prohibited by Server Backend",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.127Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.734Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.127Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.734Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Anda tidak memiliki izin untuk mengedit akun ini."
     },
@@ -2206,7 +2206,7 @@
       "method": "GET",
       "url": "/api/users/u-other-contractor-01",
       "normalized_route": "/api/users/u-other-contractor-01",
-      "source_line": 1649,
+      "source_line": 1661,
       "token_role": "leader",
       "expected_status": 403,
       "actual_status": 403,
@@ -2218,17 +2218,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.131Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.738Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403 FORBIDDEN_SCOPE: Leader tidak dapat melihat staf mitra lain.",
+          "assertion_name": "Functional Check: RBAC: Out-Of-Scope User Profile Inspection Blocked (FORBIDDEN_SCOPE)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.131Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.738Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.131Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.738Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "FORBIDDEN_SCOPE"
     },
@@ -2241,7 +2241,7 @@
       "method": "POST",
       "url": "/api/auth/firebase-login",
       "normalized_route": "/api/auth/firebase-login",
-      "source_line": 1664,
+      "source_line": 1676,
       "token_role": null,
       "expected_status": 403,
       "actual_status": 403,
@@ -2253,17 +2253,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.135Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.742Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Firebase Auth dinonaktifkan di mode produksi (FIREBASE_AUTH_DISABLED_PRODUCTION).",
+          "assertion_name": "Functional Check: Legacy Audit: /api/auth/firebase-login Disabled in Production",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.135Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.742Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.135Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.742Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "FIREBASE_AUTH_DISABLED_PRODUCTION"
     },
@@ -2276,7 +2276,7 @@
       "method": "POST",
       "url": "/api/auth/login",
       "normalized_route": "/api/auth/login",
-      "source_line": 1675,
+      "source_line": 1687,
       "token_role": null,
       "expected_status": 403,
       "actual_status": 403,
@@ -2288,17 +2288,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.138Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.745Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Local auth dinonaktifkan di mode produksi (DEPRECATED_AUTH_ENDPOINT).",
+          "assertion_name": "Functional Check: Legacy Audit: /api/auth/login Disabled in Production",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.138Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.745Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.138Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.745Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DEPRECATED_AUTH_ENDPOINT"
     },
@@ -2311,7 +2311,7 @@
       "method": "POST",
       "url": "/api/users/sync-profile",
       "normalized_route": "/api/users/sync-profile",
-      "source_line": 1686,
+      "source_line": 1698,
       "token_role": null,
       "expected_status": 403,
       "actual_status": 403,
@@ -2323,17 +2323,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.141Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.750Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Sinkronisasi profil manual dinonaktifkan di mode produksi (DEPRECATED_ENDPOINT).",
+          "assertion_name": "Functional Check: Legacy Audit: /api/users/sync-profile Disabled in Production",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.141Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.750Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.141Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.750Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "DEPRECATED_ENDPOINT"
     },
@@ -2346,41 +2346,6 @@
       "method": "POST",
       "url": "/api/tickets/assign",
       "normalized_route": "/api/tickets/assign",
-      "source_line": 1707,
-      "token_role": "leader",
-      "expected_status": 403,
-      "actual_status": 403,
-      "status_assertion_passed": true,
-      "functional_assertion_passed": true,
-      "assertion_count": 2,
-      "failed_assertion_count": 0,
-      "assertion_results": [
-        {
-          "assertion_name": "HTTP Status Code matches expected (403)",
-          "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.145Z"
-        },
-        {
-          "assertion_name": "Functional Assertion: HTTP 403: Mutasi penugasan pada record terproteksi ditolak keras (PROTECTED_PRODUCTION_RECORD).",
-          "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.145Z"
-        }
-      ],
-      "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.145Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
-      "environment": "isolated_mock_staging_loopback",
-      "response_code": "PROTECTED_PRODUCTION_RECORD"
-    },
-    {
-      "suite": "Phase14C.1",
-      "scenario": "Protected WO Immutability: wo_imp_1793825458959_4i4f1h Shielded From Reassignment",
-      "test_scenario": "Protected WO Immutability: wo_imp_1793825458959_4i4f1h Shielded From Reassignment",
-      "scenario_number": 64,
-      "category": "Protected WO",
-      "method": "POST",
-      "url": "/api/tickets/reassign",
-      "normalized_route": "/api/tickets/reassign",
       "source_line": 1719,
       "token_role": "leader",
       "expected_status": 403,
@@ -2393,29 +2358,29 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.149Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.754Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Mutasi reassign pada record terproteksi ditolak keras (PROTECTED_PRODUCTION_RECORD).",
+          "assertion_name": "Functional Check: Protected WO Immutability: wo_1793825457141_u4bnht Shielded From Assignment",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.149Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.754Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.149Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.754Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "PROTECTED_PRODUCTION_RECORD"
     },
     {
       "suite": "Phase14C.1",
-      "scenario": "Protected WO Immutability: wo_imp_1793825458959_262dei Shielded From Mutation",
-      "test_scenario": "Protected WO Immutability: wo_imp_1793825458959_262dei Shielded From Mutation",
-      "scenario_number": 65,
+      "scenario": "Protected WO Immutability: wo_imp_1793825458959_4i4f1h Shielded From Reassignment",
+      "test_scenario": "Protected WO Immutability: wo_imp_1793825458959_4i4f1h Shielded From Reassignment",
+      "scenario_number": 64,
       "category": "Protected WO",
       "method": "POST",
-      "url": "/api/tickets/assign",
-      "normalized_route": "/api/tickets/assign",
+      "url": "/api/tickets/reassign",
+      "normalized_route": "/api/tickets/reassign",
       "source_line": 1731,
       "token_role": "leader",
       "expected_status": 403,
@@ -2428,19 +2393,80 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.152Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.758Z"
         },
         {
-          "assertion_name": "Functional Assertion: HTTP 403: Mutasi pada record terproteksi ketiga ditolak keras (PROTECTED_PRODUCTION_RECORD).",
+          "assertion_name": "Functional Check: Protected WO Immutability: wo_imp_1793825458959_4i4f1h Shielded From Reassignment",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T15:54:41.152Z"
+          "assertion_timestamp": "2026-11-06T21:56:30.758Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T15:54:41.152Z",
-      "test_run_id": "run_phase14c1_1793980480755_2fua25",
+      "timestamp": "2026-11-06T21:56:30.757Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "PROTECTED_PRODUCTION_RECORD"
+    },
+    {
+      "suite": "Phase14C.1",
+      "scenario": "Protected WO Immutability: wo_imp_1793825458959_262dei Shielded From Mutation",
+      "test_scenario": "Protected WO Immutability: wo_imp_1793825458959_262dei Shielded From Mutation",
+      "scenario_number": 65,
+      "category": "Protected WO",
+      "method": "POST",
+      "url": "/api/tickets/assign",
+      "normalized_route": "/api/tickets/assign",
+      "source_line": 1743,
+      "token_role": "leader",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-06T21:56:30.761Z"
+        },
+        {
+          "assertion_name": "Functional Check: Protected WO Immutability: wo_imp_1793825458959_262dei Shielded From Mutation",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-06T21:56:30.761Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-06T21:56:30.761Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "PROTECTED_PRODUCTION_RECORD"
+    },
+    {
+      "suite": "Phase14C.1",
+      "scenario": "Frontend Dist Security: Zero Service Role Keys, DB Passwords or Direct Clients",
+      "test_scenario": "Frontend Dist Security: Zero Service Role Keys, DB Passwords or Direct Clients",
+      "scenario_number": 66,
+      "category": "Frontend Build Security",
+      "method": "NONE",
+      "url": "/no-execution",
+      "normalized_route": "/no-execution",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 0,
+      "status_assertion_passed": false,
+      "functional_assertion_passed": false,
+      "assertion_count": 0,
+      "failed_assertion_count": 0,
+      "assertion_results": [],
+      "result": "NO_EXECUTION_EVIDENCE",
+      "timestamp": "2026-11-06T21:56:30.832Z",
+      "test_run_id": "run_phase14c1_1794002190306_41xqhp",
+      "environment": "isolated_mock_staging_loopback",
+      "failure_reasons": [
+        "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
+      ]
     }
   ]
 }

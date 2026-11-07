@@ -1,8 +1,8 @@
 {
   "suite": "Phase14C.2.4.1_Regression",
-  "test_run_id": "run_phase14c241regression_1793981917630_gcwwir",
+  "test_run_id": "run_phase14c241regression_1794002252730_jhtrsd",
   "environment": "isolated_mock_staging_loopback",
-  "generated_at": "2026-11-06T16:18:37.675Z",
+  "generated_at": "2026-11-06T21:57:32.791Z",
   "total_http_calls_executed": 1,
   "all_passed": true,
   "evidence": [
@@ -27,32 +27,32 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T16:18:37.674Z"
+          "assertion_timestamp": "2026-11-06T21:57:32.791Z"
         },
         {
           "assertion_name": "Response status is strictly 200",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T16:18:37.674Z"
+          "assertion_timestamp": "2026-11-06T21:57:32.791Z"
         },
         {
           "assertion_name": "Response body is non-null object",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T16:18:37.674Z"
+          "assertion_timestamp": "2026-11-06T21:57:32.791Z"
         },
         {
           "assertion_name": "Rendered template contains customer name",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T16:18:37.674Z"
+          "assertion_timestamp": "2026-11-06T21:57:32.791Z"
         },
         {
           "assertion_name": "Generated URL starts with https://wa.me/",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-06T16:18:37.674Z"
+          "assertion_timestamp": "2026-11-06T21:57:32.791Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-06T16:18:37.674Z",
-      "test_run_id": "run_phase14c241regression_1793981917630_gcwwir",
+      "timestamp": "2026-11-06T21:57:32.791Z",
+      "test_run_id": "run_phase14c241regression_1794002252730_jhtrsd",
       "environment": "isolated_mock_staging_loopback"
     }
   ]
