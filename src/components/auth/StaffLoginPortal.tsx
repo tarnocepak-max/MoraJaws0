@@ -61,8 +61,80 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
         const errorMsg = res.error || 'Kredensial login tidak valid. Pastikan nama pengguna dan kata sandi benar.';
         setError(errorMsg);
 
-        // Precise error categorization: Do not show MJ-AUTH-001 wrong credential error for connection, inactive, or not-found errors
-        if (res.errorCode === 'MJ-AUTH-001' || errorMsg.includes('tidak cocok') || errorMsg.includes('salah')) {
+        // Precise error categorization: Do not show MJ-AUTH-001 wrong credential error for connection, mapping, inactive, or not-found errors
+        if (res.errorCode === 'NEEDS_MAPPING') {
+          showGlobalError({
+            errorCode: 'MJ-AUTH-004',
+            module: 'Authentication',
+            operation: 'Staff Auth UID Mapping',
+            description: 'Profil staf belum memiliki pemetaan Supabase Auth UID yang disetujui.',
+            message: 'Kata sandi diverifikasi, tetapi akun Anda membutuhkan persetujuan pemetaan Auth UID oleh Super Admin.',
+            technicalDetails: errorMsg,
+            severity: 'HIGH',
+            status: 'OPEN'
+          });
+        } else if (res.errorCode === 'AUTH_UID_MISMATCH') {
+          showGlobalError({
+            errorCode: 'MJ-AUTH-004',
+            module: 'Authentication',
+            operation: 'Staff Identity Integrity',
+            description: 'Auth UID tidak cocok dengan profil staf terdaftar.',
+            message: 'Akses ditolak demi keamanan: identitas token tidak cocok dengan data staf.',
+            technicalDetails: errorMsg,
+            severity: 'CRITICAL',
+            status: 'OPEN'
+          });
+        } else if (res.errorCode === 'STAFF_AUTH_EMAIL_MISSING') {
+          showGlobalError({
+            errorCode: 'MJ-AUTH-004',
+            module: 'Authentication',
+            operation: 'Staff Email Configuration',
+            description: 'Email staf belum terdaftar.',
+            message: 'Profil staf ditemukan, namun belum memiliki email untuk Supabase Auth. Hubungi Super Admin.',
+            technicalDetails: errorMsg,
+            severity: 'MEDIUM',
+            status: 'OPEN'
+          });
+        } else if (res.errorCode === 'AUTH_EMAIL_NOT_CONFIRMED') {
+          showGlobalError({
+            errorCode: 'MJ-AUTH-004',
+            module: 'Authentication',
+            operation: 'Email Confirmation',
+            description: 'Email akun belum dikonfirmasi.',
+            message: 'Email akun Supabase belum dikonfirmasi. Periksa kotak masuk email atau hubungi Super Admin.',
+            technicalDetails: errorMsg,
+            severity: 'MEDIUM',
+            status: 'OPEN'
+          });
+        } else if (res.errorCode === 'SUPABASE_NOT_CONFIGURED') {
+          showGlobalError({
+            errorCode: 'MJ-SYS-001',
+            module: 'Authentication',
+            operation: 'Supabase Configuration',
+            description: 'Layanan Supabase backend belum dikonfigurasi.',
+            message: 'Konfigurasi Supabase backend belum lengkap pada environment server.',
+            technicalDetails: errorMsg,
+            severity: 'HIGH',
+            status: 'OPEN'
+          });
+        } else if (res.errorCode === 'AUTH_PROVIDER_UNAVAILABLE') {
+          showGlobalError({
+            errorCode: 'MJ-AUTH-NET-001',
+            module: 'Authentication',
+            operation: 'Supabase Service Reachability',
+            description: 'Layanan Supabase Auth tidak dapat dijangkau.',
+            message: 'Koneksi ke Supabase Auth gagal atau batas waktu terlampaui.',
+            technicalDetails: errorMsg,
+            severity: 'HIGH',
+            status: 'OPEN'
+          });
+        } else if (
+          res.errorCode === 'MJ-AUTH-001' ||
+          res.errorCode === 'AUTH_INVALID_CREDENTIALS' ||
+          res.errorCode === 'INVALID_CREDENTIALS' ||
+          res.errorCode === 'auth/wrong-password' ||
+          (errorMsg.includes('tidak cocok') && !errorMsg.includes('Auth UID'))
+        ) {
           showGlobalError({
             errorCode: 'MJ-AUTH-001',
             module: 'Authentication',

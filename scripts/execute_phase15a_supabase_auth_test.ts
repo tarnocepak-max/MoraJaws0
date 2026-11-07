@@ -734,7 +734,7 @@ async function runPhase15aTests() {
 
       const pass = res.status === 401 &&
         res.body?.success === false &&
-        res.body?.code === 'auth/wrong-password';
+        (res.body?.code === 'auth/wrong-password' || res.body?.code === 'AUTH_INVALID_CREDENTIALS' || res.body?.code === 'INVALID_CREDENTIALS');
 
       recordTest(
         3,

@@ -795,7 +795,7 @@ export async function runPhase14C3Suite() {
   const mockEnv = createPhase14C3MockClient({});
   setSupabaseBackendClientForTesting(mockEnv.mockClient);
 
-  // Synchronize db in-memory fixture with mock
+  const app = await createExpressApp({ skipVite: true });
   db.tickets = [mockEnv.getWoState()];
   db.users = mockEnv.getUsersList();
   db.contractors = mockEnv.getContractorsList();
@@ -807,8 +807,6 @@ export async function runPhase14C3Suite() {
     updatedAt: new Date().toISOString(),
     updatedBy: 'Super Administrator'
   };
-
-  const app = await createExpressApp({ skipVite: true });
   setupTestAuthSessions(mockEnv.getUsersList());
   const server = http.createServer(app);
 

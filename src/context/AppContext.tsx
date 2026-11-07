@@ -1244,9 +1244,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const errCode = data.code || 'MJ-AUTH-001';
         let errorMsg = data.error || 'Autentikasi gagal. Kredensial tidak cocok.';
 
-        if (serverRes.status === 503 || errCode === 'DATABASE_UNAVAILABLE') {
+        if (errCode === 'SUPABASE_NOT_CONFIGURED') {
+          errorMsg = 'Layanan Supabase backend belum dikonfigurasi pada environment variables server.';
+        } else if (errCode === 'AUTH_PROVIDER_UNAVAILABLE') {
+          errorMsg = 'Layanan Supabase Auth sedang tidak dapat dijangkau. Coba beberapa saat lagi.';
+        } else if (errCode === 'DATABASE_UNAVAILABLE' || serverRes.status === 503) {
           errorMsg = 'Database authoritative Supabase tidak dapat diakses saat login.';
-        } else if (serverRes.status === 404 || errCode === 'auth/user-not-found') {
+        } else if (serverRes.status === 404 || errCode === 'auth/user-not-found' || errCode === 'ACCOUNT_NOT_FOUND') {
           errorMsg = `Nama pengguna atau email "${cleanUser}" tidak ditemukan dalam direktori staf MoraJaws.`;
         } else if (serverRes.status === 403 || errCode === 'auth/user-disabled' || errCode === 'ACCOUNT_DISABLED' || errCode === 'ACCOUNT_DELETED') {
           errorMsg = data.error || 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.';
@@ -1260,8 +1264,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           errorMsg = 'Profil staf belum memiliki email autentikasi. Hubungi Super Admin untuk melengkapi email.';
         } else if (errCode === 'AUTH_EMAIL_NOT_CONFIRMED') {
           errorMsg = 'Email Supabase belum dikonfirmasi. Hubungi Super Admin.';
-        } else if (errCode === 'AUTH_PROVIDER_UNAVAILABLE' || errCode === 'SUPABASE_NOT_CONFIGURED') {
-          errorMsg = 'Layanan Supabase Auth sedang tidak tersedia atau konfigurasi server belum lengkap. Coba lagi nanti.';
+        } else if (errCode === 'AUTH_INVALID_CREDENTIALS' || errCode === 'INVALID_CREDENTIALS' || errCode === 'auth/wrong-password') {
+          errorMsg = data.error || 'Autentikasi gagal. Kredensial tidak cocok.';
         }
 
         addAuditLog('Login Attempt Failed', 'auth', cleanUser, errorMsg);

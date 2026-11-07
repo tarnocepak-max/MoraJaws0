@@ -308,7 +308,7 @@ export function postgresRowToUser(row: any): ServerUser {
     name: row.name,
     username: row.username,
     email: row.email || '',
-    altEmail: row.alt_email || undefined,
+    altEmail: row.alt_email || payload.altEmail || payload.alt_email || undefined,
     phone: row.phone || undefined,
     role: row.role,
     contractor: row.contractor || undefined,
@@ -784,6 +784,30 @@ export async function findUserInSupabaseDetailed(identifier: string): Promise<Su
       return { success: true, data: postgresRowToUser(byId) };
     }
 
+    // 2.B. Check exact match on auth_user_id (Supabase Auth UID) if format is UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(raw)) {
+      try {
+        const { data: byAuthUid, error: errAuthUid } = await client
+          .from('users')
+          .select('*')
+          .eq('auth_user_id', raw)
+          .limit(1)
+          .maybeSingle();
+
+        if (errAuthUid) {
+          const errCode = String(errAuthUid.code || '');
+          if (!errCode.includes('42703') && !errAuthUid.message?.includes('column')) {
+            const classified = classifySupabaseError(errAuthUid);
+            return { success: false, data: null, error: classified };
+          }
+        }
+        if (byAuthUid) {
+          return { success: true, data: postgresRowToUser(byAuthUid) };
+        }
+      } catch {}
+    }
+
     // 3. If identifier has '@', search by email and alt_email
     if (raw.includes('@')) {
       const { data: byEmail, error: errEmail } = await client
@@ -802,21 +826,25 @@ export async function findUserInSupabaseDetailed(identifier: string): Promise<Su
         return { success: true, data: postgresRowToUser(byEmail) };
       }
 
-      // Check alt_email
-      const { data: byAltEmail, error: errAlt } = await client
+      // Check alt_email with wildcard and exact membership validation
+      const { data: byAltList, error: errAlt } = await client
         .from('users')
         .select('*')
-        .ilike('alt_email', escapePostgrestLikeValue(raw))
-        .limit(1)
-        .maybeSingle();
+        .ilike('alt_email', `%${escapePostgrestLikeValue(raw)}%`)
+        .limit(5);
 
       if (errAlt) {
         const classified = classifySupabaseError(errAlt);
         console.error('[Supabase DAL] findUser query error (alt_email):', classified.message);
         return { success: false, data: null, error: classified };
       }
-      if (byAltEmail) {
-        return { success: true, data: postgresRowToUser(byAltEmail) };
+      if (Array.isArray(byAltList) && byAltList.length > 0) {
+        const cleanTarget = raw.toLowerCase().trim();
+        const matchedRow = byAltList.find(r => {
+          const alts = String(r.alt_email || '').split(/[,;\s]+/).map(s => s.toLowerCase().trim());
+          return alts.includes(cleanTarget);
+        }) || byAltList[0];
+        return { success: true, data: postgresRowToUser(matchedRow) };
       }
     }
 

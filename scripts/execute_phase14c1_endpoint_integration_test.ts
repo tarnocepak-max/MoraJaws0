@@ -1756,6 +1756,7 @@ async function runSuite() {
 
     // 27. Frontend Dist Bundle Secret & Direct Client Scan
     {
+      await request('/api/health');
       const distDir = path.resolve(process.cwd(), 'dist');
       let passed = true;
       let leakDetails = '';

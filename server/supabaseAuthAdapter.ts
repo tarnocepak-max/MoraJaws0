@@ -79,13 +79,35 @@ export async function signInWithSupabaseAuth(
       };
     }
 
+    let candidateEmails: string[] = [];
+
     if (userRes.data) {
       authoritativeUser = userRes.data;
-      // Supabase Auth always signs in with an email address. Prefer the
-      // primary email, then the registered alternate email when the primary
-      // field is empty. Never attempt to use a username as an Auth email.
-      const authEmail = String(authoritativeUser.email || authoritativeUser.altEmail || '').trim().toLowerCase();
-      if (!authEmail || !authEmail.includes('@')) {
+      const isInputEmail = cleanIdent.includes('@') && cleanIdent.includes('.');
+
+      const parseEmails = (field?: string) => {
+        if (!field) return [];
+        return String(field)
+          .split(/[,;\s]+/)
+          .map(s => s.trim().toLowerCase())
+          .filter(s => s.includes('@') && s.includes('.'));
+      };
+
+      const primaryList = parseEmails(authoritativeUser.email);
+      const altList = parseEmails(authoritativeUser.altEmail || (authoritativeUser as any).payload?.altEmail);
+      const allStaffEmails = [...primaryList, ...altList];
+
+      // If user typed an email directly that belongs to this staff profile, try it first
+      if (isInputEmail && allStaffEmails.includes(cleanIdent)) {
+        candidateEmails.push(cleanIdent);
+      }
+      for (const e of allStaffEmails) {
+        if (!candidateEmails.includes(e)) {
+          candidateEmails.push(e);
+        }
+      }
+
+      if (candidateEmails.length === 0) {
         return {
           success: false,
           error: {
@@ -94,7 +116,7 @@ export async function signInWithSupabaseAuth(
           }
         };
       }
-      targetEmail = authEmail;
+      targetEmail = candidateEmails[0];
     } else {
       // User not found in authoritative users table
       return {
@@ -147,15 +169,40 @@ export async function signInWithSupabaseAuth(
       };
     }
 
-    // 2. Perform Supabase Auth Sign In with password
-    const { data: authData, error: authError } = await client.auth.signInWithPassword({
-      email: targetEmail,
-      password
-    });
+    // 2. Perform Supabase Auth Sign In with password across candidate emails
+    let authData: any = null;
+    let authError: any = null;
+    let successfulEmail: string = targetEmail;
+
+    for (const candEmail of candidateEmails) {
+      const { data, error } = await client.auth.signInWithPassword({
+        email: candEmail,
+        password
+      });
+
+      if (!error && data?.session && data?.user) {
+        authData = data;
+        authError = null;
+        successfulEmail = candEmail;
+        break;
+      }
+
+      authError = error;
+      const rawCode = String((error as any)?.code || '').toLowerCase();
+      const rawMessage = String(error?.message || '').toLowerCase();
+      const isInvalidCreds =
+        rawCode.includes('invalid_credentials') ||
+        rawMessage.includes('invalid login credentials') ||
+        rawMessage.includes('invalid credentials') ||
+        rawMessage.includes('email or password');
+
+      // Stop trying other emails if the error is ban, network, confirmation, or rate limit
+      if (!isInvalidCreds) {
+        break;
+      }
+    }
 
     if (authError || !authData?.session || !authData?.user) {
-      // Do not collapse every Supabase Auth failure into "wrong password".
-      // Network/configuration/confirmation/ban errors need different recovery.
       const rawCode = String((authError as any)?.code || '').toLowerCase();
       const rawMessage = String(authError?.message || '').toLowerCase();
       const rawStatus = Number((authError as any)?.status || 0);

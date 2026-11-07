@@ -6,6 +6,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import type { Ticket } from './src/types/index.ts';
+export type { Ticket };
 
 import { checkSupabaseConnection, getLastSupabaseHealthStatus, getSupabaseBackendClient } from './server/supabaseClient.ts';
 import {
@@ -13,7 +14,8 @@ import {
   verifySupabaseAuthToken,
   refreshSupabaseAuthSession,
   signOutSupabaseAuth,
-  resetSupabaseAuthPassword
+  resetSupabaseAuthPassword,
+  approveAuthUidMapping
 } from './server/supabaseAuthAdapter.ts';
 import { checkFirebaseAdminHealth, verifyFirebaseIdToken } from './server/firebaseAdmin.ts';
 import { EventEmitter } from 'events';
@@ -321,6 +323,7 @@ export function isSupabaseMode(): boolean {
 // -------------------------------------------------------------
 export interface ServerUser {
   id: string;
+  authUserId?: string;
   name: string;
   username: string;
   email: string;
@@ -1262,7 +1265,39 @@ interface AuthenticatedRequest extends Request {
   supabaseAuthUser?: any;
 }
 
+export function validateCsrfProtection(req: { method?: string; headers?: Record<string, string | string[] | undefined> }): { valid: boolean; reason?: string } {
+  const method = (req.method || 'GET').toUpperCase();
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    return { valid: true };
+  }
+  const headers = req.headers || {};
+  const origin = headers['origin'];
+  const host = headers['host'];
+
+  if (origin && host) {
+    const originStr = Array.isArray(origin) ? origin[0] : origin;
+    const hostStr = Array.isArray(host) ? host[0] : host;
+    try {
+      const originHost = new URL(originStr).host;
+      if (originHost !== hostStr) {
+        return { valid: false, reason: 'Origin mismatch' };
+      }
+    } catch {
+      return { valid: false, reason: 'Malformed origin' };
+    }
+  }
+  return { valid: true };
+}
+
 async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  // Production Cutover Guard: Block Firebase auth indicator in production
+  if (!isLocalJsonModeAllowed() && req.headers['x-auth-provider'] === 'firebase') {
+    return res.status(403).json({
+      error: 'Firebase Authentication dinonaktifkan pada lingkungan produksi MoraJaws. Seluruh autentikasi wajib melalui Supabase Auth.',
+      code: 'FIREBASE_AUTH_DISABLED_PRODUCTION'
+    });
+  }
+
   let found: ServerUser | undefined;
   let activeSession: ServerSession | undefined;
   let authSource: 'firebase_token' | 'server_session' | 'supabase_auth' | undefined;
@@ -1284,6 +1319,14 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
       });
     }
 
+    // Production Cutover Guard: Block local session tokens in production
+    if (!isLocalJsonModeAllowed() && token.startsWith('mora_')) {
+      return res.status(401).json({
+        error: 'Sesi login lokal dinonaktifkan pada lingkungan produksi MoraJaws. Seluruh autentikasi wajib melalui Supabase Auth.',
+        code: 'LOCAL_AUTH_DISABLED_PRODUCTION'
+      });
+    }
+
     // 1. Supabase Auth JWT Token Verification (Sole Production Authentication Mechanism)
     if (token.startsWith('eyJ')) {
       try {
@@ -1295,6 +1338,11 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
           return res.status(401).json({
             error: 'Sesi login telah dicabut karena perubahan akun atau logout.',
             code: 'SESSION_REVOKED'
+          });
+        } else if (saRes.error?.code === 'TOKEN_EXPIRED') {
+          return res.status(401).json({
+            error: saRes.error.message || 'Token Supabase Auth telah kedaluwarsa.',
+            code: 'TOKEN_EXPIRED'
           });
         }
       } catch (saErr) {
@@ -2282,7 +2330,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       user: {
         id: user.id,
         username: user.username,
-        email: user.email,
         name: user.name,
         role: user.role,
         contractor: user.contractor,
@@ -2592,29 +2639,27 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         errCode === 'AUTH_PROVIDER_ERROR'
       ) {
         statusCode = 503;
-      } else if (errCode === 'auth/user-not-found') {
+      } else if (errCode === 'auth/user-not-found' || errCode === 'ACCOUNT_NOT_FOUND') {
         statusCode = 404;
       } else if (
         errCode === 'ACCOUNT_DISABLED' ||
         errCode === 'ACCOUNT_DELETED' ||
         errCode === 'auth/user-disabled' ||
-        errCode === 'AUTH_EMAIL_NOT_CONFIRMED'
+        errCode === 'AUTH_EMAIL_NOT_CONFIRMED' ||
+        errCode === 'AUTH_UID_MISMATCH' ||
+        errCode === 'NEEDS_MAPPING' ||
+        errCode === 'INVALID_ROLE'
       ) {
         statusCode = 403;
-      } else if (errCode === 'NEEDS_MAPPING' || errCode === 'AUTH_UID_MISMATCH' || errCode === 'INVALID_ROLE' || errCode === 'STAFF_AUTH_EMAIL_MISSING') {
+      } else if (errCode === 'STAFF_AUTH_EMAIL_MISSING') {
         statusCode = 409;
-      } else if (errCode === 'AUTH_INVALID_CREDENTIALS') {
-        statusCode = 401;
       } else if (
-        errCode === 'NEEDS_MAPPING' ||
-        errCode === 'AUTH_UID_MISMATCH' ||
-        errCode === 'INVALID_ROLE' ||
-        errCode === 'STAFF_AUTH_EMAIL_MISSING' ||
-        errCode === 'AUTH_EMAIL_NOT_CONFIRMED'
+        errCode === 'AUTH_INVALID_CREDENTIALS' ||
+        errCode === 'INVALID_CREDENTIALS' ||
+        errCode === 'auth/wrong-password' ||
+        errCode === 'MJ-AUTH-001'
       ) {
-        // Profile/configuration failures are not bad-password attempts.
-        statusCode = 409;
-      } else {
+        statusCode = 401;
         const currentAttempts = (attemptInfo?.count || 0) + 1;
         let lockedUntil: number | undefined;
         if (currentAttempts >= 5) {
@@ -2638,7 +2683,8 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       return res.status(statusCode).json({
         success: false,
         error: authRes.error?.message || 'Autentikasi Supabase Auth gagal.',
-        code: errCode
+        code: errCode,
+        details: authRes.error?.details
       });
     }
 
@@ -2704,20 +2750,26 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   app.post('/api/auth/supabase-logout', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-    await signOutSupabaseAuth();
+    // Do not call client.auth.signOut() on a shared backend client
     if (req.session) {
       req.session.status = 'revoked';
     }
     if (req.user) {
-      req.user.sessionVersion = (req.user.sessionVersion || 1) + 1;
+      const nextVersion = (req.user.sessionVersion || 1) + 1;
+      req.user.sessionVersion = nextVersion;
       if (isSupabaseMode()) {
         try {
-          await updateUserInSupabase(req.user.id, { sessionVersion: req.user.sessionVersion });
-        } catch {}
+          const updateRes = await updateUserInSupabase(req.user.id, { sessionVersion: nextVersion });
+          if (!updateRes.success) {
+            return res.status(500).json({ success: false, error: 'Gagal memperbarui versi sesi di database.', code: 'SESSION_REVOCATION_FAILED' });
+          }
+        } catch {
+          return res.status(500).json({ success: false, error: 'Database gagal diakses saat logout.', code: 'DATABASE_UNAVAILABLE' });
+        }
       }
       await logServerAuditAsync('Logout Success (Supabase Auth)', 'auth', req.user.id, `User ${req.user.name} logout dari Supabase Auth`, req.user, { level: 'critical' });
     }
-    res.json({ success: true, message: 'Sesi Supabase Auth berhasil diakhiri.' });
+    res.json({ success: true, message: 'Sesi Supabase Auth berhasil diakhiri.', sessionVersion: req.user?.sessionVersion });
   });
 
   app.post('/api/auth/supabase-reset-password', async (req: Request, res: Response) => {
@@ -2732,8 +2784,31 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     res.json({ success: true, message: `Email pemulihan kata sandi telah dikirim ke ${email}.` });
   });
 
+  // --- Identity Mapping Approval (Super Admin Only) ---
+  app.post('/api/auth/approve-mapping', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
+    const { staffId, authUserId } = req.body || {};
+    const result = await approveAuthUidMapping({
+      staffId,
+      authUserId,
+      adminUser: req.user!
+    });
+    if (!result.success) {
+      const status = result.error?.code === 'FORBIDDEN' ? 403 : result.error?.code === 'INVALID_INPUT' ? 400 : 500;
+      return res.status(status).json(result);
+    }
+    return res.json(result);
+  });
+
   // --- Change Password for Authenticated Users (Enforces transition from default seed password) ---
   app.post('/api/auth/change-password', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    if (isSupabaseMode()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Perubahan kata sandi lokal dinonaktifkan di mode produksi. Gunakan reset password Supabase Auth (SUPABASE_PASSWORD_CHANGE_NOT_IMPLEMENTED).',
+        code: 'LOCAL_PASSWORD_DISABLED'
+      });
+    }
+
     const user = req.user!;
     const { currentPassword, newPassword } = req.body;
 
