@@ -58,8 +58,8 @@ export function getAppEnvironment(): AppEnvironment {
   if (rawEnv === 'staging' || rawEnv === 'stage') {
     return 'staging';
   }
-  if (rawEnv === 'development' || rawEnv === 'dev') {
-    return 'development';
+  if (rawEnv === 'production' || rawEnv === 'prod') {
+    return 'production';
   }
 
   // Default to production to ensure canonical deployment URL https://morajaws.ai.studio is enforced
@@ -436,6 +436,14 @@ export function validateEnvironmentStartup(envOverride?: AppEnvironment): { vali
     if (config.supabaseUrl.includes('morajaws.ai.studio') || (process.env.PRODUCTION_SUPABASE_URL && config.supabaseUrl === process.env.PRODUCTION_SUPABASE_URL.trim())) {
       errors.push('Cross-environment violation: URL project produksi dilarang digunakan oleh staging.');
     }
+    try {
+      const parsed = new URL(config.supabaseUrl);
+      if (parsed.protocol !== 'https:') {
+        errors.push('Staging Supabase URL wajib menggunakan protokol HTTPS.');
+      }
+    } catch {
+      errors.push(`Format Staging Supabase URL "${config.supabaseUrl}" tidak valid.`);
+    }
   } else if (config.env === 'production') {
     if (config.supabaseProjectId === STAGING_SUPABASE_PROJECT_ID) {
       errors.push(`Cross-environment violation: Project ID staging "${STAGING_SUPABASE_PROJECT_ID}" dilarang digunakan di production.`);
@@ -443,6 +451,19 @@ export function validateEnvironmentStartup(envOverride?: AppEnvironment): { vali
     const extracted = extractSupabaseProjectId(config.supabaseUrl);
     if (extracted === STAGING_SUPABASE_PROJECT_ID) {
       errors.push(`Cross-environment violation: Production Supabase URL (${config.supabaseUrl}) mengarah ke project staging.`);
+    }
+    if (config.supabaseUrl && config.supabaseUrl.includes(STAGING_SUPABASE_PROJECT_ID)) {
+      errors.push(`Cross-environment violation: Production Supabase URL mengandung staging project ID "${STAGING_SUPABASE_PROJECT_ID}".`);
+    }
+    if (config.supabaseUrl) {
+      try {
+        const parsed = new URL(config.supabaseUrl);
+        if (parsed.protocol !== 'https:' && process.env.NODE_ENV === 'production') {
+          errors.push('Production Supabase URL wajib menggunakan protokol HTTPS.');
+        }
+      } catch {
+        errors.push(`Format Production Supabase URL "${config.supabaseUrl}" tidak valid.`);
+      }
     }
   }
 

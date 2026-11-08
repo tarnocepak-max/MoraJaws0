@@ -1401,6 +1401,14 @@ export function isBrowserClientRequest(req: Request): boolean {
   if (req.headers['x-suppress-tokens'] === 'true') {
     return true;
   }
+  const cookieName = getSessionCookieName();
+  const cookies = parseRequestCookies(req);
+  if (cookies[cookieName]) {
+    return true;
+  }
+  if (req.headers['origin'] || req.headers['referer']) {
+    return true;
+  }
   return false;
 }
 
@@ -2863,11 +2871,16 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         null,
         { level: 'critical' }
       );
+      const safeDetails = authRes.error?.details ? {
+        staffId: authRes.error.details.staffId,
+        username: authRes.error.details.username
+      } : undefined;
+
       return res.status(statusCode).json({
         success: false,
         error: authRes.error?.message || 'Autentikasi Supabase Auth gagal.',
         code: errCode,
-        details: authRes.error?.details
+        details: safeDetails
       });
     }
 
@@ -3367,16 +3380,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
   // --- Change Password for Authenticated Users (Enforces transition from default seed password) ---
   app.post('/api/auth/change-password', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-    if (isSupabaseMode()) {
-      return res.status(400).json({
-        success: false,
-        error: 'Perubahan kata sandi lokal dinonaktifkan di mode produksi. Gunakan reset password Supabase Auth (SUPABASE_PASSWORD_CHANGE_NOT_IMPLEMENTED).',
-        code: 'LOCAL_PASSWORD_DISABLED'
-      });
-    }
-
-    const user = req.user!;
-    const { currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body || {};
 
     if (!currentPassword || !newPassword) {
       return res.status(400).json({
@@ -3401,6 +3405,16 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         code: 'CANNOT_USE_DEFAULT_PASSWORD'
       });
     }
+
+    if (isSupabaseMode()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Perubahan kata sandi lokal dinonaktifkan di mode produksi. Gunakan reset password Supabase Auth (SUPABASE_PASSWORD_CHANGE_NOT_IMPLEMENTED).',
+        code: 'LOCAL_PASSWORD_DISABLED'
+      });
+    }
+
+    const user = req.user!;
 
     const currentHash = hashPassword(currentPassword);
     const matchesCurrent = user.passwordHash === currentHash || (currentPassword === '12345678' && user.passwordHash === DEFAULT_HASH);

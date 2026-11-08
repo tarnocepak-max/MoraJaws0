@@ -1208,6 +1208,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       })
       .catch(() => {});
+
+    // Phase 15A.7.5: Authoritative session validation on page load/refresh
+    fetch('/api/auth/session', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Morajaws-Client': 'browser',
+        ...getAuthHeaders()
+      },
+      credentials: 'include'
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.authenticated === true && data.user) {
+          const authUser = data.user;
+          setIsLoggedIn(true);
+          setCurrentUser(prev => ({
+            ...prev,
+            ...authUser,
+            id: authUser.id,
+            name: authUser.name || authUser.username,
+            username: authUser.username,
+            role: authUser.role,
+            contractor: authUser.contractor,
+            contractorId: authUser.contractorId,
+            area: authUser.area,
+            active: authUser.active !== false
+          }));
+          try {
+            localStorage.setItem('morajaws_logged_in', 'true');
+            localStorage.setItem('morajaws_auth_session', JSON.stringify({
+              userId: authUser.id,
+              username: authUser.username,
+              role: authUser.role,
+              name: authUser.name,
+              contractor: authUser.contractor,
+              contractorId: authUser.contractorId,
+              area: authUser.area,
+              sessionId: data.session?.sessionId,
+              sessionVersion: data.session?.sessionVersion || authUser.sessionVersion || 1
+            }));
+          } catch {}
+        } else if (data && data.authenticated === false) {
+          // Stale local session without valid server backend cookie/token
+          const stored = localStorage.getItem('morajaws_logged_in');
+          if (stored === 'true') {
+            setIsLoggedIn(false);
+            setCurrentUser(UNAUTHENTICATED_USER);
+            try {
+              localStorage.setItem('morajaws_logged_in', 'false');
+              localStorage.removeItem('morajaws_auth_session');
+            } catch {}
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Authentication & Session (Phase 13E: Supabase Auth as Sole Production Mechanism)

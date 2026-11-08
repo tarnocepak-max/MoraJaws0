@@ -247,6 +247,8 @@ export interface Ticket {
   address?: string;
   city?: string;
   postalCode?: string;
+  latitude?: number;
+  longitude?: number;
   clusterName?: string;
   area: string;
 
