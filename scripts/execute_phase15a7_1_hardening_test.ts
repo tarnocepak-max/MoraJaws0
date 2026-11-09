@@ -38,6 +38,7 @@ import {
   isSupabaseConfigured,
   checkSupabaseConnection
 } from '../server/supabaseClient.ts';
+import { setAppEnvironmentForTesting } from '../server/environmentConfig.ts';
 import { createExpressApp, clearAllRecoveryRateLimitsForTesting } from '../server.ts';
 
 interface TestCaseResult {
@@ -218,6 +219,7 @@ async function runAllTests() {
   // SECTION 1: UNIT TESTS
   // ==========================================================================
   console.log('--- SECTION 1: UNIT TESTS ---');
+  setAppEnvironmentForTesting('production');
 
   // 1. Canonical Deployment URL Enforcement
   const defaultRedirect = resolveAuthRedirectUrl();

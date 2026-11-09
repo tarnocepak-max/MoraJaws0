@@ -17,6 +17,7 @@ import {
   updateSupabaseUserPassword
 } from '../server/supabaseAuthAdapter.ts';
 import { setSupabaseBackendClientForTesting } from '../server/supabaseClient.ts';
+import { setAppEnvironmentForTesting } from '../server/environmentConfig.ts';
 
 interface TestResult {
   name: string;
@@ -36,6 +37,7 @@ function assert(name: string, condition: boolean, message: string) {
 
 async function runTests() {
   console.log('=== MORAJAWS SUPABASE PASSWORD RECOVERY TEST SUITE ===\n');
+  setAppEnvironmentForTesting('production');
 
   // --------------------------------------------------------------------------
   // TEST 1: URL Resolution & Redirect Hardening
@@ -116,7 +118,23 @@ async function runTests() {
           return { data: null, error: null };
         }
       }
-    }
+    },
+    from: (_table: string) => ({
+      select: () => ({
+        eq: () => ({
+          single: async () => ({ data: { id: 'usr_mock_123', session_version: 1, sessionVersion: 1 }, error: null }),
+          maybeSingle: async () => ({ data: { id: 'usr_mock_123', session_version: 1, sessionVersion: 1 }, error: null })
+        })
+      }),
+      update: () => ({
+        eq: () => ({
+          select: () => ({
+            single: async () => ({ data: { id: 'usr_mock_123', session_version: 2 }, error: null })
+          }),
+          then: (resolve: any) => Promise.resolve({ data: null, error: null }).then(resolve)
+        })
+      })
+    })
   };
 
   // Inject mock client for safe unit testing

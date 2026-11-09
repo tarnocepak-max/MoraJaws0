@@ -19,7 +19,6 @@ import {
   signInWithSupabaseAuth,
   verifySupabaseAuthToken,
   refreshSupabaseAuthSession,
-  signOutSupabaseAuth,
   resetSupabaseAuthPassword,
   verifySupabaseRecoveryToken,
   updateSupabaseUserPassword,
@@ -1523,7 +1522,7 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
             !u.isDeleted && u.active && (
               (u.firebaseUid && u.firebaseUid === decodedFirebaseToken.uid) ||
               (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail) ||
-              (cleanEmail && u.altEmail && u.altEmail.toLowerCase().includes(cleanEmail))
+              (cleanEmail && u.altEmail && u.altEmail.toLowerCase() === cleanEmail)
             )
           );
 
@@ -2232,7 +2231,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         if (u.isDeleted) return false;
         if (cleanEmail && (
           u.email.toLowerCase() === cleanEmail ||
-          (u.altEmail && u.altEmail.toLowerCase().includes(cleanEmail))
+          (u.altEmail && u.altEmail.toLowerCase() === cleanEmail)
         )) return true;
         if (cleanUid && u.firebaseUid === cleanUid) return true;
         return false;
@@ -2489,7 +2488,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       if (!user) {
         user = db.users.find(u => {
           if (u.isDeleted) return false;
-          if (u.altEmail && u.altEmail.toLowerCase().includes(clean)) return true;
+          if (u.altEmail && u.altEmail.toLowerCase() === clean) return true;
           const prefix = (u.email || '').split('@')[0].toLowerCase();
           return prefix === clean;
         }) || null;
@@ -2650,7 +2649,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       if (!user) {
         user = db.users.find(
           u => !u.isDeleted && (
-            (u.altEmail && u.altEmail.toLowerCase().includes(cleanUser))
+            (u.altEmail && u.altEmail.toLowerCase() === cleanUser)
           )
         ) || null;
       }
@@ -2852,6 +2851,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       }
 
       // 5. Clear cookie with consistent attributes across environments
+      // Note: Do not call client.auth.signOut() on a shared backend client as it mutates global backend auth state.
       clearSecureSessionCookie(res, cookieName, isHttps);
 
       return res.json({

@@ -1,8 +1,8 @@
 {
   "suite": "Phase15A.1",
-  "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+  "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
   "environment": "isolated_mock_staging_loopback",
-  "generated_at": "2026-11-07T19:26:32.850Z",
+  "generated_at": "2026-11-09T16:28:22.603Z",
   "total_http_calls_executed": 17,
   "all_passed": false,
   "evidence": [
@@ -25,8 +25,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.783Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.546Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -51,8 +51,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.786Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.549Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -77,8 +77,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.788Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.554Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -103,8 +103,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.817Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.574Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -129,8 +129,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.820Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.576Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -155,8 +155,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.825Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.580Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -181,8 +181,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.827Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.582Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -207,8 +207,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.830Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.585Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -233,8 +233,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.834Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.591Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -259,8 +259,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.838Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.595Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -285,8 +285,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.840Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.596Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -311,8 +311,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.844Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.599Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -337,8 +337,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.844Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.599Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -363,8 +363,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.844Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.599Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -389,8 +389,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.846Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.600Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -415,8 +415,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.848Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.602Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"
@@ -441,8 +441,8 @@
       "failed_assertion_count": 0,
       "assertion_results": [],
       "result": "NO_EXECUTION_EVIDENCE",
-      "timestamp": "2026-11-07T19:26:32.848Z",
-      "test_run_id": "run_phase15a1_1794079592729_t6p2n0",
+      "timestamp": "2026-11-09T16:28:22.602Z",
+      "test_run_id": "run_phase15a1_1794241702498_4e1zgn",
       "environment": "isolated_mock_staging_loopback",
       "failure_reasons": [
         "[NO_EXECUTION_EVIDENCE] No HTTP request execution evidence recorded over wire"

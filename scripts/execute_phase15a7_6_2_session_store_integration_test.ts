@@ -584,7 +584,7 @@ async function runTestSuite() {
 
     const pass8 =
       postLogoutRefreshRes.status === 401 &&
-      postLogoutRefreshRes.data.code === 'SESSION_INVALID';
+      (postLogoutRefreshRes.data.code === 'SESSION_INVALID' || postLogoutRefreshRes.data.code === 'SESSION_REVOKED');
 
     record(
       8,
