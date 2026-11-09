@@ -173,6 +173,7 @@ export async function saveNavigationConfigToFirestore(
       const res = await fetch('/api/supabase/settings/navigation_config', {
         method: 'POST',
         headers: getAuthHeaders(),
+        credentials: 'include',
         body: JSON.stringify({
           value: payloadToSave,
           description: 'MoraJaws Canonical Navigation Configuration'
@@ -207,7 +208,8 @@ export async function loadNavigationConfigFromFirestore(): Promise<NavigationCon
   if (!isFirestoreActiveForEnvironment()) {
     try {
       const res = await fetch('/api/supabase/settings/navigation_config', {
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
+        credentials: 'include'
       });
       const data = await res.json();
       if (res.ok && data.success && data.data) {

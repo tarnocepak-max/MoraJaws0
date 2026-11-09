@@ -502,6 +502,7 @@ export async function saveTicketToFirestore(ticket: Ticket): Promise<void> {
       await fetch(`/api/supabase/work-orders/${encodeURIComponent(targetId)}`, {
         method: 'PATCH',
         headers: getAuthHeaders(),
+        credentials: 'include',
         body: JSON.stringify(ticket)
       });
     } catch (err) {
@@ -526,6 +527,7 @@ export async function batchSaveTicketsToFirestore(tickets: Ticket[]): Promise<{ 
       const res = await fetch('/api/supabase/work-orders/bulk-import', {
         method: 'POST',
         headers: getAuthHeaders(),
+        credentials: 'include',
         body: JSON.stringify({ tickets })
       });
       const data = await res.json();
@@ -1058,6 +1060,7 @@ export async function deleteTicketFromFirestore(ticketId: string, woNumber?: str
       await fetch(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
+        credentials: 'include',
         body: JSON.stringify({ reason: 'Penghapusan via aplikasi' })
       });
     } catch (err) {
@@ -1091,6 +1094,7 @@ export async function softDeleteTicketInFirestore(ticketId: string, deletedBy: s
       await fetch(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
+        credentials: 'include',
         body: JSON.stringify({ reason: reason || 'Soft delete via aplikasi' })
       });
     } catch (err) {
@@ -1118,7 +1122,8 @@ export async function archiveTicketInFirestore(ticketId: string, archivedBy: str
     try {
       await fetch(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}/archive`, {
         method: 'POST',
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
+        credentials: 'include'
       });
     } catch (err) {
       console.warn('[Supabase Direct Sync] Archive WO error:', err);
@@ -1145,7 +1150,8 @@ export async function restoreTicketInFirestore(ticketId: string, restoredBy: str
     try {
       await fetch(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}/restore`, {
         method: 'POST',
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
+        credentials: 'include'
       });
     } catch (err) {
       console.warn('[Supabase Direct Sync] Restore WO error:', err);
@@ -1223,6 +1229,7 @@ export async function sendChatMessageToFirestore(msg: TicketMessage): Promise<vo
       await fetch(`/api/tickets/${encodeURIComponent(msg.ticketId || msg.woNumber)}/messages`, {
         method: 'POST',
         headers: getAuthHeaders(),
+        credentials: 'include',
         body: JSON.stringify(msg)
       });
     } catch (err) {
@@ -1264,6 +1271,7 @@ export async function saveTemplateToFirestore(template: WhatsAppTemplate): Promi
       await fetch('/api/supabase/settings/whatsapp_templates', {
         method: 'POST',
         headers: getAuthHeaders(),
+        credentials: 'include',
         body: JSON.stringify({ value: template, description: `WA Template: ${template.name}` })
       });
     } catch (err) {
@@ -1302,6 +1310,7 @@ export async function saveUserToFirestore(user: User): Promise<void> {
       await fetch('/api/supabase/users', {
         method: 'POST',
         headers: getAuthHeaders(),
+        credentials: 'include',
         body: JSON.stringify(user)
       });
     } catch (err) {
@@ -1329,6 +1338,7 @@ export async function deleteUserFromFirestore(userId: string): Promise<void> {
       await fetch(`/api/supabase/users/${encodeURIComponent(userId)}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
+        credentials: 'include',
         body: JSON.stringify({ reason: 'Dihapus via antarmuka staf' })
       });
     } catch (err) {
@@ -1351,6 +1361,7 @@ export async function softDeleteUserInFirestore(userId: string, deletedBy: strin
       await fetch(`/api/supabase/users/${encodeURIComponent(userId)}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
+        credentials: 'include',
         body: JSON.stringify({ reason })
       });
     } catch (err) {
@@ -1383,6 +1394,7 @@ export async function saveGeneralDroplistsToFirestore(items: DroplistItem[]): Pr
       await fetch('/api/supabase/settings/general_droplists', {
         method: 'POST',
         headers: getAuthHeaders(),
+        credentials: 'include',
         body: JSON.stringify({ value: items, description: 'General Droplists Configuration' })
       });
     } catch (err) {
@@ -1407,7 +1419,8 @@ export async function loadGeneralDroplistsFromFirestore(): Promise<DroplistItem[
   if (!isFirestoreActiveForEnvironment()) {
     try {
       const res = await fetch('/api/supabase/settings/general_droplists', {
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
+        credentials: 'include'
       });
       const json = await res.json();
       if (json.success && json.data) {
@@ -2259,6 +2272,7 @@ export async function saveHierarchicalDroplistsToFirestore(statuses: Hierarchica
       await fetch('/api/supabase/settings/hierarchical_droplists', {
         method: 'POST',
         headers: getAuthHeaders(),
+        credentials: 'include',
         body: JSON.stringify({ value: statuses, description: 'Hierarchical Droplists Configuration' })
       });
     } catch (err) {
@@ -2328,7 +2342,8 @@ export async function loadHierarchicalDroplistsFromFirestore(): Promise<Hierarch
   if (!isFirestoreActiveForEnvironment()) {
     try {
       const res = await fetch('/api/supabase/settings/hierarchical_droplists', {
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
+        credentials: 'include'
       });
       const json = await res.json();
       if (json.success && json.data) {

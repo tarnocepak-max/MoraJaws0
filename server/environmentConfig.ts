@@ -61,9 +61,16 @@ export function getAppEnvironment(): AppEnvironment {
   if (rawEnv === 'production' || rawEnv === 'prod') {
     return 'production';
   }
+  if (rawEnv === 'development' || rawEnv === 'dev') {
+    return 'development';
+  }
 
-  // Default to production to ensure canonical deployment URL https://morajaws.ai.studio is enforced
-  return 'production';
+  // Strict check: empty APP_ENV is NEVER automatically assumed to be staging
+  if (process.env.NODE_ENV === 'production') {
+    return 'production';
+  }
+
+  return 'development';
 }
 
 export interface EnvironmentConfig {
@@ -106,13 +113,7 @@ export function getEnvironmentConfig(envOverride?: AppEnvironment): EnvironmentC
   if (env === 'staging') {
     // 1. Resolve Staging Supabase URL & Project ID
     const supabaseUrl = (process.env.STAGING_SUPABASE_URL || STAGING_DEFAULT_SUPABASE_URL).trim();
-    const projectId = process.env.STAGING_SUPABASE_PROJECT_ID?.trim() || STAGING_SUPABASE_PROJECT_ID;
-
-    // Cross-environment safety: Staging must NOT use production project ID
-    const extractedId = extractSupabaseProjectId(supabaseUrl);
-    if (extractedId !== STAGING_SUPABASE_PROJECT_ID) {
-      console.warn('[EnvironmentConfig] Warning: Staging Supabase URL does not match designated staging project ID.');
-    }
+    const projectId = (process.env.STAGING_SUPABASE_PROJECT_ID || STAGING_SUPABASE_PROJECT_ID).trim();
 
     // 2. Resolve Staging Credentials (Server-side only)
     // Strictly isolate: Staging NEVER falls back to production SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY
@@ -441,8 +442,26 @@ export function validateEnvironmentStartup(envOverride?: AppEnvironment): { vali
       if (parsed.protocol !== 'https:') {
         errors.push('Staging Supabase URL wajib menggunakan protokol HTTPS.');
       }
+      const expectedOrigin = `https://${STAGING_SUPABASE_PROJECT_ID}.supabase.co`;
+      if (parsed.origin !== expectedOrigin) {
+        errors.push(`Staging Supabase URL (${config.supabaseUrl}) tidak cocok persis dengan origin staging "${expectedOrigin}".`);
+      }
     } catch {
       errors.push(`Format Staging Supabase URL "${config.supabaseUrl}" tidak valid.`);
+    }
+
+    // Cross-environment credentials check: staging must not use production credentials
+    if (config.supabaseServiceRoleKey && (
+      (process.env.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY && config.supabaseServiceRoleKey === process.env.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY.trim()) ||
+      (process.env.SUPABASE_SERVICE_ROLE_KEY && config.supabaseServiceRoleKey === process.env.SUPABASE_SERVICE_ROLE_KEY.trim())
+    )) {
+      errors.push('Cross-environment violation: Kredensial service role produksi dilarang digunakan di staging.');
+    }
+    if (config.supabaseAnonKey && (
+      (process.env.PRODUCTION_SUPABASE_ANON_KEY && config.supabaseAnonKey === process.env.PRODUCTION_SUPABASE_ANON_KEY.trim()) ||
+      (process.env.SUPABASE_ANON_KEY && config.supabaseAnonKey === process.env.SUPABASE_ANON_KEY.trim())
+    )) {
+      errors.push('Cross-environment violation: Kredensial anon key produksi dilarang digunakan di staging.');
     }
   } else if (config.env === 'production') {
     if (config.supabaseProjectId === STAGING_SUPABASE_PROJECT_ID) {
@@ -464,6 +483,32 @@ export function validateEnvironmentStartup(envOverride?: AppEnvironment): { vali
       } catch {
         errors.push(`Format Production Supabase URL "${config.supabaseUrl}" tidak valid.`);
       }
+    }
+
+    // Fail closed if production startup is ambiguous or empty
+    if (process.env.NODE_ENV === 'production' && !testEnvironmentOverride) {
+      if (!config.supabaseUrl) {
+        errors.push('Konfigurasi environment produksi tidak valid: Production Supabase URL dilarang kosong.');
+      }
+      if (!config.supabaseProjectId) {
+        errors.push('Konfigurasi environment produksi tidak valid: Production Supabase Project ID dilarang kosong.');
+      }
+      if (!config.supabaseServiceRoleKey) {
+        errors.push('Konfigurasi environment produksi tidak valid: Service Role Key produksi wajib dikonfigurasi.');
+      }
+    }
+
+    // Cross-environment credentials check: production must not use staging credentials
+    if (config.supabaseServiceRoleKey && (
+      (process.env.STAGING_SUPABASE_SERVICE_ROLE_KEY && config.supabaseServiceRoleKey === process.env.STAGING_SUPABASE_SERVICE_ROLE_KEY.trim()) ||
+      (process.env.STAGING_SUPABASE_SECRET_KEY && config.supabaseServiceRoleKey === process.env.STAGING_SUPABASE_SECRET_KEY.trim())
+    )) {
+      errors.push('Cross-environment violation: Kredensial staging dilarang digunakan di production.');
+    }
+    if (config.supabaseAnonKey && (
+      (process.env.STAGING_SUPABASE_ANON_KEY && config.supabaseAnonKey === process.env.STAGING_SUPABASE_ANON_KEY.trim())
+    )) {
+      errors.push('Cross-environment violation: Anon key staging dilarang digunakan di production.');
     }
   }
 

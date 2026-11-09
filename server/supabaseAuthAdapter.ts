@@ -276,8 +276,7 @@ export async function signInWithSupabaseAuth(
           details: {
             staffId: authoritativeUser.id,
             username: authoritativeUser.username,
-            email: targetEmail,
-            authUserId: authUid
+            email: targetEmail
           }
         }
       };

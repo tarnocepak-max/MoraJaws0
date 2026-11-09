@@ -370,6 +370,7 @@ export const UIConfigProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         'Content-Type': 'application/json',
         ...getAuthHeaders()
       },
+      credentials: 'include',
       body: JSON.stringify({ config })
     }).catch(() => {});
 

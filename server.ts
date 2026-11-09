@@ -1444,7 +1444,7 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
     const token = rawToken;
 
     // Fast-fail if this token was explicitly revoked in server sessions
-    const knownSession = SERVER_SESSIONS.find(s => s.token === token);
+    const knownSession = SERVER_SESSIONS.find(s => s.token === token || s.sessionId === token);
     if (knownSession && knownSession.status === 'revoked') {
       return res.status(401).json({
         error: 'Sesi login telah dicabut atau Anda telah logout. Silakan login kembali.',
@@ -1513,7 +1513,7 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
 
     // 2. Server Session Verification with strict sessionVersion checking
     if (!found) {
-      activeSession = SERVER_SESSIONS.find(s => s.token === token && s.status === 'active');
+      activeSession = SERVER_SESSIONS.find(s => (s.token === token || s.sessionId === token) && s.status === 'active');
       if (activeSession) {
         if (new Date(activeSession.expiresAt).getTime() < now) {
           activeSession.status = 'expired';
@@ -1913,17 +1913,14 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
       const isAiStudioPreview = /(?:\.run\.app|\.aistudio-preview\.app|\.google\.com|\.googleusercontent\.com)(:\d+)?$/.test(origin);
 
-      if (isDev || isLocalhost || isAiStudioPreview) {
+      if (isLocalhost || isAiStudioPreview) {
         isAllowed = true;
         allowedOriginToSet = origin;
-      } else if (configuredCorsOrigins.length > 0) {
-        // Strict exact match only - NO wildcards permitted
-        if (configuredCorsOrigins.includes(origin)) {
-          isAllowed = true;
-          allowedOriginToSet = origin;
-        }
+      } else if (configuredCorsOrigins.length > 0 && configuredCorsOrigins.includes(origin)) {
+        isAllowed = true;
+        allowedOriginToSet = origin;
       } else {
-        // Strictly reject unknown external origins in production
+        // Strictly reject unknown external origins across all environments
         isAllowed = false;
       }
     }
@@ -1943,7 +1940,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     }
 
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-id, x-username, x-user-role, x-google-access-token, Accept, X-Requested-With, Cache-Control');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-id, x-username, x-user-role, x-google-access-token, Accept, X-Requested-With, Cache-Control, X-Morajaws-Client, x-session-id');
 
     if (req.method === 'OPTIONS') {
       return res.sendStatus(204);
@@ -2749,6 +2746,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     if (req.session) {
       req.session.status = 'revoked';
     }
+    const currentToken = (req.headers['authorization']?.startsWith('Bearer ') ? req.headers['authorization'].substring(7).trim() : undefined) || parseRequestCookies(req)[getSessionCookieName()];
+    if (currentToken) {
+      const matched = SERVER_SESSIONS.find(s => s.token === currentToken || s.sessionId === currentToken);
+      if (matched) {
+        matched.status = 'revoked';
+      }
+    }
     if (req.user) {
       req.user.sessionVersion = (req.user.sessionVersion || 1) + 1;
       if (isSupabaseMode()) {
@@ -2763,12 +2767,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     }
     const cookieName = getSessionCookieName();
     const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || getAppEnvironment() !== 'development';
-    res.clearCookie(cookieName, {
-      httpOnly: true,
-      secure: isHttps,
-      sameSite: 'lax',
-      path: '/'
-    });
+    clearSecureSessionCookie(res, cookieName, isHttps);
     res.json({ success: true, message: 'Sesi berhasil diakhiri' });
   });
 
@@ -2971,9 +2970,96 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       });
     }
 
-    let targetRefreshToken = req.body?.refreshToken;
+    const isBrowser = isBrowserClientRequest(req);
     const cookieName = getSessionCookieName();
     const cookies = parseRequestCookies(req);
+
+    // Browser Contract Enforcement:
+    // 1. Browser client must NEVER send access token or refresh token via JSON body
+    // 2. Browser client must NEVER send refresh token via Authorization header
+    // 3. Refresh only uses server-verified HttpOnly session cookie
+    if (isBrowser) {
+      if (req.body?.refreshToken !== undefined || req.body?.accessToken !== undefined || req.body?.token !== undefined) {
+        return res.status(400).json({
+          success: false,
+          error: 'Browser client dilarang mengirim token atau refreshToken melalui request body demi keamanan session cookie.',
+          code: 'BROWSER_TOKEN_TRANSMISSION_REJECTED'
+        });
+      }
+      if (req.query?.refreshToken !== undefined || req.query?.token !== undefined || req.query?.accessToken !== undefined) {
+        return res.status(400).json({
+          success: false,
+          error: 'Browser client dilarang mengirim token atau refreshToken melalui query parameter.',
+          code: 'BROWSER_TOKEN_TRANSMISSION_REJECTED'
+        });
+      }
+      if (req.headers['authorization']) {
+        return res.status(400).json({
+          success: false,
+          error: 'Browser client dilarang mengirim token melalui Authorization header. Gunakan HttpOnly session cookie.',
+          code: 'BROWSER_AUTH_HEADER_REJECTED'
+        });
+      }
+
+      const sessionCookie = cookies[cookieName];
+      if (!sessionCookie) {
+        return res.status(401).json({
+          success: false,
+          error: 'Sesi browser tidak ditemukan atau cookie hilang. Silakan login kembali.',
+          code: 'UNAUTHORIZED_NO_SESSION'
+        });
+      }
+
+      const activeSession = SERVER_SESSIONS.find(s => (s.sessionId === sessionCookie || s.token === sessionCookie) && s.status === 'active');
+      if (!activeSession) {
+        return res.status(401).json({
+          success: false,
+          error: 'Sesi browser tidak valid atau telah kedaluwarsa/dicabut.',
+          code: 'SESSION_INVALID'
+        });
+      }
+
+      const serverRefreshToken = activeSession.refreshToken;
+      if (!serverRefreshToken) {
+        return res.status(401).json({
+          success: false,
+          error: 'Refresh token tidak ditemukan pada sesi server.',
+          code: 'NO_SERVER_REFRESH_TOKEN'
+        });
+      }
+
+      const refreshRes = await refreshSupabaseAuthSession(serverRefreshToken);
+      if (!refreshRes.success || !refreshRes.data) {
+        return res.status(401).json({
+          success: false,
+          error: refreshRes.error?.message || 'Gagal memperbarui token.',
+          code: refreshRes.error?.code || 'REFRESH_FAILED'
+        });
+      }
+
+      if (refreshRes.data.accessToken) {
+        activeSession.token = refreshRes.data.accessToken;
+        if (refreshRes.data.refreshToken) {
+          activeSession.refreshToken = refreshRes.data.refreshToken;
+        }
+        activeSession.lastActivityAt = new Date().toISOString();
+        activeSession.expiresAt = new Date(Date.now() + (refreshRes.data.expiresIn || 3600) * 1000).toISOString();
+
+        const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || getAppEnvironment() !== 'development';
+        const maxAgeMs = (refreshRes.data.expiresIn || 3600) * 1000;
+        setSecureSessionCookie(res, cookieName, refreshRes.data.accessToken, maxAgeMs, isHttps);
+      }
+
+      // Browser client NEVER receives tokens in JSON response
+      return res.json({
+        success: true,
+        message: 'Sesi Supabase Auth berhasil diperbarui via backend.',
+        sessionVersion: activeSession.sessionVersion || 1
+      });
+    }
+
+    // Non-browser client compatibility (automated server-side test runners / CLI)
+    let targetRefreshToken = req.body?.refreshToken;
     const incomingToken = (req.headers['authorization']?.startsWith('Bearer ') ? req.headers['authorization'].substring(7).trim() : undefined) || cookies[cookieName];
 
     let activeSession = incomingToken ? SERVER_SESSIONS.find(s => (s.sessionId === incomingToken || s.token === incomingToken) && s.status === 'active') : undefined;
@@ -3006,15 +3092,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       setSecureSessionCookie(res, cookieName, refreshRes.data.accessToken, maxAgeMs, isHttps);
     }
 
-    // Audit Remediation (Phase 15A.7.4): Browser clients NEVER receive tokens in JSON response
-    if (isBrowserClientRequest(req)) {
-      return res.json({
-        success: true,
-        message: 'Sesi Supabase Auth berhasil diperbarui via backend.',
-        sessionVersion: activeSession?.sessionVersion || 1
-      });
-    }
-
     res.json({ success: true, tokens: refreshRes.data });
   });
 
@@ -3032,6 +3109,14 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       if (matched) {
         matched.status = 'revoked';
       }
+    }
+    // Also revoke all active server sessions for this user ID per authoritative logout standard
+    if (req.user?.id) {
+      SERVER_SESSIONS.forEach(s => {
+        if (s.userId === req.user?.id && s.status === 'active') {
+          s.status = 'revoked';
+        }
+      });
     }
     if (req.user) {
       const nextVersion = (req.user.sessionVersion || 1) + 1;
@@ -3089,6 +3174,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   };
 
   const handleForgotPassword = async (req: Request, res: Response) => {
+    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
+    if (!checkAuthEnvironmentValid(res)) return;
+
     const clientIp = (req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
 
     // CRITICAL SECURITY ENFORCEMENT: Reject any client attempt to specify environment or Supabase target project
@@ -3170,6 +3258,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   app.post('/api/auth/forgot-password', handleForgotPassword);
 
   app.post('/api/auth/verify-recovery', async (req: Request, res: Response) => {
+    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
+    if (!checkAuthEnvironmentValid(res)) return;
+
     const clientIp = (req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
     
     // CRITICAL SECURITY ENFORCEMENT: Reject any client-supplied target UID
@@ -3251,6 +3342,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
+    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
+    if (!checkAuthEnvironmentValid(res)) return;
+
     const clientIp = (req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
 
     // CRITICAL SECURITY ENFORCEMENT:

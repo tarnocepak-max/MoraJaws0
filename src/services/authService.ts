@@ -176,30 +176,15 @@ export function getRoleDisplayName(role: UserRole): string {
 }
 
 /**
- * Returns authenticated HTTP headers including Authorization: Bearer <sessionToken>
- * sourced from official stored session in localStorage.
- * Custom spoofable headers (x-user-id, x-user-role, x-username) are strictly omitted.
+ * Returns authenticated HTTP headers for browser client.
+ * Browser authentication is maintained exclusively via HttpOnly session cookies with credentials: 'include'.
+ * Access tokens, refresh tokens, and user credentials from localStorage are strictly removed.
  */
 export function getAuthHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
+  return {
     'Content-Type': 'application/json',
     'X-Morajaws-Client': 'browser'
   };
-  try {
-    const sessionStr = localStorage.getItem('morajaws_auth_session');
-    if (sessionStr) {
-      const sess = JSON.parse(sessionStr);
-      if (sess?.token) {
-        headers['Authorization'] = `Bearer ${sess.token}`;
-      }
-      if (sess?.sessionId) {
-        headers['x-session-id'] = sess.sessionId;
-      }
-    }
-  } catch (err) {
-    console.warn('[authService] Failed to read auth session headers:', err);
-  }
-  return headers;
 }
 
 /**
@@ -219,30 +204,31 @@ export async function loginWithSupabase(identifier: string, password: string) {
   return { ok: res.ok, status: res.status, data };
 }
 
-export async function refreshSupabaseSession(refreshToken?: string) {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-Morajaws-Client': 'browser'
-  };
-  const bodyObj: Record<string, any> = {};
-  if (refreshToken) {
-    bodyObj.refreshToken = refreshToken;
-  }
+/**
+ * Refreshes session strictly using server-side HttpOnly cookie.
+ * Does not accept or transmit refresh token via body, headers, or query parameters.
+ */
+export async function refreshSupabaseSession() {
   const res = await fetch('/api/auth/supabase-refresh', {
     method: 'POST',
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Morajaws-Client': 'browser'
+    },
     credentials: 'include',
-    body: JSON.stringify(bodyObj)
+    body: JSON.stringify({})
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
 }
 
 export async function logoutSupabase() {
-  const headers = getAuthHeaders();
   const res = await fetch('/api/auth/supabase-logout', {
     method: 'POST',
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Morajaws-Client': 'browser'
+    },
     credentials: 'include'
   });
   const data = await res.json().catch(() => ({}));

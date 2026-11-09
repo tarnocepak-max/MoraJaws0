@@ -385,19 +385,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
 
   const getAuthHeaders = (): Record<string, string> => {
-    const headers: Record<string, string> = {
+    return {
       'Content-Type': 'application/json',
       'X-Morajaws-Client': 'browser'
     };
-    try {
-      const sessionStr = localStorage.getItem('morajaws_auth_session');
-      if (sessionStr) {
-        const sess = JSON.parse(sessionStr);
-        if (sess.token) headers['Authorization'] = `Bearer ${sess.token}`;
-        if (sess.sessionId) headers['x-session-id'] = sess.sessionId;
-      }
-    } catch (e) {}
-    return headers;
   };
 
   // Cloud Firestore Real-time Sync & Connectivity Status
@@ -429,24 +420,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<User>(() => {
     try {
       const stored = localStorage.getItem('morajaws_logged_in');
-      const sessionStr = localStorage.getItem('morajaws_auth_session');
-      if (stored === 'true' && sessionStr) {
-        const session = JSON.parse(sessionStr);
-        const match = users.find(u => u.id === session.userId || u.username === session.username);
-        if (match) return match;
-        if (session && session.userId && session.role) {
+      const displayStr = localStorage.getItem('morajaws_user_display');
+      if (stored === 'true' && displayStr) {
+        const display = JSON.parse(displayStr);
+        if (display && display.id && display.role) {
           return {
-            id: session.userId,
-            name: session.name || session.username,
-            username: session.username,
-            role: session.role,
-            contractor: session.contractor,
-            contractorId: session.contractorId,
-            area: session.area,
-            email: session.email || `${session.username}@morajaws.net`,
-            phone: session.phone,
-            active: session.active !== false,
-            createdAt: session.loginAt || new Date().toISOString()
+            id: display.id,
+            name: display.name || display.username,
+            username: display.username,
+            role: display.role,
+            contractor: display.contractor,
+            contractorId: display.contractorId,
+            area: display.area,
+            email: display.email || `${display.username}@morajaws.net`,
+            phone: display.phone,
+            active: display.active !== false,
+            createdAt: display.loginAt || new Date().toISOString()
           };
         }
       }
@@ -790,20 +779,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (isCancelled) return;
             if (liveUsers && liveUsers.length > 0) {
               setUsers(liveUsers);
-              const sessionStr = localStorage.getItem('morajaws_auth_session');
-              if (sessionStr) {
-                try {
-                  const s = JSON.parse(sessionStr);
-                  const matchingLive = liveUsers.find(u => u.id === s.userId || u.username.toLowerCase() === (s.username || '').toLowerCase());
-                  if (matchingLive) {
-                    if (matchingLive.active === false || (matchingLive as any).isDeleted) {
-                      logout();
-                      toast.error('Akun Anda telah dinonaktifkan oleh Administrator.', 'Akses Ditutup');
-                    } else {
-                      setCurrentUser(matchingLive);
-                    }
+              if (currentUser && currentUser.id) {
+                const matchingLive = liveUsers.find(u => u.id === currentUser.id || u.username.toLowerCase() === (currentUser.username || '').toLowerCase());
+                if (matchingLive) {
+                  if (matchingLive.active === false || (matchingLive as any).isDeleted) {
+                    logout();
+                    toast.error('Akun Anda telah dinonaktifkan oleh Administrator.', 'Akses Ditutup');
+                  } else {
+                    setCurrentUser(prev => ({ ...prev, ...matchingLive }));
                   }
-                } catch (e) {}
+                }
               }
             }
           },
@@ -989,9 +974,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentUser.active &&
         (currentUser.role === 'super_admin' || currentUser.role === 'it_support')
       );
-      if (canViewAudit && headers['Authorization']) {
+      if (canViewAudit && isLoggedIn) {
         try {
-          const auditRes = await fetch('/api/supabase/audit-logs?limit=100', { headers });
+          const auditRes = await fetch('/api/supabase/audit-logs?limit=100', { headers, credentials: 'include' });
           if (auditRes.ok) {
             const auditData = await auditRes.json();
             if (auditData && auditData.success && Array.isArray(auditData.data)) {
@@ -1163,10 +1148,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem('morajaws_logged_in');
-      const session = localStorage.getItem('morajaws_auth_session');
-      if (stored === 'true' && session) {
-        return true;
-      }
+      return stored === 'true';
     } catch (e) {}
     return false;
   });
@@ -1194,12 +1176,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'Content-Type': 'application/json',
         ...getAuthHeaders()
       },
+      credentials: 'include',
       body: JSON.stringify({ operationalDate: date })
     }).catch(() => {});
   };
 
   useEffect(() => {
-    fetch('/api/system/operational-date')
+    fetch('/api/system/operational-date', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (data && data.success && data.operationalDate) {
@@ -1209,13 +1192,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
       .catch(() => {});
 
-    // Phase 15A.7.5: Authoritative session validation on page load/refresh
+    // Phase 15A.7.6: Authoritative session validation on page load/refresh
     fetch('/api/auth/session', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'X-Morajaws-Client': 'browser',
-        ...getAuthHeaders()
+        'X-Morajaws-Client': 'browser'
       },
       credentials: 'include'
     })
@@ -1238,32 +1220,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }));
           try {
             localStorage.setItem('morajaws_logged_in', 'true');
-            localStorage.setItem('morajaws_auth_session', JSON.stringify({
-              userId: authUser.id,
+            localStorage.setItem('morajaws_user_display', JSON.stringify({
+              id: authUser.id,
+              name: authUser.name,
               username: authUser.username,
               role: authUser.role,
-              name: authUser.name,
               contractor: authUser.contractor,
               contractorId: authUser.contractorId,
               area: authUser.area,
-              sessionId: data.session?.sessionId,
-              sessionVersion: data.session?.sessionVersion || authUser.sessionVersion || 1
+              email: authUser.email
             }));
+            localStorage.removeItem('morajaws_auth_session');
           } catch {}
         } else if (data && data.authenticated === false) {
           // Stale local session without valid server backend cookie/token
-          const stored = localStorage.getItem('morajaws_logged_in');
-          if (stored === 'true') {
-            setIsLoggedIn(false);
-            setCurrentUser(UNAUTHENTICATED_USER);
-            try {
-              localStorage.setItem('morajaws_logged_in', 'false');
-              localStorage.removeItem('morajaws_auth_session');
-            } catch {}
-          }
+          setIsLoggedIn(false);
+          setCurrentUser(UNAUTHENTICATED_USER);
+          try {
+            localStorage.setItem('morajaws_logged_in', 'false');
+            localStorage.removeItem('morajaws_auth_session');
+            localStorage.removeItem('morajaws_user_display');
+          } catch {}
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setIsLoggedIn(false);
+        setCurrentUser(UNAUTHENTICATED_USER);
+      });
   }, []);
 
   // Authentication & Session (Phase 13E: Supabase Auth as Sole Production Mechanism)
@@ -1353,21 +1336,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentUser(authedUser);
       setIsLoggedIn(true);
 
-      // Audit Remediation (Phase 15A.7.4): Tokens are stored strictly in server HttpOnly cookies.
+      // Audit Remediation (Phase 15A.7.6): Tokens are stored strictly in server HttpOnly cookies.
       // ZERO tokens (accessToken / refreshToken) are placed in browser localStorage.
       try {
         localStorage.setItem('morajaws_logged_in', 'true');
-        localStorage.setItem('morajaws_auth_session', JSON.stringify({
-          userId: authedUser.id,
+        localStorage.setItem('morajaws_user_display', JSON.stringify({
+          id: authedUser.id,
+          name: authedUser.name,
           username: authedUser.username,
           role: authedUser.role,
-          name: authedUser.name,
           contractor: authedUser.contractor,
+          contractorId: authedUser.contractorId,
           area: authedUser.area,
-          loginAt: authedUser.lastLoginAt,
-          sessionId: data.sessionId,
-          sessionVersion: data.sessionVersion || (authedUser as any).sessionVersion || 1
+          email: authedUser.email
         }));
+        localStorage.removeItem('morajaws_auth_session');
       } catch (e) {}
 
       addAuditLog('Login Success', 'auth', authedUser.id, `Pengguna ${authedUser.name} (${authedUser.role}) berhasil login ke sistem via Supabase Auth`);
@@ -1412,12 +1395,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logout = () => {
     addAuditLog('User Logout', 'auth', currentUser.id, `Pengguna ${currentUser.name} (${currentUser.role}) logout dari sistem`);
-    const authHeaders = getAuthHeaders();
     setIsLoggedIn(false);
     setCurrentUser(UNAUTHENTICATED_USER);
     try {
       localStorage.setItem('morajaws_logged_in', 'false');
       localStorage.removeItem('morajaws_auth_session');
+      localStorage.removeItem('morajaws_user_display');
     } catch (e) {}
 
     // Invoke Supabase Auth logout on Express backend
@@ -1425,14 +1408,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Morajaws-Client': 'browser',
-        ...authHeaders
+        'X-Morajaws-Client': 'browser'
       },
       credentials: 'include'
     }).catch(() => {});
 
-    // Reload public bootstrap after logout
-    loadCentralData();
+    // Also notify /api/auth/logout for session cleanup
+    fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Morajaws-Client': 'browser'
+      },
+      credentials: 'include'
+    }).catch(() => {});
 
     // Reload public bootstrap after logout
     loadCentralData();
@@ -1550,6 +1539,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/users/${userId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ reason, permanent })
     }).catch(e => console.error('Error syncing user deletion to server:', e));
 
@@ -1619,6 +1609,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await fetch(`/api/users/${userId}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
+      credentials: 'include',
         body: JSON.stringify(updates)
       });
 
@@ -1787,6 +1778,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/users', {
       method: 'POST',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify(newUser)
     }).catch(e => console.error('Error syncing dispatch account to server:', e));
 
@@ -1888,6 +1880,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/users', {
       method: 'POST',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify(newUser)
     }).catch(e => console.error('Error syncing leader user to server:', e));
 
@@ -1895,6 +1888,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       fetch('/api/contractors', {
         method: 'POST',
         headers: getAuthHeaders(),
+      credentials: 'include',
         body: JSON.stringify({ contractor: matchedContractor })
       }).catch(e => console.error('Error syncing contractor to server:', e));
     }
@@ -1957,6 +1951,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/users', {
       method: 'POST',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify(newUser)
     }).catch(e => console.error('Error syncing installer account to server:', e));
 
@@ -1985,7 +1980,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     fetch(`/api/users/${userId}/toggle`, {
       method: 'PUT',
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
+      credentials: 'include'
     }).catch(e => console.error('Error syncing user status toggle to server:', e));
 
     return { success: true };
@@ -2011,7 +2007,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     fetch(`/api/users/${userId}/reset-password`, {
       method: 'POST',
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
+      credentials: 'include'
     }).catch(e => console.error('Error syncing password reset to server:', e));
 
     return { success: true, newPassword: '12345678' };
@@ -2031,6 +2028,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/contractors', {
       method: 'POST',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ contractor: newContractor })
     }).catch(e => console.error('Error syncing new contractor to server:', e));
   };
@@ -2051,6 +2049,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/contractors/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify(updates)
     }).catch(e => console.error('Error syncing contractor update to server:', e));
   };
@@ -2341,6 +2340,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/${ticketId}/report`, {
       method: 'POST',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ report })
     }).catch(e => console.error('Error saving technical report to server:', e));
 
@@ -2726,6 +2726,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/${ticketId}/progress-report`, {
       method: 'POST',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({
         entry,
         status: nextInstallerStatus,
@@ -3167,6 +3168,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/${ticketId}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({
         statusWOAgent: 'Closed',
         closedAt: now,
@@ -3398,6 +3400,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/${ticketId}/messages`, {
       method: 'POST',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ text: text.trim(), attachments })
     }).catch(e => console.error('Error syncing chat message to server:', e));
 
@@ -3573,6 +3576,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify(updates)
     }).catch(e => console.error('Error syncing ticket update to server:', e));
 
@@ -3649,6 +3653,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/tickets/assign', {
       method: 'POST',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({
         ticketId,
         leaderName,
@@ -3734,6 +3739,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/tickets/assign', {
       method: 'POST',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({
         ticketIds,
         leaderName,
@@ -3822,6 +3828,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/tickets/reassign', {
       method: 'POST',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({
         ticketId,
         woNumber: ticket.woNumber,
@@ -3997,6 +4004,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/${ticketId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ reason, permanent })
     }).catch(e => console.error('Error syncing ticket delete to server:', e));
 
@@ -4289,6 +4297,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       fetch('/api/tickets/bulk-import', {
         method: 'POST',
         headers: getAuthHeaders(),
+      credentials: 'include',
         body: JSON.stringify({
           tickets: newItems,
           options: { duplicatePolicy: policy }
@@ -4376,6 +4385,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/batch/${importDate}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ reason })
     }).catch(e => console.error('Error syncing batch tickets delete to server:', e));
 
@@ -4443,6 +4453,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/tickets/bulk-delete', {
       method: 'POST',
       headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ ticketIds, reason })
     }).catch(e => console.error('Error syncing bulk delete tickets to server:', e));
 

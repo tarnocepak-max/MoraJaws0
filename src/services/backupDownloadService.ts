@@ -15,40 +15,26 @@ export const EXPECTED_BACKUP_SHA256 = 'c4b0b42c78f634735f1eb361947e641d096e13b9d
  * Validates exact file size (1,055,520 bytes) and SHA-256 checksum before triggering save.
  */
 export async function downloadProductionBackup(): Promise<BackupDownloadResult> {
-  // 1. Retrieve session token
-  let token = '';
-  try {
-    const sessionStr = localStorage.getItem('morajaws_auth_session');
-    if (sessionStr) {
-      const s = JSON.parse(sessionStr);
-      if (s?.token) {
-        token = s.token;
-      }
-    }
-  } catch (e) {}
+  // 1. Send GET request with credentials: 'include' for HttpOnly session cookie
+  // Fallback to Firebase ID token header if available in dev
+  const headers: Record<string, string> = {
+    'X-Morajaws-Client': 'browser'
+  };
 
-  // 1.B. Fallback to Firebase ID token if available
-  if (!token && auth.currentUser) {
+  if (auth.currentUser) {
     try {
-      token = await auth.currentUser.getIdToken();
+      const fbToken = await auth.currentUser.getIdToken();
+      if (fbToken) {
+        headers['Authorization'] = `Bearer ${fbToken}`;
+      }
     } catch (e) {}
   }
 
-  if (!token) {
-    return {
-      success: false,
-      error: 'Autentikasi tidak ditemukan: Sesi login Anda telah berakhir. Silakan login kembali.'
-    };
-  }
-
   try {
-    // 2. Send GET request with Authorization: Bearer <token>
-    // NEVER put token in query string or URL
     const response = await fetch('/api/admin/backup/download', {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+      headers,
+      credentials: 'include'
     });
 
     if (response.status === 401) {

@@ -43,6 +43,20 @@ export interface RealtimeSubscriptionOptions {
   onError?: (error: any) => void;
 }
 
+/**
+ * Universal backend proxy fetch wrapper ensuring credentials: 'include' and standard auth headers
+ */
+function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  return fetch(input, {
+    ...init,
+    headers: {
+      ...getAuthHeaders(),
+      ...(init.headers || {})
+    },
+    credentials: 'include'
+  });
+}
+
 // In-Memory Sandbox Mock Store for isolated local testing
 const SANDBOX_STORE = {
   workOrders: new Map<string, Ticket>(),
@@ -93,7 +107,7 @@ export class SupabaseRepository {
     }
 
     try {
-      const res = await fetch('/api/supabase/work-orders', {
+      const res = await apiFetch('/api/supabase/work-orders', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(ticket)
@@ -124,7 +138,7 @@ export class SupabaseRepository {
     }
 
     try {
-      const res = await fetch(`/api/supabase/work-orders/${encodeURIComponent(id)}`, {
+      const res = await apiFetch(`/api/supabase/work-orders/${encodeURIComponent(id)}`, {
         headers: getAuthHeaders()
       });
       const json = await res.json();
@@ -153,7 +167,7 @@ export class SupabaseRepository {
 
     try {
       const query = new URLSearchParams(options as any).toString();
-      const res = await fetch(`/api/supabase/work-orders?${query}`, {
+      const res = await apiFetch(`/api/supabase/work-orders?${query}`, {
         headers: getAuthHeaders()
       });
       const json = await res.json();
@@ -188,7 +202,7 @@ export class SupabaseRepository {
     }
 
     try {
-      const res = await fetch(`/api/supabase/work-orders/${encodeURIComponent(id)}`, {
+      const res = await apiFetch(`/api/supabase/work-orders/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         headers: getAuthHeaders(),
         body: JSON.stringify(updates)
@@ -226,7 +240,7 @@ export class SupabaseRepository {
     }
 
     try {
-      const res = await fetch(`/api/supabase/work-orders/${encodeURIComponent(id)}`, {
+      const res = await apiFetch(`/api/supabase/work-orders/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
         body: JSON.stringify({ reason, deletedBy })
@@ -263,7 +277,7 @@ export class SupabaseRepository {
     }
 
     try {
-      const res = await fetch(`/api/supabase/work-orders/${encodeURIComponent(id)}/archive`, {
+      const res = await apiFetch(`/api/supabase/work-orders/${encodeURIComponent(id)}/archive`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ archivedBy })
@@ -302,7 +316,7 @@ export class SupabaseRepository {
     }
 
     try {
-      const res = await fetch(`/api/supabase/work-orders/${encodeURIComponent(id)}/restore`, {
+      const res = await apiFetch(`/api/supabase/work-orders/${encodeURIComponent(id)}/restore`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ restoredBy })
@@ -359,7 +373,7 @@ export class SupabaseRepository {
     }
 
     try {
-      const res = await fetch('/api/supabase/work-orders/bulk-import', {
+      const res = await apiFetch('/api/supabase/work-orders/bulk-import', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ tickets, batchId })
@@ -379,7 +393,7 @@ export class SupabaseRepository {
 
   async getUsers(includeDeleted = false): Promise<SupabaseResponse<User[]>> {
     try {
-      const res = await fetch(`/api/supabase/users?includeDeleted=${includeDeleted}`, {
+      const res = await apiFetch(`/api/supabase/users?includeDeleted=${includeDeleted}`, {
         headers: getAuthHeaders()
       });
       return await res.json();
@@ -390,7 +404,7 @@ export class SupabaseRepository {
 
   async getUserById(id: string): Promise<SupabaseResponse<User | null>> {
     try {
-      const res = await fetch(`/api/supabase/users/${encodeURIComponent(id)}`, {
+      const res = await apiFetch(`/api/supabase/users/${encodeURIComponent(id)}`, {
         headers: getAuthHeaders()
       });
       return await res.json();
@@ -401,7 +415,7 @@ export class SupabaseRepository {
 
   async createUser(user: Partial<User>): Promise<SupabaseResponse<User>> {
     try {
-      const res = await fetch('/api/supabase/users', {
+      const res = await apiFetch('/api/supabase/users', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(user)
@@ -414,7 +428,7 @@ export class SupabaseRepository {
 
   async updateUser(id: string, updates: Partial<User>): Promise<SupabaseResponse<User>> {
     try {
-      const res = await fetch(`/api/supabase/users/${encodeURIComponent(id)}`, {
+      const res = await apiFetch(`/api/supabase/users/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         headers: getAuthHeaders(),
         body: JSON.stringify(updates)
@@ -427,7 +441,7 @@ export class SupabaseRepository {
 
   async deleteUser(id: string, reason: string): Promise<SupabaseResponse<any>> {
     try {
-      const res = await fetch(`/api/supabase/users/${encodeURIComponent(id)}`, {
+      const res = await apiFetch(`/api/supabase/users/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
         body: JSON.stringify({ reason })
@@ -440,7 +454,7 @@ export class SupabaseRepository {
 
   async resetUserPassword(id: string): Promise<SupabaseResponse<any>> {
     try {
-      const res = await fetch(`/api/supabase/users/${encodeURIComponent(id)}/reset-password`, {
+      const res = await apiFetch(`/api/supabase/users/${encodeURIComponent(id)}/reset-password`, {
         method: 'POST',
         headers: getAuthHeaders()
       });
@@ -456,7 +470,7 @@ export class SupabaseRepository {
 
   async getContractors(): Promise<SupabaseResponse<Contractor[]>> {
     try {
-      const res = await fetch('/api/supabase/contractors', {
+      const res = await apiFetch('/api/supabase/contractors', {
         headers: getAuthHeaders()
       });
       return await res.json();
@@ -467,7 +481,7 @@ export class SupabaseRepository {
 
   async getCoverageAreas(): Promise<SupabaseResponse<CoverageArea[]>> {
     try {
-      const res = await fetch('/api/supabase/coverage-areas', {
+      const res = await apiFetch('/api/supabase/coverage-areas', {
         headers: getAuthHeaders()
       });
       return await res.json();
@@ -482,7 +496,7 @@ export class SupabaseRepository {
 
   async getAppSetting(key: string): Promise<SupabaseResponse<any>> {
     try {
-      const res = await fetch(`/api/supabase/settings/${encodeURIComponent(key)}`, {
+      const res = await apiFetch(`/api/supabase/settings/${encodeURIComponent(key)}`, {
         headers: getAuthHeaders()
       });
       return await res.json();
@@ -493,7 +507,7 @@ export class SupabaseRepository {
 
   async saveAppSetting(key: string, value: any, description?: string): Promise<SupabaseResponse<boolean>> {
     try {
-      const res = await fetch(`/api/supabase/settings/${encodeURIComponent(key)}`, {
+      const res = await apiFetch(`/api/supabase/settings/${encodeURIComponent(key)}`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ value, description })
@@ -506,7 +520,7 @@ export class SupabaseRepository {
 
   async getAuditLogs(limit = 100): Promise<SupabaseResponse<AuditLog[]>> {
     try {
-      const res = await fetch(`/api/supabase/audit-logs?limit=${limit}`, {
+      const res = await apiFetch(`/api/supabase/audit-logs?limit=${limit}`, {
         headers: getAuthHeaders()
       });
       return await res.json();
@@ -536,6 +550,7 @@ export class SupabaseRepository {
             ...authHeaders,
             Accept: 'text/event-stream'
           },
+          credentials: 'include',
           signal: abortController.signal
         });
 
