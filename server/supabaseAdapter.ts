@@ -760,7 +760,11 @@ export async function findUserInSupabaseDetailed(identifier: string): Promise<Su
 
     if (errFb) {
       const classified = classifySupabaseError(errFb);
-      console.error('[Supabase DAL] findUser query error (firebase_uid):', classified.message);
+      if (classified.isSchemaError) {
+        console.warn('[Supabase DAL] findUser schema notice (users table not initialized):', classified.message);
+      } else {
+        console.error('[Supabase DAL] findUser query error (firebase_uid):', classified.message);
+      }
       return { success: false, data: null, error: classified };
     }
     if (byFbUid) {
@@ -777,7 +781,11 @@ export async function findUserInSupabaseDetailed(identifier: string): Promise<Su
 
     if (errId) {
       const classified = classifySupabaseError(errId);
-      console.error('[Supabase DAL] findUser query error (id):', classified.message);
+      if (classified.isSchemaError) {
+        console.warn('[Supabase DAL] findUser schema notice (users table not initialized):', classified.message);
+      } else {
+        console.error('[Supabase DAL] findUser query error (id):', classified.message);
+      }
       return { success: false, data: null, error: classified };
     }
     if (byId) {
@@ -819,7 +827,11 @@ export async function findUserInSupabaseDetailed(identifier: string): Promise<Su
 
       if (errEmail) {
         const classified = classifySupabaseError(errEmail);
-        console.error('[Supabase DAL] findUser query error (email):', classified.message);
+        if (classified.isSchemaError) {
+          console.warn('[Supabase DAL] findUser schema notice (users table not initialized):', classified.message);
+        } else {
+          console.error('[Supabase DAL] findUser query error (email):', classified.message);
+        }
         return { success: false, data: null, error: classified };
       }
       if (byEmail) {
@@ -835,7 +847,11 @@ export async function findUserInSupabaseDetailed(identifier: string): Promise<Su
 
       if (errAlt) {
         const classified = classifySupabaseError(errAlt);
-        console.error('[Supabase DAL] findUser query error (alt_email):', classified.message);
+        if (classified.isSchemaError) {
+          console.warn('[Supabase DAL] findUser schema notice (users table not initialized):', classified.message);
+        } else {
+          console.error('[Supabase DAL] findUser query error (alt_email):', classified.message);
+        }
         return { success: false, data: null, error: classified };
       }
       if (Array.isArray(byAltList) && byAltList.length > 0) {
@@ -858,7 +874,11 @@ export async function findUserInSupabaseDetailed(identifier: string): Promise<Su
 
     if (errUser) {
       const classified = classifySupabaseError(errUser);
-      console.error('[Supabase DAL] findUser query error (username):', classified.message);
+      if (classified.isSchemaError) {
+        console.warn('[Supabase DAL] findUser schema notice (users table not initialized):', classified.message);
+      } else {
+        console.error('[Supabase DAL] findUser query error (username):', classified.message);
+      }
       return { success: false, data: null, error: classified };
     }
     if (byUsername) {
@@ -892,7 +912,11 @@ export async function getUsersFromSupabase(includeDeleted = false): Promise<Supa
     const { data, error } = await query;
     if (error) {
       const classified = classifySupabaseError(error);
-      console.error('[Supabase DAL] getUsers error:', classified.message);
+      if (classified.isSchemaError) {
+        console.warn('[Supabase DAL] getUsers schema notice (users table not initialized):', classified.message);
+      } else {
+        console.error('[Supabase DAL] getUsers error:', classified.message);
+      }
       return { success: false, error: classified };
     }
 
@@ -1180,7 +1204,11 @@ export async function getWorkOrdersFromSupabase(options: GetWorkOrdersOptions = 
     const { data, error } = await query;
     if (error) {
       const classified = classifySupabaseError(error);
-      console.error('[Supabase DAL] getWorkOrders error:', classified.message);
+      if (classified.isSchemaError) {
+        console.warn('[Supabase DAL] getWorkOrders schema notice (work_orders table not initialized):', classified.message);
+      } else {
+        console.error('[Supabase DAL] getWorkOrders error:', classified.message);
+      }
       return { success: false, error: classified };
     }
 
@@ -2776,12 +2804,22 @@ export async function insertAuditLogToSupabase(log: {
 
     const { error } = await client.from('audit_logs').insert([entry]);
     if (error) {
-      console.error('[Supabase DAL] insertAuditLog error:', error.message);
+      const classified = classifySupabaseError(error);
+      if (classified.isSchemaError) {
+        console.warn('[Supabase DAL] insertAuditLog schema notice (audit_logs table not initialized):', error.message);
+      } else {
+        console.error('[Supabase DAL] insertAuditLog error:', error.message);
+      }
       return false;
     }
     return true;
   } catch (err: any) {
-    console.error('[Supabase DAL] insertAuditLog exception:', err?.message || err);
+    const classified = classifySupabaseError(err);
+    if (classified.isSchemaError) {
+      console.warn('[Supabase DAL] insertAuditLog schema notice (exception):', err?.message || err);
+    } else {
+      console.error('[Supabase DAL] insertAuditLog exception:', err?.message || err);
+    }
     return false;
   }
 }

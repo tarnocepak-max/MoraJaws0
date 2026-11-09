@@ -30,7 +30,8 @@
     "test:phase15a.7.5": "tsx scripts/execute_phase15a7_5_completion_test.ts",
     "test:phase15a.7.6": "tsx scripts/execute_phase15a7_6_session_hardening_test.ts",
     "test:phase15a.7.6.2": "tsx scripts/execute_phase15a7_6_2_session_store_integration_test.ts",
-    "test:phase16a": "tsx scripts/execute_phase16a_entity_crud_audit_test.ts"
+    "test:phase16a": "tsx scripts/execute_phase16a_entity_crud_audit_test.ts",
+    "test:phase16a.1": "tsx scripts/execute_phase16a1_login_diagnostic_test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",

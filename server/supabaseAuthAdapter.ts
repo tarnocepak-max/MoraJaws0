@@ -52,9 +52,17 @@ export async function signInWithSupabaseAuth(
 ): Promise<SupabaseAuthResponse<MoraJawsAuthSession>> {
   const client = getSupabaseBackendClient();
   if (!client) {
+    const { getEnvironmentConfig, STAGING_SUPABASE_PROJECT_ID } = await import('./environmentConfig.ts');
+    const envCheck = getEnvironmentConfig();
+    const isMismatch = envCheck.env === 'staging' && envCheck.supabaseProjectId !== STAGING_SUPABASE_PROJECT_ID;
     return {
       success: false,
-      error: { code: 'SUPABASE_NOT_CONFIGURED', message: 'Supabase client backend belum dikonfigurasi.' }
+      error: {
+        code: isMismatch ? 'CONFIGURATION_MISMATCH' : 'SUPABASE_NOT_CONFIGURED',
+        message: isMismatch
+          ? 'Konfigurasi proyek Supabase staging tidak cocok dengan Project ID yang ditentukan.'
+          : 'Supabase client backend belum dikonfigurasi.'
+      }
     };
   }
 
@@ -74,11 +82,14 @@ export async function signInWithSupabaseAuth(
     // Look up authoritative user in Supabase users table
     const userRes = await findUserInSupabaseDetailed(cleanIdent);
     if (!userRes.success) {
+      const isSchemaUninit = userRes.error?.isSchemaError;
       return {
         success: false,
         error: {
-          code: 'DATABASE_UNAVAILABLE',
-          message: userRes.error?.message || 'Database authoritative tidak tersedia saat validasi identitas.'
+          code: isSchemaUninit ? 'SCHEMA_NOT_INITIALIZED' : 'DATABASE_UNAVAILABLE',
+          message: isSchemaUninit
+            ? 'Skema tabel pengguna Supabase belum diinisialisasi (tabel public.users belum ada di database). Jalankan migrasi migrations/001_core_morajaws_schema.sql.'
+            : (userRes.error?.message || 'Database authoritative tidak tersedia saat validasi identitas.')
         }
       };
     }
@@ -101,8 +112,8 @@ export async function signInWithSupabaseAuth(
       const altList = parseEmails(authoritativeUser.altEmail || (authoritativeUser as any).payload?.altEmail);
       const allStaffEmails = [...primaryList, ...altList];
 
-      // If user typed an email directly that belongs to this staff profile, try it first
-      if (isInputEmail && allStaffEmails.includes(cleanIdent)) {
+      // If user typed an email directly, try it FIRST and unconditionally (preventing any username-to-email overwrite)
+      if (isInputEmail) {
         candidateEmails.push(cleanIdent);
       }
       for (const e of allStaffEmails) {
@@ -122,14 +133,12 @@ export async function signInWithSupabaseAuth(
       }
       targetEmail = candidateEmails[0];
     } else {
-      // User not found in authoritative users table
+      // User not found in authoritative users table (anti-enumeration: safe generic message)
       return {
         success: false,
         error: {
           code: 'auth/user-not-found',
-          message: cleanIdent.includes('@')
-            ? `Alamat email "${identifier}" tidak terdaftar dalam direktori staf MoraJaws.`
-            : `Nama pengguna "${identifier}" tidak terdaftar dalam direktori staf MoraJaws.`
+          message: 'Identitas staf tidak terdaftar dalam direktori MoraJaws.'
         }
       };
     }

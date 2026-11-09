@@ -304,13 +304,21 @@ export const PROTECTED_PRODUCTION_WO_IDS = new Set<string>([
 ]);
 
 export function isLocalJsonModeAllowed(): boolean {
-  if (process.env.NODE_ENV === 'production') return false;
+  if (process.env.NODE_ENV === 'production' || getAppEnvironment() === 'production') return false;
   const hasSupabaseUrl = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_URL.trim());
   const hasServiceKey = Boolean(
     (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY.trim()) ||
     (process.env.SUPABASE_SECRET_KEY && process.env.SUPABASE_SECRET_KEY.trim())
   );
-  if (hasSupabaseUrl && hasServiceKey) return false;
+  if (hasSupabaseUrl && hasServiceKey) {
+    const health = getLastSupabaseHealthStatus();
+    // In development mode, if Supabase is connected but tables are not yet initialized (PGRST205 / schema_not_initialized),
+    // allow local development fixture fallback so developers and UI preview can function while migrations are pending.
+    if (health.status === 'schema_not_initialized') {
+      return true;
+    }
+    return false;
+  }
   return process.env.ALLOW_LOCAL_JSON_MODE === 'true';
 }
 
@@ -1047,13 +1055,25 @@ export async function logServerAuditAsync(
       });
 
       if (!persisted) {
-        console.error(`[Audit Log] GAGAL menyimpan audit log ke Supabase untuk ${action} [${entity}:${entityId}]`);
+        const supaStatus = getLastSupabaseHealthStatus().status;
+        const isSchemaUninit = supaStatus === 'schema_not_initialized';
+        if (isSchemaUninit) {
+          console.warn(`[Audit Log] Supabase audit store belum diinisialisasi (${action} [${entity}:${entityId}]), menyimpan log ke buffer server.`);
+        } else {
+          console.error(`[Audit Log] GAGAL menyimpan audit log ke Supabase untuk ${action} [${entity}:${entityId}]`);
+        }
+        db.auditLogs.unshift(localEntry);
+        if (db.auditLogs.length > 1000) db.auditLogs.pop();
+        saveDatabaseToDisk();
+
         return {
-          success: false,
+          success: isSchemaUninit,
           logId,
-          status: 'failed',
+          status: isSchemaUninit ? 'unverified' : 'failed',
           level,
-          error: 'Supabase menolak penyimpanan audit log atau tabel audit_logs tidak dapat diakses.'
+          error: isSchemaUninit
+            ? 'Skema tabel audit_logs Supabase belum diinisialisasi; log disimpan di buffer server.'
+            : 'Supabase menolak penyimpanan audit log atau tabel audit_logs tidak dapat diakses.'
         };
       }
 
@@ -2929,10 +2949,17 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         errCode === 'DATABASE_UNAVAILABLE' ||
         errCode === 'SUPABASE_NOT_CONFIGURED' ||
         errCode === 'AUTH_PROVIDER_UNAVAILABLE' ||
-        errCode === 'AUTH_PROVIDER_ERROR'
+        errCode === 'AUTH_PROVIDER_ERROR' ||
+        errCode === 'CONFIGURATION_MISMATCH' ||
+        errCode === 'ENVIRONMENT_INVALID'
       ) {
         statusCode = 503;
-      } else if (errCode === 'auth/user-not-found' || errCode === 'ACCOUNT_NOT_FOUND') {
+      } else if (
+        errCode === 'auth/user-not-found' ||
+        errCode === 'ACCOUNT_NOT_FOUND' ||
+        errCode === 'STAFF_NOT_FOUND' ||
+        errCode === 'PROFILE_NOT_FOUND'
+      ) {
         statusCode = 404;
       } else if (
         errCode === 'ACCOUNT_DISABLED' ||
@@ -2963,6 +2990,8 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
           lastAttempt: nowMs,
           lockedUntil
         });
+      } else {
+        statusCode = 400;
       }
 
       await logServerAuditAsync(

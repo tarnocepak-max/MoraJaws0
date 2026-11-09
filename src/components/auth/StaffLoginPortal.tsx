@@ -83,7 +83,7 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
         const errorMsg = res.error || 'Kredensial login tidak valid. Pastikan nama pengguna dan kata sandi benar.';
         setError(errorMsg);
 
-        // Precise error categorization: Do not show MJ-AUTH-001 wrong credential error for connection, mapping, inactive, or not-found errors
+        // Precise error categorization: Do not map non-credential errors to MJ-AUTH-001
         if (res.errorCode === 'NEEDS_MAPPING') {
           showGlobalError({
             errorCode: 'MJ-AUTH-004',
@@ -111,7 +111,7 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
             errorCode: 'MJ-AUTH-004',
             module: 'Authentication',
             operation: 'Staff Email Configuration',
-            description: 'Email staf belum terdaftar.',
+            description: 'Email autentikasi staf belum terdaftar.',
             message: 'Profil staf ditemukan, namun belum memiliki email untuk Supabase Auth. Hubungi Super Admin.',
             technicalDetails: errorMsg,
             severity: 'MEDIUM',
@@ -128,24 +128,50 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
             severity: 'MEDIUM',
             status: 'OPEN'
           });
-        } else if (res.errorCode === 'SUPABASE_NOT_CONFIGURED') {
+        } else if (
+          res.errorCode === 'SUPABASE_NOT_CONFIGURED' ||
+          res.errorCode === 'CONFIGURATION_MISMATCH' ||
+          res.errorCode === 'ENVIRONMENT_INVALID'
+        ) {
           showGlobalError({
             errorCode: 'MJ-SYS-001',
             module: 'Authentication',
             operation: 'Supabase Configuration',
-            description: 'Layanan Supabase backend belum dikonfigurasi.',
-            message: 'Konfigurasi Supabase backend belum lengkap pada environment server.',
+            description: 'Konfigurasi Supabase backend belum lengkap atau terjadi ketidakcocokan project.',
+            message: 'Konfigurasi Supabase backend belum lengkap atau tidak cocok pada environment server.',
             technicalDetails: errorMsg,
             severity: 'HIGH',
             status: 'OPEN'
           });
-        } else if (res.errorCode === 'AUTH_PROVIDER_UNAVAILABLE') {
+        } else if (res.errorCode === 'SCHEMA_NOT_INITIALIZED') {
+          showGlobalError({
+            errorCode: 'MJ-SYS-001',
+            module: 'Database Schema',
+            operation: 'Supabase Schema Initialization',
+            description: 'Skema tabel database Supabase belum diinisialisasi.',
+            message: 'Tabel database MoraJaws belum diinisialisasi pada database Supabase. Terapkan migrasi migrations/001_core_morajaws_schema.sql.',
+            technicalDetails: errorMsg,
+            severity: 'CRITICAL',
+            status: 'OPEN'
+          });
+        } else if (res.errorCode === 'AUTH_PROVIDER_UNAVAILABLE' || res.errorCode === 'DATABASE_UNAVAILABLE') {
           showGlobalError({
             errorCode: 'MJ-AUTH-NET-001',
             module: 'Authentication',
             operation: 'Supabase Service Reachability',
-            description: 'Layanan Supabase Auth tidak dapat dijangkau.',
-            message: 'Koneksi ke Supabase Auth gagal atau batas waktu terlampaui.',
+            description: 'Layanan Supabase backend/Auth tidak dapat dijangkau.',
+            message: 'Koneksi ke layanan Supabase gagal atau database tidak dapat diakses.',
+            technicalDetails: errorMsg,
+            severity: 'HIGH',
+            status: 'OPEN'
+          });
+        } else if (res.errorCode === 'SESSION_STORE_ERROR') {
+          showGlobalError({
+            errorCode: 'MJ-SYS-001',
+            module: 'Authentication',
+            operation: 'Session Creation',
+            description: 'Gagal membuat sesi penyimpanan server.',
+            message: 'Gagal membuat sesi server setelah verifikasi kredensial. Coba kembali.',
             technicalDetails: errorMsg,
             severity: 'HIGH',
             status: 'OPEN'
@@ -154,8 +180,7 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
           res.errorCode === 'MJ-AUTH-001' ||
           res.errorCode === 'AUTH_INVALID_CREDENTIALS' ||
           res.errorCode === 'INVALID_CREDENTIALS' ||
-          res.errorCode === 'auth/wrong-password' ||
-          (errorMsg.includes('tidak cocok') && !errorMsg.includes('Auth UID'))
+          res.errorCode === 'auth/wrong-password'
         ) {
           showGlobalError({
             errorCode: 'MJ-AUTH-001',
@@ -178,18 +203,24 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
             severity: 'HIGH',
             status: 'OPEN'
           });
-        } else if (res.errorCode === 'auth/user-disabled' || errorMsg.includes('dinonaktifkan')) {
+        } else if (res.errorCode === 'auth/user-disabled' || res.errorCode === 'ACCOUNT_DISABLED' || res.errorCode === 'ACCOUNT_DELETED' || errorMsg.includes('dinonaktifkan')) {
           showGlobalError({
             errorCode: 'MJ-AUTH-003',
             module: 'Authentication',
             operation: 'Staff Account Status',
-            description: 'Akun staf dinonaktifkan.',
+            description: 'Akun staf dinonaktifkan atau dihapus.',
             message: 'Akun telah dinonaktifkan oleh Administrator.',
             technicalDetails: errorMsg,
             severity: 'HIGH',
             status: 'OPEN'
           });
-        } else if (res.errorCode === 'auth/user-not-found' || errorMsg.includes('tidak ditemukan') || errorMsg.includes('tidak terdaftar')) {
+        } else if (
+          res.errorCode === 'auth/user-not-found' ||
+          res.errorCode === 'ACCOUNT_NOT_FOUND' ||
+          res.errorCode === 'STAFF_NOT_FOUND' ||
+          res.errorCode === 'PROFILE_NOT_FOUND' ||
+          errorMsg.includes('tidak terdaftar')
+        ) {
           showGlobalError({
             errorCode: 'MJ-AUTH-002',
             module: 'Authentication',

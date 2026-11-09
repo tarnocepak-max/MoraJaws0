@@ -1285,31 +1285,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const data = await serverRes.json().catch(() => ({}));
 
       if (!serverRes.ok || !data.success) {
-        const errCode = data.code || 'MJ-AUTH-001';
-        let errorMsg = data.error || 'Autentikasi gagal. Kredensial tidak cocok.';
+        // Safe classification: derive appropriate fallback code from HTTP status instead of defaulting everything to MJ-AUTH-001
+        let errCode = data.code;
+        if (!errCode) {
+          if (serverRes.status === 404) errCode = 'STAFF_NOT_FOUND';
+          else if (serverRes.status === 403) errCode = 'ACCOUNT_DISABLED';
+          else if (serverRes.status === 409) errCode = 'STAFF_AUTH_EMAIL_MISSING';
+          else if (serverRes.status === 503) errCode = 'SUPABASE_NOT_CONFIGURED';
+          else if (serverRes.status === 500) errCode = 'SESSION_STORE_ERROR';
+          else errCode = 'AUTH_INVALID_CREDENTIALS';
+        }
+
+        let errorMsg = data.error;
 
         if (errCode === 'SUPABASE_NOT_CONFIGURED') {
-          errorMsg = 'Layanan Supabase backend belum dikonfigurasi pada environment variables server.';
+          errorMsg = errorMsg || 'Layanan Supabase backend belum dikonfigurasi pada environment variables server.';
+        } else if (errCode === 'CONFIGURATION_MISMATCH' || errCode === 'ENVIRONMENT_INVALID') {
+          errorMsg = errorMsg || 'Konfigurasi proyek Supabase tidak sesuai atau terjadi ketidakcocokan environment.';
         } else if (errCode === 'AUTH_PROVIDER_UNAVAILABLE') {
-          errorMsg = 'Layanan Supabase Auth sedang tidak dapat dijangkau. Coba beberapa saat lagi.';
-        } else if (errCode === 'DATABASE_UNAVAILABLE' || serverRes.status === 503) {
-          errorMsg = 'Database authoritative Supabase tidak dapat diakses saat login.';
-        } else if (serverRes.status === 404 || errCode === 'auth/user-not-found' || errCode === 'ACCOUNT_NOT_FOUND') {
-          errorMsg = `Nama pengguna atau email "${cleanUser}" tidak ditemukan dalam direktori staf MoraJaws.`;
+          errorMsg = errorMsg || 'Layanan Supabase Auth sedang tidak dapat dijangkau. Coba beberapa saat lagi.';
+        } else if (errCode === 'SCHEMA_NOT_INITIALIZED') {
+          errorMsg = errorMsg || 'Skema database Supabase belum diinisialisasi (tabel public belum dibuat). Silakan terapkan migrasi skema database terlebih dahulu.';
+        } else if (errCode === 'DATABASE_UNAVAILABLE' || (serverRes.status === 503 && errCode !== 'SUPABASE_NOT_CONFIGURED' && errCode !== 'CONFIGURATION_MISMATCH' && errCode !== 'SCHEMA_NOT_INITIALIZED')) {
+          errorMsg = errorMsg || 'Database authoritative Supabase tidak dapat diakses saat login.';
+        } else if (serverRes.status === 404 || errCode === 'auth/user-not-found' || errCode === 'ACCOUNT_NOT_FOUND' || errCode === 'STAFF_NOT_FOUND' || errCode === 'PROFILE_NOT_FOUND') {
+          errorMsg = errorMsg || 'Identitas staf tidak terdaftar dalam direktori MoraJaws.';
         } else if (serverRes.status === 403 || errCode === 'auth/user-disabled' || errCode === 'ACCOUNT_DISABLED' || errCode === 'ACCOUNT_DELETED') {
           errorMsg = data.error || 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.';
         } else if (serverRes.status === 429 || errCode === 'auth/too-many-requests') {
           errorMsg = data.error || 'Terlalu banyak percobaan login yang gagal. Akses akun ditangguhkan sementara demi keamanan.';
         } else if (errCode === 'NEEDS_MAPPING') {
-          errorMsg = 'Kata sandi berhasil diverifikasi, tetapi profil staf belum dipetakan ke Supabase Auth. Minta Super Admin menyetujui mapping Auth UID.';
+          errorMsg = data.error || 'Kata sandi berhasil diverifikasi, tetapi profil staf belum memiliki pemetaan Supabase Auth UID yang disetujui. Minta Super Admin menyetujui mapping Auth UID.';
         } else if (errCode === 'AUTH_UID_MISMATCH') {
-          errorMsg = 'Identitas Supabase Auth tidak cocok dengan profil staf. Login ditolak demi keamanan; hubungi Super Admin.';
+          errorMsg = data.error || 'Identitas Supabase Auth tidak cocok dengan profil staf. Login ditolak demi keamanan; hubungi Super Admin.';
         } else if (errCode === 'STAFF_AUTH_EMAIL_MISSING') {
-          errorMsg = 'Profil staf belum memiliki email autentikasi. Hubungi Super Admin untuk melengkapi email.';
+          errorMsg = data.error || 'Profil staf belum memiliki email autentikasi yang valid. Hubungi Super Admin untuk melengkapi email.';
         } else if (errCode === 'AUTH_EMAIL_NOT_CONFIRMED') {
-          errorMsg = 'Email Supabase belum dikonfirmasi. Hubungi Super Admin.';
-        } else if (errCode === 'AUTH_INVALID_CREDENTIALS' || errCode === 'INVALID_CREDENTIALS' || errCode === 'auth/wrong-password') {
-          errorMsg = data.error || 'Autentikasi gagal. Kredensial tidak cocok.';
+          errorMsg = data.error || 'Email Supabase belum dikonfirmasi. Hubungi Super Admin.';
+        } else if (errCode === 'SESSION_STORE_ERROR' || serverRes.status === 500) {
+          errorMsg = errorMsg || 'Gagal membuat sesi penyimpanan server setelah verifikasi kredensial.';
+        } else if (errCode === 'AUTH_INVALID_CREDENTIALS' || errCode === 'INVALID_CREDENTIALS' || errCode === 'auth/wrong-password' || errCode === 'MJ-AUTH-001') {
+          errorMsg = data.error || 'Email atau kata sandi Supabase tidak cocok. Pastikan email akun dan kata sandi yang digunakan benar.';
+        } else {
+          errorMsg = errorMsg || 'Autentikasi gagal. Silakan coba kembali.';
         }
 
         addAuditLog('Login Attempt Failed', 'auth', cleanUser, errorMsg);
