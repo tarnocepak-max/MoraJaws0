@@ -28,7 +28,8 @@
     "test:phase15a.7.2": "tsx scripts/execute_phase15a7_2_isolation_test.ts",
     "test:phase15a.7.3": "tsx scripts/execute_phase15a7_3_staging_login_test.ts",
     "test:phase15a.7.5": "tsx scripts/execute_phase15a7_5_completion_test.ts",
-    "test:phase15a.7.6": "tsx scripts/execute_phase15a7_6_session_hardening_test.ts"
+    "test:phase15a.7.6": "tsx scripts/execute_phase15a7_6_session_hardening_test.ts",
+    "test:phase15a.7.6.2": "tsx scripts/execute_phase15a7_6_2_session_store_integration_test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",

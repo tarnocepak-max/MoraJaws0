@@ -26,6 +26,7 @@ import {
   approveAuthUidMapping
 } from './server/supabaseAuthAdapter.ts';
 import { checkFirebaseAdminHealth, verifyFirebaseIdToken } from './server/firebaseAdmin.ts';
+import { sessionStore, SERVER_SESSIONS_BUFFER as SERVER_SESSIONS, type ISessionStore } from './server/sessionStore.ts';
 import { EventEmitter } from 'events';
 import {
   findUserInSupabase,
@@ -905,8 +906,7 @@ function loadDatabaseFromDisk() {
           storageMetadata: Array.isArray(parsed.storageMetadata) ? parsed.storageMetadata : []
         };
         if (Array.isArray(parsed.sessions)) {
-          SERVER_SESSIONS.length = 0;
-          SERVER_SESSIONS.push(...parsed.sessions);
+          sessionStore.loadSessions?.(parsed.sessions);
         }
         // Ensure Ray Super Admin is present in user directory
         if (!db.users.some(u => u.username.toLowerCase() === 'ray' || u.email.toLowerCase() === 'rayjs666@gmail.com')) {
@@ -925,7 +925,7 @@ function loadDatabaseFromDisk() {
             u.mustChangePassword = true;
           }
         });
-        console.log(`[Database] Loaded ${db.tickets.length} tickets, ${db.users.length} users, ${db.contractors.length} contractors, ${SERVER_SESSIONS.length} sessions from persistent disk storage.`);
+        console.log(`[Database] Loaded ${db.tickets.length} tickets, ${db.users.length} users, ${db.contractors.length} contractors, ${sessionStore.getAllSessions().length} sessions from persistent disk storage.`);
         return;
       }
     }
@@ -946,7 +946,7 @@ export function saveDatabaseToDisk() {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    db.sessions = SERVER_SESSIONS;
+    db.sessions = sessionStore.getAllSessions();
     const tempFile = DB_FILE + '.tmp';
     fs.writeFileSync(tempFile, JSON.stringify(db, null, 2), 'utf-8');
     fs.renameSync(tempFile, DB_FILE);
@@ -1127,8 +1127,8 @@ export function broadcastSupabaseChange(table: string, eventType: string, record
   backendRealtimeBus.emit('change', { table, eventType, record, timestamp: new Date().toISOString() });
 }
 
-// --- Session Store ---
-export const SERVER_SESSIONS: ServerSession[] = [];
+// --- Session Store (ISessionStore singleton) ---
+export { sessionStore, SERVER_SESSIONS };
 const LOGIN_ATTEMPTS = new Map<string, { count: number; lastAttempt: number; lockedUntil?: number }>();
 
 function getOperationalDate(): { date: string; isAuto: boolean; timezone: string } {
@@ -1444,12 +1444,38 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
     const token = rawToken;
 
     // Fast-fail if this token was explicitly revoked in server sessions
-    const knownSession = SERVER_SESSIONS.find(s => s.token === token || s.sessionId === token);
+    let knownSession: ServerSession | undefined;
+    try {
+      knownSession = await sessionStore.findSession(token, { allowInactive: true });
+    } catch (storeErr: any) {
+      console.error('[Auth Middleware] Session store error:', storeErr);
+      return res.status(503).json({
+        error: 'Layanan verifikasi sesi tidak tersedia saat ini.',
+        code: 'SESSION_STORE_UNAVAILABLE'
+      });
+    }
+
     if (knownSession && knownSession.status === 'revoked') {
+      if (req.path === '/api/auth/logout' || req.path === '/api/auth/supabase-logout') {
+        req.session = knownSession;
+        return next();
+      }
       return res.status(401).json({
         error: 'Sesi login telah dicabut atau Anda telah logout. Silakan login kembali.',
         code: 'SESSION_REVOKED'
       });
+    }
+
+    if (knownSession) {
+      const isExpired = knownSession.status === 'expired' || new Date(knownSession.expiresAt).getTime() < now;
+      if (isExpired) {
+        knownSession.status = 'expired';
+        await sessionStore.updateSession(knownSession.sessionId, { status: 'expired' });
+        // Expired session must NOT authenticate - clear session and skip token checks
+        req.user = undefined;
+        req.session = undefined;
+        return next();
+      }
     }
 
     // Production Cutover Guard: Block local session tokens in production
@@ -1513,70 +1539,75 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
 
     // 2. Server Session Verification with strict sessionVersion checking
     if (!found) {
-      activeSession = SERVER_SESSIONS.find(s => (s.token === token || s.sessionId === token) && s.status === 'active');
+      try {
+        activeSession = await sessionStore.findSession(token);
+      } catch (storeErr: any) {
+        return res.status(503).json({
+          error: 'Layanan verifikasi sesi tidak tersedia.',
+          code: 'SESSION_STORE_UNAVAILABLE'
+        });
+      }
+
       if (activeSession) {
-        if (new Date(activeSession.expiresAt).getTime() < now) {
-          activeSession.status = 'expired';
+        const lastAct = new Date(activeSession.lastActivityAt).getTime();
+        const idleLimitMs = (db.sessionConfig.idleTimeoutMinutes || 60) * 60 * 1000;
+        if (now - lastAct > idleLimitMs) {
+          await sessionStore.updateSession(activeSession.sessionId, { status: 'expired' });
           activeSession = undefined;
         } else {
-          const lastAct = new Date(activeSession.lastActivityAt).getTime();
-          const idleLimitMs = (db.sessionConfig.idleTimeoutMinutes || 60) * 60 * 1000;
-          if (now - lastAct > idleLimitMs) {
-            activeSession.status = 'expired';
-            activeSession = undefined;
-          } else {
-            // Retrieve authoritative user state
-            let authoritativeUser: ServerUser | null = null;
-            if (isSupabaseMode()) {
-              try {
-                const sbRes = await findUserInSupabaseDetailed(activeSession.userId);
-                if (sbRes.success && sbRes.data) {
-                  authoritativeUser = sbRes.data;
-                } else if (!sbRes.success && !isLocalJsonModeAllowed()) {
-                  // Fail closed: Database is down or rejected query in production
-                  return res.status(503).json({
-                    error: 'Database authoritative tidak tersedia saat verifikasi kredensial sesi.',
-                    code: 'DATABASE_UNAVAILABLE'
-                  });
-                }
-              } catch {
-                if (!isLocalJsonModeAllowed()) {
-                  return res.status(503).json({
-                    error: 'Database authoritative gagal diakses.',
-                    code: 'DATABASE_UNAVAILABLE'
-                  });
-                }
+          // Retrieve authoritative user state
+          let authoritativeUser: ServerUser | null = null;
+          if (isSupabaseMode()) {
+            try {
+              const sbRes = await findUserInSupabaseDetailed(activeSession.userId);
+              if (sbRes.success && sbRes.data) {
+                authoritativeUser = sbRes.data;
+              } else if (!sbRes.success && !isLocalJsonModeAllowed()) {
+                // Fail closed: Database is down or rejected query in production
+                return res.status(503).json({
+                  error: 'Database authoritative tidak tersedia saat verifikasi kredensial sesi.',
+                  code: 'DATABASE_UNAVAILABLE'
+                });
+              }
+            } catch {
+              if (!isLocalJsonModeAllowed()) {
+                return res.status(503).json({
+                  error: 'Database authoritative gagal diakses.',
+                  code: 'DATABASE_UNAVAILABLE'
+                });
               }
             }
+          }
 
-            if (!authoritativeUser && isLocalJsonModeAllowed()) {
-              authoritativeUser = db.users.find(u => u.id === activeSession!.userId) || null;
-            }
+          if (!authoritativeUser && isLocalJsonModeAllowed()) {
+            authoritativeUser = db.users.find(u => u.id === activeSession!.userId) || null;
+          }
 
-            if (!authoritativeUser || authoritativeUser.isDeleted || !authoritativeUser.active) {
-              activeSession.status = 'revoked';
+          if (!authoritativeUser || authoritativeUser.isDeleted || !authoritativeUser.active) {
+            await sessionStore.revokeSession(activeSession.sessionId);
+            activeSession = undefined;
+            found = undefined;
+          } else {
+            // Authoritative sessionVersion check
+            const authoritativeVersion = authoritativeUser.sessionVersion || 1;
+            const sessionVersion = activeSession.sessionVersion || 1;
+
+            if (authoritativeVersion !== sessionVersion) {
+              // Token has been revoked due to account change or logout
+              await sessionStore.revokeSession(activeSession.sessionId);
               activeSession = undefined;
               found = undefined;
             } else {
-              // Authoritative sessionVersion check
-              const authoritativeVersion = authoritativeUser.sessionVersion || 1;
-              const sessionVersion = activeSession.sessionVersion || 1;
-
-              if (authoritativeVersion !== sessionVersion) {
-                // Token has been revoked due to account change or logout
-                activeSession.status = 'revoked';
-                activeSession = undefined;
-                found = undefined;
-              } else {
-                if (db.sessionConfig.extendOnActivity) {
-                  activeSession.lastActivityAt = new Date().toISOString();
-                }
-                authSource = 'server_session';
-                found = authoritativeUser;
-                // Keep session role and contractor synced with authoritative record
-                activeSession.role = authoritativeUser.role;
-                activeSession.contractor = authoritativeUser.contractor;
+              const updates: Partial<ServerSession> = {
+                role: authoritativeUser.role,
+                contractor: authoritativeUser.contractor
+              };
+              if (db.sessionConfig.extendOnActivity) {
+                updates.lastActivityAt = new Date().toISOString();
               }
+              await sessionStore.updateSession(activeSession.sessionId, updates);
+              authSource = 'server_session';
+              found = authoritativeUser;
             }
           }
         }
@@ -2257,7 +2288,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       deviceType
     };
 
-    SERVER_SESSIONS.unshift(newSession);
+    await sessionStore.addSession(newSession);
     user.lastLoginAt = nowIso;
     user.loginCount = (user.loginCount || 0) + 1;
     if (isLocalJsonModeAllowed()) {
@@ -2682,17 +2713,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     const expiresIso = new Date(nowMs + sessionMaxDurationMs).toISOString();
 
     if (db.sessionConfig.revokePreviousOnLogin) {
-      SERVER_SESSIONS.forEach(s => {
-        if (s.userId === user!.id && s.status === 'active') {
-          s.status = 'revoked';
-        }
-      });
+      await sessionStore.revokeUserSessions(user!.id);
     } else {
-      const activeUserSessions = SERVER_SESSIONS.filter(s => s.userId === user!.id && s.status === 'active');
+      const activeUserSessions = await sessionStore.getActiveSessionsForUser(user!.id);
       if (activeUserSessions.length >= (db.sessionConfig.maxActiveSessionsPerUser || 3)) {
         const oldest = activeUserSessions.sort((a, b) => new Date(a.loginAt).getTime() - new Date(b.loginAt).getTime())[0];
         if (oldest) {
-          oldest.status = 'revoked';
+          await sessionStore.revokeSession(oldest.sessionId);
         }
       }
     }
@@ -2720,7 +2747,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       deviceType
     };
 
-    SERVER_SESSIONS.unshift(newSession);
+    await sessionStore.addSession(newSession);
 
     user.sessionVersion = user.sessionVersion || 1;
     user.lastLoginAt = nowIso;
@@ -2742,34 +2769,110 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     });
   });
 
-  app.post('/api/auth/logout', requireAuth, async (req: AuthenticatedRequest, res) => {
-    if (req.session) {
-      req.session.status = 'revoked';
-    }
-    const currentToken = (req.headers['authorization']?.startsWith('Bearer ') ? req.headers['authorization'].substring(7).trim() : undefined) || parseRequestCookies(req)[getSessionCookieName()];
-    if (currentToken) {
-      const matched = SERVER_SESSIONS.find(s => s.token === currentToken || s.sessionId === currentToken);
-      if (matched) {
-        matched.status = 'revoked';
-      }
-    }
-    if (req.user) {
-      req.user.sessionVersion = (req.user.sessionVersion || 1) + 1;
-      if (isSupabaseMode()) {
-        try {
-          await updateUserInSupabase(req.user.id, { sessionVersion: req.user.sessionVersion });
-        } catch {}
-      }
-      if (isLocalJsonModeAllowed()) {
-        saveDatabaseToDisk();
-      }
-      await logServerAuditAsync('Logout Success', 'auth', req.user.id, `User ${req.user.name} (${req.user.role}) logout dari sistem`, req.user, { level: 'critical' });
-    }
+  // --- Authoritative Unified Logout Handler (Phase 15A.7.6.2) ---
+  const handleAuthoritativeLogout = async (req: Request, res: Response) => {
+    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
+    if (!checkAuthEnvironmentValid(res)) return;
+
     const cookieName = getSessionCookieName();
+    const cookies = parseRequestCookies(req);
+    const authHeader = req.headers['authorization'];
+    const currentToken = (authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : undefined) || cookies[cookieName];
     const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || getAppEnvironment() !== 'development';
-    clearSecureSessionCookie(res, cookieName, isHttps);
-    res.json({ success: true, message: 'Sesi berhasil diakhiri' });
-  });
+
+    try {
+      let matchedSession: ServerSession | undefined;
+      if (currentToken) {
+        matchedSession = await sessionStore.findSession(currentToken, { allowInactive: true });
+      }
+
+      const isAlreadyRevoked = matchedSession?.status === 'revoked';
+      const isExpired = matchedSession?.status === 'expired' || (matchedSession && new Date(matchedSession.expiresAt).getTime() < Date.now());
+
+      // 1. Revoke matched session via ISessionStore
+      if (matchedSession) {
+        await sessionStore.revokeSession(matchedSession.sessionId);
+      }
+      if (currentToken && (!matchedSession || matchedSession.token !== currentToken)) {
+        await sessionStore.revokeSession(currentToken);
+      }
+
+      // 2. Identify target user
+      const authUser = (req as AuthenticatedRequest).user;
+      const targetUserId = authUser?.id || matchedSession?.userId;
+
+      // 3. Revoke all active sessions for this user ID via ISessionStore
+      if (targetUserId) {
+        await sessionStore.revokeUserSessions(targetUserId);
+      }
+
+      let nextVersion: number | undefined;
+
+      // 4. Update sessionVersion in authoritative database
+      if (targetUserId) {
+        if (isSupabaseMode()) {
+          try {
+            const userLookup = await getUserByIdFromSupabase(targetUserId);
+            const currentVersion = userLookup.success && userLookup.data?.sessionVersion ? userLookup.data.sessionVersion : (authUser?.sessionVersion || 1);
+            nextVersion = currentVersion + 1;
+            const updateRes = await updateUserInSupabase(targetUserId, { sessionVersion: nextVersion });
+            if (!updateRes.success) {
+              return res.status(500).json({
+                success: false,
+                error: 'Gagal mencabut versi sesi di database authoritative.',
+                code: 'SESSION_REVOCATION_FAILED'
+              });
+            }
+          } catch (dbErr) {
+            return res.status(500).json({
+              success: false,
+              error: 'Database gagal diakses saat logout.',
+              code: 'DATABASE_UNAVAILABLE'
+            });
+          }
+        } else if (isLocalJsonModeAllowed()) {
+          const localUser = db.users.find(u => u.id === targetUserId);
+          if (localUser) {
+            nextVersion = (localUser.sessionVersion || 1) + 1;
+            localUser.sessionVersion = nextVersion;
+            saveDatabaseToDisk();
+          }
+        }
+
+        const userName = authUser?.name || matchedSession?.name || targetUserId;
+        const userRole = authUser?.role || matchedSession?.role || 'user';
+        await logServerAuditAsync(
+          'Logout Success',
+          'auth',
+          targetUserId,
+          `User ${userName} (${userRole}) logout dari sistem`,
+          authUser,
+          { level: 'critical' }
+        );
+      }
+
+      // 5. Clear cookie with consistent attributes across environments
+      clearSecureSessionCookie(res, cookieName, isHttps);
+
+      return res.json({
+        success: true,
+        message: isAlreadyRevoked
+          ? 'Sesi sebelumnya telah dicabut. Cookie telah dibersihkan.'
+          : (isExpired ? 'Sesi kedaluwarsa telah dibersihkan.' : 'Sesi berhasil diakhiri.'),
+        sessionVersion: nextVersion || authUser?.sessionVersion
+      });
+    } catch (storeErr: any) {
+      console.error('[Logout] Session store error during revocation:', storeErr);
+      return res.status(500).json({
+        success: false,
+        error: 'Terjadi kegagalan pada session store saat logout.',
+        code: 'LOGOUT_STORE_ERROR'
+      });
+    }
+  };
+
+  // Primary logout endpoint
+  app.post('/api/auth/logout', handleAuthoritativeLogout);
 
   // --- Supabase Authentication Backend Endpoints (Production Architecture Target) ---
   app.post('/api/auth/supabase-login', async (req: Request, res: Response) => {
@@ -2895,24 +2998,33 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     const userAgent = req.headers['user-agent'] || 'Web Browser';
     const deviceType = userAgent.toLowerCase().includes('mobi') ? 'mobile' : 'desktop';
 
-    SERVER_SESSIONS.unshift({
-      sessionId,
-      token: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      userId: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
-      contractor: user.contractor,
-      sessionVersion: sessionVersion || 1,
-      loginAt: nowIso,
-      lastActivityAt: nowIso,
-      expiresAt: expiresIso,
-      status: 'active',
-      ipAddress: req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1',
-      userAgent,
-      deviceType
-    });
+    try {
+      await sessionStore.addSession({
+        sessionId,
+        token: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        userId: user.id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+        contractor: user.contractor,
+        sessionVersion: sessionVersion || 1,
+        loginAt: nowIso,
+        lastActivityAt: nowIso,
+        expiresAt: expiresIso,
+        status: 'active',
+        ipAddress: req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1',
+        userAgent,
+        deviceType
+      });
+    } catch (storeErr: any) {
+      console.error('[Supabase Login] Session store error:', storeErr);
+      return res.status(500).json({
+        success: false,
+        error: 'Gagal membuat sesi penyimpanan server.',
+        code: 'SESSION_STORE_ERROR'
+      });
+    }
 
     await logServerAuditAsync(
       'Login Success (Supabase Auth)',
@@ -2950,6 +3062,8 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       sessionVersion
     });
   });
+
+  const IN_FLIGHT_REFRESH_PROMISES = new Map<string, Promise<any>>();
 
   app.post('/api/auth/supabase-refresh', async (req: Request, res: Response) => {
     // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
@@ -3010,8 +3124,24 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         });
       }
 
-      const activeSession = SERVER_SESSIONS.find(s => (s.sessionId === sessionCookie || s.token === sessionCookie) && s.status === 'active');
-      if (!activeSession) {
+      let activeSession: ServerSession | undefined;
+      try {
+        activeSession = await sessionStore.findSession(sessionCookie);
+      } catch (storeErr: any) {
+        return res.status(503).json({
+          success: false,
+          error: 'Layanan verifikasi sesi tidak tersedia saat ini.',
+          code: 'SESSION_STORE_UNAVAILABLE'
+        });
+      }
+
+      // Concurrency deduplication: ensure concurrent refreshes for the same session share single in-flight call
+      let refreshPromise = IN_FLIGHT_REFRESH_PROMISES.get(sessionCookie);
+      if (!refreshPromise && activeSession) {
+        refreshPromise = IN_FLIGHT_REFRESH_PROMISES.get(activeSession.sessionId);
+      }
+
+      if (!activeSession && !refreshPromise) {
         return res.status(401).json({
           success: false,
           error: 'Sesi browser tidak valid atau telah kedaluwarsa/dicabut.',
@@ -3019,31 +3149,58 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         });
       }
 
-      const serverRefreshToken = activeSession.refreshToken;
-      if (!serverRefreshToken) {
-        return res.status(401).json({
-          success: false,
-          error: 'Refresh token tidak ditemukan pada sesi server.',
-          code: 'NO_SERVER_REFRESH_TOKEN'
-        });
-      }
-
-      const refreshRes = await refreshSupabaseAuthSession(serverRefreshToken);
-      if (!refreshRes.success || !refreshRes.data) {
-        return res.status(401).json({
-          success: false,
-          error: refreshRes.error?.message || 'Gagal memperbarui token.',
-          code: refreshRes.error?.code || 'REFRESH_FAILED'
-        });
-      }
-
-      if (refreshRes.data.accessToken) {
-        activeSession.token = refreshRes.data.accessToken;
-        if (refreshRes.data.refreshToken) {
-          activeSession.refreshToken = refreshRes.data.refreshToken;
+      let isInitiator = false;
+      if (!refreshPromise && activeSession) {
+        const serverRefreshToken = activeSession.refreshToken;
+        if (!serverRefreshToken) {
+          return res.status(401).json({
+            success: false,
+            error: 'Refresh token tidak ditemukan pada sesi server.',
+            code: 'NO_SERVER_REFRESH_TOKEN'
+          });
         }
-        activeSession.lastActivityAt = new Date().toISOString();
-        activeSession.expiresAt = new Date(Date.now() + (refreshRes.data.expiresIn || 3600) * 1000).toISOString();
+        isInitiator = true;
+        refreshPromise = refreshSupabaseAuthSession(serverRefreshToken);
+        IN_FLIGHT_REFRESH_PROMISES.set(sessionCookie, refreshPromise);
+        IN_FLIGHT_REFRESH_PROMISES.set(activeSession.sessionId, refreshPromise);
+      }
+
+      let refreshRes: any;
+      try {
+        refreshRes = await refreshPromise;
+      } finally {
+        if (isInitiator) {
+          // Keep promise in map briefly to allow in-flight concurrent requests to pick it up, then clear
+          setTimeout(() => {
+            IN_FLIGHT_REFRESH_PROMISES.delete(sessionCookie);
+            if (activeSession) {
+              IN_FLIGHT_REFRESH_PROMISES.delete(activeSession.sessionId);
+            }
+          }, 100);
+        }
+      }
+
+      if (!refreshRes || !refreshRes.success || !refreshRes.data) {
+        return res.status(401).json({
+          success: false,
+          error: refreshRes?.error?.message || 'Gagal memperbarui token.',
+          code: refreshRes?.error?.code || 'REFRESH_FAILED'
+        });
+      }
+
+      // If activeSession was not resolved initially (because another concurrent request already updated it),
+      // look it up again by token or sessionId
+      if (!activeSession && refreshRes.data.accessToken) {
+        activeSession = await sessionStore.findSession(refreshRes.data.accessToken);
+      }
+
+      if (activeSession && refreshRes.data.accessToken) {
+        await sessionStore.updateSession(activeSession.sessionId, {
+          token: refreshRes.data.accessToken,
+          refreshToken: refreshRes.data.refreshToken || activeSession.refreshToken,
+          lastActivityAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + (refreshRes.data.expiresIn || 3600) * 1000).toISOString()
+        });
 
         const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || getAppEnvironment() !== 'development';
         const maxAgeMs = (refreshRes.data.expiresIn || 3600) * 1000;
@@ -3054,7 +3211,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       return res.json({
         success: true,
         message: 'Sesi Supabase Auth berhasil diperbarui via backend.',
-        sessionVersion: activeSession.sessionVersion || 1
+        sessionVersion: activeSession?.sessionVersion || 1
       });
     }
 
@@ -3062,7 +3219,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     let targetRefreshToken = req.body?.refreshToken;
     const incomingToken = (req.headers['authorization']?.startsWith('Bearer ') ? req.headers['authorization'].substring(7).trim() : undefined) || cookies[cookieName];
 
-    let activeSession = incomingToken ? SERVER_SESSIONS.find(s => (s.sessionId === incomingToken || s.token === incomingToken) && s.status === 'active') : undefined;
+    let activeSession = incomingToken ? await sessionStore.findSession(incomingToken) : undefined;
 
     if (!targetRefreshToken && activeSession?.refreshToken) {
       targetRefreshToken = activeSession.refreshToken;
@@ -3078,12 +3235,12 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     }
 
     if (activeSession && refreshRes.data.accessToken) {
-      activeSession.token = refreshRes.data.accessToken;
-      if (refreshRes.data.refreshToken) {
-        activeSession.refreshToken = refreshRes.data.refreshToken;
-      }
-      activeSession.lastActivityAt = new Date().toISOString();
-      activeSession.expiresAt = new Date(Date.now() + (refreshRes.data.expiresIn || 3600) * 1000).toISOString();
+      await sessionStore.updateSession(activeSession.sessionId, {
+        token: refreshRes.data.accessToken,
+        refreshToken: refreshRes.data.refreshToken || activeSession.refreshToken,
+        lastActivityAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + (refreshRes.data.expiresIn || 3600) * 1000).toISOString()
+      });
     }
 
     if (refreshRes.data.accessToken) {
@@ -3095,51 +3252,8 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     res.json({ success: true, tokens: refreshRes.data });
   });
 
-  app.post('/api/auth/supabase-logout', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
-    if (!checkAuthEnvironmentValid(res)) return;
-
-    // Do not call client.auth.signOut() on a shared backend client
-    if (req.session) {
-      req.session.status = 'revoked';
-    }
-    const currentToken = (req.headers['authorization']?.startsWith('Bearer ') ? req.headers['authorization'].substring(7).trim() : undefined) || parseRequestCookies(req)[getSessionCookieName()];
-    if (currentToken) {
-      const matched = SERVER_SESSIONS.find(s => s.token === currentToken || s.sessionId === currentToken);
-      if (matched) {
-        matched.status = 'revoked';
-      }
-    }
-    // Also revoke all active server sessions for this user ID per authoritative logout standard
-    if (req.user?.id) {
-      SERVER_SESSIONS.forEach(s => {
-        if (s.userId === req.user?.id && s.status === 'active') {
-          s.status = 'revoked';
-        }
-      });
-    }
-    if (req.user) {
-      const nextVersion = (req.user.sessionVersion || 1) + 1;
-      req.user.sessionVersion = nextVersion;
-      if (isSupabaseMode()) {
-        try {
-          const updateRes = await updateUserInSupabase(req.user.id, { sessionVersion: nextVersion });
-          if (!updateRes.success) {
-            return res.status(500).json({ success: false, error: 'Gagal memperbarui versi sesi di database.', code: 'SESSION_REVOCATION_FAILED' });
-          }
-        } catch {
-          return res.status(500).json({ success: false, error: 'Database gagal diakses saat logout.', code: 'DATABASE_UNAVAILABLE' });
-        }
-      }
-      await logServerAuditAsync('Logout Success (Supabase Auth)', 'auth', req.user.id, `User ${req.user.name} logout dari Supabase Auth`, req.user, { level: 'critical' });
-    }
-
-    const cookieName = getSessionCookieName();
-    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || getAppEnvironment() !== 'development';
-    clearSecureSessionCookie(res, cookieName, isHttps);
-
-    res.json({ success: true, message: 'Sesi Supabase Auth berhasil diakhiri.', sessionVersion: req.user?.sessionVersion });
-  });
+  // Compatibility adapter for Supabase Auth logout: routes directly to handleAuthoritativeLogout
+  app.post('/api/auth/supabase-logout', handleAuthoritativeLogout);
 
   // Recovery endpoints and rate limiting
 
@@ -3527,11 +3641,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     user.sessionVersion = newVersion;
 
     // Invalidate all other sessions for this user
-    SERVER_SESSIONS.forEach(s => {
-      if (s.userId === user.id && (!req.session || s.sessionId !== req.session.sessionId)) {
-        s.status = 'revoked';
-      }
-    });
+    await sessionStore.revokeUserSessions(user.id, req.session?.sessionId);
 
     if (req.session) {
       req.session.sessionVersion = newVersion;
@@ -5571,9 +5681,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     if (isSensitiveMod) {
       user.sessionVersion = (user.sessionVersion || 1) + 1;
       updates.sessionVersion = user.sessionVersion;
-      SERVER_SESSIONS.forEach(s => {
-        if (s.userId === user!.id) s.status = 'revoked';
-      });
+      await sessionStore.revokeUserSessions(user!.id);
     }
 
     if (isSupabaseMode()) {
@@ -5626,9 +5734,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     user.active = newActive;
     user.sessionVersion = newSessionVersion;
 
-    SERVER_SESSIONS.forEach(s => {
-      if (s.userId === user!.id) s.status = 'revoked';
-    });
+    await sessionStore.revokeUserSessions(user!.id);
 
     if (isSupabaseMode()) {
       const supaRes = await updateUserInSupabase(id, {
@@ -5686,9 +5792,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     user.mustChangePassword = true;
     user.sessionVersion = newSessionVersion;
 
-    SERVER_SESSIONS.forEach(s => {
-      if (s.userId === user!.id) s.status = 'revoked';
-    });
+    await sessionStore.revokeUserSessions(user!.id);
 
     if (isSupabaseMode()) {
       const supaRes = await updateUserInSupabase(id, {
@@ -5754,11 +5858,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     }
 
     // Revoke all sessions for target user immediately
-    SERVER_SESSIONS.forEach(s => {
-      if (s.userId === id) {
-        s.status = 'revoked';
-      }
-    });
+    await sessionStore.revokeUserSessions(id);
 
     if (isSupabaseMode()) {
       const delRes = await deleteUserInSupabase(id, req.user?.name, reason);
@@ -5796,30 +5896,26 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   // --- Session Management Endpoints ---
-  app.get('/api/sessions', requireSuperAdmin, (_req, res) => {
-    const now = Date.now();
-    SERVER_SESSIONS.forEach(s => {
-      if (s.status === 'active' && new Date(s.expiresAt).getTime() < now) {
-        s.status = 'expired';
-      }
-    });
-    const safeSessions = SERVER_SESSIONS.map(s => {
-      const { token: _, ...safe } = s;
+  app.get('/api/sessions', requireSuperAdmin, async (_req, res) => {
+    await sessionStore.cleanupExpired();
+    const allSessions = sessionStore.getAllSessions();
+    const safeSessions = allSessions.map(s => {
+      const { token: _, refreshToken: __, ...safe } = s;
       return safe;
     });
     res.json({ sessions: safeSessions });
   });
 
-  app.post('/api/sessions/revoke', requireAuth, (req: AuthenticatedRequest, res) => {
+  app.post('/api/sessions/revoke', requireAuth, async (req: AuthenticatedRequest, res) => {
     const { sessionId, reason } = req.body;
-    const session = SERVER_SESSIONS.find(s => s.sessionId === sessionId);
+    const session = await sessionStore.findSession(sessionId, { allowInactive: true });
     if (!session) return res.status(404).json({ error: 'Sesi tidak ditemukan.' });
 
     if (session.userId !== req.user!.id && req.user!.role !== 'super_admin') {
       return res.status(403).json({ error: 'Akses Ditolak: Anda hanya dapat mencabut sesi Anda sendiri.' });
     }
 
-    session.status = 'revoked';
+    await sessionStore.revokeSession(sessionId);
     logServerAudit('Session Revoked', 'session', sessionId, `Sesi dicabut oleh ${req.user!.name}. Alasan: ${reason || 'Pencabutan manual'}`, req.user);
     res.json({ success: true, message: 'Sesi berhasil dicabut.' });
   });
@@ -8025,9 +8121,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         inMemoryUser.sessionVersion = newVersion;
       }
 
-      SERVER_SESSIONS.forEach(s => {
-        if (s.userId === id) s.status = 'revoked';
-      });
+      await sessionStore.revokeUserSessions(id);
 
       const result = await updateUserInSupabase(id, { ...updates, sessionVersion: newVersion });
       if (!result.success) {
@@ -8093,9 +8187,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       }
 
       // Revoke sessions
-      SERVER_SESSIONS.forEach(s => {
-        if (s.userId === id) s.status = 'revoked';
-      });
+      await sessionStore.revokeUserSessions(id);
 
       const inMemoryUser = db.users.find(u => u.id === id);
       if (inMemoryUser) {
@@ -8131,9 +8223,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const user = req.user!;
 
       // Revoke all sessions
-      SERVER_SESSIONS.forEach(s => {
-        if (s.userId === id) s.status = 'revoked';
-      });
+      await sessionStore.revokeUserSessions(id);
 
       const existingUser = db.users.find(u => u.id === id);
       const newVersion = (existingUser?.sessionVersion || 1) + 1;

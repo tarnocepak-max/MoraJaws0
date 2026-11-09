@@ -1403,17 +1403,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('morajaws_user_display');
     } catch (e) {}
 
-    // Invoke Supabase Auth logout on Express backend
-    fetch('/api/auth/supabase-logout', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Morajaws-Client': 'browser'
-      },
-      credentials: 'include'
-    }).catch(() => {});
-
-    // Also notify /api/auth/logout for session cleanup
+    // Invoke single authoritative logout endpoint on Express backend
     fetch('/api/auth/logout', {
       method: 'POST',
       headers: {

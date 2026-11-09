@@ -223,7 +223,7 @@ export async function refreshSupabaseSession() {
 }
 
 export async function logoutSupabase() {
-  const res = await fetch('/api/auth/supabase-logout', {
+  const res = await fetch('/api/auth/logout', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
