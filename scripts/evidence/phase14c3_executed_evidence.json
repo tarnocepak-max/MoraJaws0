@@ -1,8 +1,8 @@
 {
   "suite": "Phase14C.3",
-  "test_run_id": "run_phase14c3_1794241205574_n30759",
+  "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
   "environment": "isolated_mock_staging_loopback",
-  "generated_at": "2026-11-09T16:20:05.911Z",
+  "generated_at": "2026-11-07T14:07:06.025Z",
   "total_http_calls_executed": 74,
   "all_passed": true,
   "evidence": [
@@ -27,27 +27,27 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.649Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.839Z"
         },
         {
           "assertion_name": "Health Status matches ok",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.649Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.839Z"
         },
         {
           "assertion_name": "Active Database Status defined",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.649Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.839Z"
         },
         {
           "assertion_name": "Zero Secret Key Leakage in Health",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.649Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.839Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.648Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.838Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -71,22 +71,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.653Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.842Z"
         },
         {
           "assertion_name": "Authenticated Flag is False",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.653Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.842Z"
         },
         {
           "assertion_name": "User is Null",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.653Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.842Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.653Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.842Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -110,27 +110,27 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.658Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.845Z"
         },
         {
           "assertion_name": "Authenticated Flag is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.658Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.845Z"
         },
         {
           "assertion_name": "Role matches super_admin",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.658Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.845Z"
         },
         {
           "assertion_name": "passwordHash is stripped",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.658Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.845Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.658Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.845Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -154,22 +154,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.678Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.859Z"
         },
         {
           "assertion_name": "Status is 400",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.678Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.859Z"
         },
         {
           "assertion_name": "Code is INVALID_INPUT",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.678Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.859Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.678Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.859Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "INVALID_INPUT"
     },
@@ -194,33 +194,33 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.681Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.861Z"
         },
         {
           "assertion_name": "Found is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.681Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.861Z"
         },
         {
           "assertion_name": "Role matches super_admin",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.681Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.861Z"
         },
         {
           "assertion_name": "passwordHash is omitted",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.681Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.861Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.681Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.861Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
       "suite": "Phase14C.3",
-      "scenario": "POST /api/auth/logout - Unauthenticated handled safely (HTTP 200/401)",
-      "test_scenario": "POST /api/auth/logout - Unauthenticated handled safely (HTTP 200/401)",
+      "scenario": "POST /api/auth/logout - Unauthenticated request rejected (HTTP 401)",
+      "test_scenario": "POST /api/auth/logout - Unauthenticated request rejected (HTTP 401)",
       "scenario_number": 6,
       "category": "Authentication & Identity",
       "method": "POST",
@@ -228,29 +228,29 @@
       "normalized_route": "/api/auth/logout",
       "source_line": 925,
       "token_role": null,
-      "expected_status": 200,
-      "actual_status": 200,
+      "expected_status": 401,
+      "actual_status": 401,
       "status_assertion_passed": true,
       "functional_assertion_passed": true,
       "assertion_count": 2,
       "failed_assertion_count": 0,
       "assertion_results": [
         {
-          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.688Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.863Z"
         },
         {
-          "assertion_name": "Status is 200 or 401",
+          "assertion_name": "Status is 401",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.688Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.863Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.688Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.863Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
-      "response_summary": "Sesi berhasil diakhiri."
+      "response_code": "UNAUTHENTICATED"
     },
     {
       "suite": "Phase14C.3",
@@ -273,24 +273,24 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.695Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.866Z"
         },
         {
           "assertion_name": "Success Flag is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.695Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.866Z"
         },
         {
           "assertion_name": "Message confirms session ended",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.695Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.866Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.695Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.866Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
-      "response_summary": "Sesi berhasil diakhiri."
+      "response_summary": "Sesi berhasil diakhiri"
     },
     {
       "suite": "Phase14C.3",
@@ -313,17 +313,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (401)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.698Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.868Z"
         },
         {
           "assertion_name": "Status is 401",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.698Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.868Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.698Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.868Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "UNAUTHENTICATED"
     },
@@ -348,22 +348,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.706Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.873Z"
         },
         {
           "assertion_name": "Success Flag is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.706Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.873Z"
         },
         {
           "assertion_name": "Tickets is Array",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.706Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.873Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.706Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.873Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -387,22 +387,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.715Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.877Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.715Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.877Z"
         },
         {
           "assertion_name": "Ticket object present",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.715Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.877Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.715Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.877Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -426,22 +426,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.717Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.880Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.717Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.880Z"
         },
         {
           "assertion_name": "Target work order retrieved",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.717Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.880Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.717Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.880Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -465,22 +465,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.719Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.882Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.719Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.882Z"
         },
         {
           "assertion_name": "Protected WO Code matches PROTECTED_RECORD",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.719Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.882Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.719Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.882Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "PROTECTED_RECORD"
     },
@@ -505,22 +505,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.723Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.885Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.723Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.885Z"
         },
         {
           "assertion_name": "statusWOInstaller updated to In Progress",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.723Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.885Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.723Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.885Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -544,22 +544,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.724Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.886Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.724Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.886Z"
         },
         {
           "assertion_name": "Code matches PROTECTED_RECORD",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.724Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.886Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.724Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.886Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "PROTECTED_RECORD"
     },
@@ -584,22 +584,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.726Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.888Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.726Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.888Z"
         },
         {
           "assertion_name": "slotTime updated",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.726Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.888Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.726Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.888Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -623,17 +623,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.728Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.891Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.728Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.891Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.728Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.891Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -657,17 +657,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.730Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.892Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.730Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.892Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.730Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.892Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_MANAGEMENT_DATA"
     },
@@ -692,22 +692,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.732Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.895Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.732Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.895Z"
         },
         {
           "assertion_name": "Code matches PROTECTED_RECORD",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.732Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.895Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.732Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.895Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "PROTECTED_RECORD"
     },
@@ -732,22 +732,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.734Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.898Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.734Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.898Z"
         },
         {
           "assertion_name": "Message confirms soft delete",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.734Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.898Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.734Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.897Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Work Order WO-TEST-MOCK-202 berhasil dihapus."
     },
@@ -772,22 +772,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.736Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.900Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.736Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.900Z"
         },
         {
           "assertion_name": "History is Array",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.736Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.900Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.736Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.900Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -811,22 +811,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.737Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.901Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.737Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.901Z"
         },
         {
           "assertion_name": "History is Array",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.737Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.901Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.737Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.901Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -850,17 +850,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.739Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.902Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.739Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.902Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.739Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.902Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Hanya Super Admin dan Dispatch yang dapat mengubah data kontraktor."
     },
@@ -885,22 +885,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.741Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.904Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.741Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.904Z"
         },
         {
           "assertion_name": "Contractor object returned",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.741Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.904Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.741Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.904Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Data kontraktor berhasil diperbarui."
     },
@@ -925,17 +925,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.743Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.906Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.743Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.906Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.743Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.906Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Data kontraktor berhasil diperbarui."
     },
@@ -960,17 +960,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.745Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.908Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.745Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.908Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.745Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.908Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Kontraktor berhasil dihapus dari database."
     },
@@ -995,17 +995,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.746Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.910Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.746Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.910Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.746Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.909Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Akses Ditolak: Hanya Super Admin dan Dispatch yang dapat mengubah coverage area."
     },
@@ -1030,17 +1030,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.749Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.912Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.749Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.912Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.749Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.912Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Coverage area berhasil diperbarui."
     },
@@ -1065,17 +1065,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.755Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.915Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.755Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.915Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.751Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.915Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Coverage area berhasil diperbarui."
     },
@@ -1100,17 +1100,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.761Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.917Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.761Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.917Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.761Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.917Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Coverage area berhasil dihapus dari database."
     },
@@ -1135,17 +1135,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (400)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.763Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.919Z"
         },
         {
           "assertion_name": "Status is 400",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.763Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.919Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.763Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.919Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "Anda tidak dapat menghapus akun Anda sendiri saat sedang login."
     },
@@ -1170,17 +1170,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.764Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.920Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.764Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.920Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.764Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.920Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Akun User To Delete berhasil dihapus dari database."
     },
@@ -1205,17 +1205,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.771Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.922Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.771Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.922Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.771Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.922Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "REQUIRE_SUPER_ADMIN"
     },
@@ -1240,22 +1240,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.774Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.923Z"
         },
         {
           "assertion_name": "Config object present",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.774Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.923Z"
         },
         {
           "assertion_name": "spreadsheetId present",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.774Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.923Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.774Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.923Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1279,22 +1279,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.776Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.925Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.776Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.925Z"
         },
         {
           "assertion_name": "sheetName updated",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.776Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.925Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.776Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.925Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1318,22 +1318,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.778Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.926Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.778Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.926Z"
         },
         {
           "assertion_name": "App DB Connected",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.778Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.926Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.778Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.926Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1357,17 +1357,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.780Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.928Z"
         },
         {
           "assertion_name": "History is Array",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.780Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.928Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.780Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.928Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1391,27 +1391,27 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.782Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.929Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.782Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.929Z"
         },
         {
           "assertion_name": "Bucket is morajaws-reports",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.782Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.929Z"
         },
         {
           "assertion_name": "Readiness object present",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.782Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.929Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.782Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.929Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1435,22 +1435,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.783Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.931Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.783Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.931Z"
         },
         {
           "assertion_name": "Source type classified",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.783Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.931Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.783Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.931Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1474,22 +1474,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.787Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.932Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.787Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.932Z"
         },
         {
           "assertion_name": "Bucket name matches morajaws-reports",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.787Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.932Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.787Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.932Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Bucket \"morajaws-reports\" benar-benar tersedia dan terverifikasi di Supabase Storage (PRIVATE)."
     },
@@ -1514,22 +1514,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.793Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.935Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.793Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.935Z"
         },
         {
           "assertion_name": "Evaluation present",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.793Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.935Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.792Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.935Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1553,22 +1553,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.806Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.938Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.806Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.938Z"
         },
         {
           "assertion_name": "Stages object present",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.806Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.938Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.806Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.938Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1592,27 +1592,27 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.810Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.940Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.810Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.940Z"
         },
         {
           "assertion_name": "Metadata filePath present",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.810Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.940Z"
         },
         {
           "assertion_name": "Signed URL generated",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.810Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.940Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.809Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.940Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1622,7 +1622,7 @@
       "scenario_number": 43,
       "category": "Storage Subsystem",
       "method": "GET",
-      "url": "/api/storage/adapter/download?storagePath=test-sandbox%2Fu_superadmin_01%2Fimage_report%2Fdata%2Fadp_file_1794241205808_bb5f848a_report_teknisi_01.jpg&category=test-sandbox",
+      "url": "/api/storage/adapter/download?storagePath=test-sandbox%2Fu_superadmin_01%2Fimage_report%2Fdata%2Fadp_file_1794060425940_8994713c_report_teknisi_01.jpg&category=test-sandbox",
       "normalized_route": "/api/storage/adapter/download",
       "source_line": 1657,
       "token_role": "super_admin",
@@ -1636,17 +1636,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.814Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.943Z"
         },
         {
           "assertion_name": "Status is 200",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.814Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.943Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.814Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.943Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1670,22 +1670,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.816Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.945Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.816Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.945Z"
         },
         {
           "assertion_name": "Signed URL present",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.816Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.945Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.815Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.945Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1709,22 +1709,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.817Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.947Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.817Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.947Z"
         },
         {
           "assertion_name": "Signed URL present",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.817Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.947Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.817Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.946Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1748,19 +1748,19 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.820Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.948Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.820Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.948Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.820Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.948Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
-      "response_summary": "File sandbox \"test-sandbox/u_superadmin_01/image_report/data/adp_file_1794241205808_bb5f848a_report_teknisi_01.jpg\" berhasil dihapus."
+      "response_summary": "File sandbox \"test-sandbox/u_superadmin_01/image_report/data/adp_file_1794060425940_8994713c_report_teknisi_01.jpg\" berhasil dihapus."
     },
     {
       "suite": "Phase14C.3",
@@ -1783,22 +1783,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.829Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.949Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.829Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.949Z"
         },
         {
           "assertion_name": "Recent Operation Logs is Array",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.829Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.949Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.829Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.949Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1822,22 +1822,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.831Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.951Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.831Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.951Z"
         },
         {
           "assertion_name": "Data is Array",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.831Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.951Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.831Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.950Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1861,22 +1861,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (201)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.836Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.953Z"
         },
         {
           "assertion_name": "Status is 201",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.836Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.953Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.836Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.953Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.835Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.953Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -1900,17 +1900,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.837Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.955Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.837Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.955Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.837Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.955Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "PROTECTED_RECORD"
     },
@@ -1935,17 +1935,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.839Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.956Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.839Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.956Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.839Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.956Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "PROTECTED_RECORD"
     },
@@ -1970,17 +1970,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.842Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.957Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.842Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.957Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.842Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.957Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Work Order wo_test_mock_202 berhasil ditandai terhapus (soft delete)."
     },
@@ -2005,27 +2005,27 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.845Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.959Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.845Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.959Z"
         },
         {
           "assertion_name": "Data is Array",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.845Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.959Z"
         },
         {
           "assertion_name": "passwordHash stripped from all users",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.845Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.959Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.845Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.959Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2049,22 +2049,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.847Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.960Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.847Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.960Z"
         },
         {
           "assertion_name": "ID matches target",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.847Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.960Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.847Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.960Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2088,22 +2088,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (201)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.849Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.971Z"
         },
         {
           "assertion_name": "Status is 201",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.849Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.971Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.849Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.971Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.849Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.971Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2127,17 +2127,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.850Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.978Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.850Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.978Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.850Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.978Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2161,17 +2161,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.852Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.983Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.852Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.983Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.852Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.983Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_summary": "Pengguna berhasil dihapus."
     },
@@ -2196,22 +2196,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.856Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.985Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.856Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.985Z"
         },
         {
           "assertion_name": "Data is Array",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.856Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.985Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.856Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.985Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2235,22 +2235,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (201)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.860Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.986Z"
         },
         {
           "assertion_name": "Status is 201",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.860Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.986Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.860Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.986Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.860Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.986Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2274,17 +2274,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.866Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.988Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.866Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.988Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.865Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.987Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2308,22 +2308,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.868Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.989Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.868Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.989Z"
         },
         {
           "assertion_name": "Data is Array",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.868Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.989Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.868Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.989Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2347,22 +2347,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (201)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.870Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.990Z"
         },
         {
           "assertion_name": "Status is 201",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.870Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.990Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.870Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.990Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.870Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.990Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2386,22 +2386,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.876Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.992Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.877Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.992Z"
         },
         {
           "assertion_name": "Data object present",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.877Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.992Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.876Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.992Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2425,17 +2425,17 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.879Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.993Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.879Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.993Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.879Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.993Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2459,22 +2459,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.882Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.995Z"
         },
         {
           "assertion_name": "Success is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.882Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.995Z"
         },
         {
           "assertion_name": "Data is Array",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.882Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.995Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.882Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.995Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2498,22 +2498,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.884Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.996Z"
         },
         {
           "assertion_name": "Status is 200",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.884Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.996Z"
         },
         {
           "assertion_name": "SSE Flag is True",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.884Z"
+          "assertion_timestamp": "2026-11-07T14:07:05.996Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.883Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:05.996Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     },
     {
@@ -2537,22 +2537,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.889Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.000Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.889Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.000Z"
         },
         {
           "assertion_name": "Code is FIREBASE_TOKEN_REQUIRED",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.889Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.000Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.889Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:06.000Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "FIREBASE_TOKEN_REQUIRED"
     },
@@ -2577,22 +2577,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.891Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.002Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.891Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.002Z"
         },
         {
           "assertion_name": "Code is FIREBASE_TOKEN_REQUIRED",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.891Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.002Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.891Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:06.002Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "FIREBASE_TOKEN_REQUIRED"
     },
@@ -2617,22 +2617,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.895Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.003Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.895Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.003Z"
         },
         {
           "assertion_name": "Code is FIREBASE_TOKEN_REQUIRED",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.895Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.003Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.895Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:06.003Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "FIREBASE_TOKEN_REQUIRED"
     },
@@ -2657,22 +2657,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.897Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.004Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.897Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.004Z"
         },
         {
           "assertion_name": "Code is FIREBASE_TOKEN_REQUIRED",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.897Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.004Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.897Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:06.004Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "FIREBASE_TOKEN_REQUIRED"
     },
@@ -2697,22 +2697,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (403)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.899Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.005Z"
         },
         {
           "assertion_name": "Status is 403",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.899Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.005Z"
         },
         {
           "assertion_name": "Code is FIREBASE_TOKEN_REQUIRED",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.899Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.005Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.899Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:06.005Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "FIREBASE_TOKEN_REQUIRED"
     },
@@ -2737,22 +2737,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.900Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.007Z"
         },
         {
           "assertion_name": "Status is 404",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.901Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.007Z"
         },
         {
           "assertion_name": "Code is NOT_FOUND",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.901Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.007Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.900Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:06.007Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "NOT_FOUND"
     },
@@ -2777,22 +2777,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (404)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.903Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.009Z"
         },
         {
           "assertion_name": "Status is 404",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.903Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.009Z"
         },
         {
           "assertion_name": "Code is NOT_FOUND",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.903Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.009Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.902Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:06.009Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback",
       "response_code": "NOT_FOUND"
     },
@@ -2817,22 +2817,22 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.910Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.024Z"
         },
         {
           "assertion_name": "Status is 200",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.910Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.024Z"
         },
         {
           "assertion_name": "Response is valid HTML entrypoint",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-09T16:20:05.910Z"
+          "assertion_timestamp": "2026-11-07T14:07:06.024Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-09T16:20:05.910Z",
-      "test_run_id": "run_phase14c3_1794241205574_n30759",
+      "timestamp": "2026-11-07T14:07:06.024Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
       "environment": "isolated_mock_staging_loopback"
     }
   ]

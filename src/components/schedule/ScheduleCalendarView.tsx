@@ -81,8 +81,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
   // Filtered tickets
   const filteredTickets = useMemo(() => {
     return (scopedTickets || []).filter(t => {
-      if (!t) return false;
-      if (slotFilter !== 'ALL' && !(t.slotTime || '').includes(slotFilter.slice(0, 5))) return false;
+      if (slotFilter !== 'ALL' && !String(t.slotTime || '').includes(slotFilter.slice(0, 5))) return false;
       if (areaFilter !== 'ALL' && t.area !== areaFilter) return false;
       if (contractorFilter !== 'ALL') {
         const c = t.contactorName || t.contractorName || '';
@@ -356,7 +355,7 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {STANDARD_SLOTS.map(slot => {
               const slotKey = slot.slice(0, 5);
-              const slotTickets = dayTickets.filter(t => (t.slotTime || '').includes(slotKey));
+              const slotTickets = dayTickets.filter(t => String(t.slotTime || '').includes(slotKey));
               return (
                 <div
                   key={slot}

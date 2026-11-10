@@ -160,21 +160,21 @@ export const ManagementDataPortal: React.FC<ManagementDataPortalProps> = ({
     return tickets.filter(t => {
       if (t.isArchived || t.isDeleted) return false;
 
-      if (searchWo && !t.woNumber.toLowerCase().includes(searchWo.toLowerCase().trim())) {
+      if (searchWo && !String(t.woNumber ?? '').toLowerCase().includes(searchWo.toLowerCase().trim())) {
         return false;
       }
 
       if (searchCustomerId) {
-        const cid = (t.idCustomer || t.customerId || '').toLowerCase();
+        const cid = String(t.idCustomer || t.customerId || '').toLowerCase();
         if (!cid.includes(searchCustomerId.toLowerCase().trim())) return false;
       }
 
-      if (searchCustomerName && !t.customerName.toLowerCase().includes(searchCustomerName.toLowerCase().trim())) {
+      if (searchCustomerName && !String(t.customerName ?? '').toLowerCase().includes(searchCustomerName.toLowerCase().trim())) {
         return false;
       }
 
       if (selectedContractor !== 'ALL') {
-        const contr = (t.contactorName || t.contractorName || '').toLowerCase();
+        const contr = String(t.contactorName || t.contractorName || '').toLowerCase();
         if (!contr.includes(selectedContractor.toLowerCase())) return false;
       }
 

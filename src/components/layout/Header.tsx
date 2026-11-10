@@ -94,7 +94,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onNavigate }) => {
       const raw = t.appointmentDate;
       if (!raw) return false;
       const clean = String(raw).slice(0, 10);
-      return clean === todayWIB || (raw.includes('T') && raw.split('T')[0] === todayWIB);
+      return clean === todayWIB || (String(raw).includes('T') && String(raw).split('T')[0] === todayWIB);
     });
   }, [tickets, todayWIB]);
 

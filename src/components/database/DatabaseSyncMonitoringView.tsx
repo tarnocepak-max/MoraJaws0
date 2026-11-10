@@ -105,9 +105,10 @@ export const DatabaseSyncMonitoringView: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...getAuthHeaders()
-        },
-        credentials: 'include'
+          ...getAuthHeaders(),
+          'x-user-role': currentUser.role,
+          'x-user-id': currentUser.id
+        }
       });
       const data = await res.json();
       if (res.ok) {
@@ -139,9 +140,10 @@ export const DatabaseSyncMonitoringView: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...getAuthHeaders()
+          ...getAuthHeaders(),
+          'x-user-role': currentUser.role,
+          'x-user-id': currentUser.id
         },
-        credentials: 'include',
         body: JSON.stringify({
           syncType: 'full_sync',
           dataSource: googleSheetsConfig.sheetName || 'Google Sheets Master'

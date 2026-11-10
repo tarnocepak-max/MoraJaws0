@@ -110,8 +110,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 };
 
 export function hasPermission(role: UserRole, permission: Permission): boolean {
-  const permissions = ROLE_PERMISSIONS[role] || [];
-  return permissions.includes(permission);
+  const permissions = ROLE_PERMISSIONS[role];
+  return Array.isArray(permissions) ? permissions.includes(permission) : false;
 }
 
 // SHA-256 password hash generator with salt
@@ -176,117 +176,133 @@ export function getRoleDisplayName(role: UserRole): string {
 }
 
 /**
- * Returns authenticated HTTP headers for browser client.
- * Browser authentication is maintained exclusively via HttpOnly session cookies with credentials: 'include'.
- * Access tokens, refresh tokens, and user credentials from localStorage are strictly removed.
+ * Returns authenticated HTTP headers including Authorization: Bearer <sessionToken>
+ * sourced from official stored session in localStorage.
+ * Custom spoofable headers (x-user-id, x-user-role, x-username) are strictly omitted.
  */
 export function getAuthHeaders(): Record<string, string> {
-  return {
-    'Content-Type': 'application/json',
-    'X-Morajaws-Client': 'browser'
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
   };
+  try {
+    const sessionStr = localStorage.getItem('morajaws_auth_session');
+    if (sessionStr) {
+      const sess = JSON.parse(sessionStr);
+      if (sess?.token) {
+        headers['Authorization'] = `Bearer ${sess.token}`;
+      }
+    }
+  } catch (err) {
+    console.warn('[authService] Failed to read auth session headers:', err);
+  }
+  return headers;
 }
 
 /**
- * Official MoraJaws Supabase Auth client methods communicating through Express backend
+ * Official MoraJaws Custom Authentication client methods communicating through Express backend
  */
-export async function loginWithSupabase(identifier: string, password: string) {
-  const res = await fetch('/api/auth/supabase-login', {
+export async function loginWithMoraJaws(identifier: string, password: string) {
+  const res = await fetch('/api/auth/login', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Morajaws-Client': 'browser'
-    },
-    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ identifier: identifier.trim(), password })
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
 }
 
-/**
- * Refreshes session strictly using server-side HttpOnly cookie.
- * Does not accept or transmit refresh token via body, headers, or query parameters.
- */
-export async function refreshSupabaseSession() {
-  const res = await fetch('/api/auth/supabase-refresh', {
+// Backwards-compatible alias
+export const loginWithSupabase = loginWithMoraJaws;
+
+export async function refreshMoraJawsSession(refreshToken?: string) {
+  const res = await fetch('/api/auth/refresh', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Morajaws-Client': 'browser'
-    },
-    credentials: 'include',
-    body: JSON.stringify({})
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken })
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
 }
 
-export async function logoutSupabase() {
+// Backwards-compatible alias
+export const refreshSupabaseSession = refreshMoraJawsSession;
+
+export async function logoutMoraJaws() {
+  const headers = getAuthHeaders();
   const res = await fetch('/api/auth/logout', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Morajaws-Client': 'browser'
-    },
-    credentials: 'include'
+    headers
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
 }
 
-/**
- * Initiates password recovery through Express backend with server-authoritative canonical redirect.
- */
-export async function requestPasswordRecovery(identifier: string, customRedirectTo?: string) {
-  const body: Record<string, string> = {
-    emailOrUsername: identifier.trim()
-  };
-  if (customRedirectTo && typeof customRedirectTo === 'string' && customRedirectTo.trim()) {
-    body.redirectTo = customRedirectTo.trim();
-  }
-  const res = await fetch('/api/auth/forgot-password', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, data };
-}
+// Backwards-compatible alias
+export const logoutSupabase = logoutMoraJaws;
 
 /**
- * Verifies recovery token, code, or hash server-side
+ * Superadmin-exclusive User Management API calls
  */
-export async function verifyRecoverySession(params: {
-  accessToken?: string;
-  recoveryToken?: string;
-  code?: string;
-  token_hash?: string;
+export async function adminCreateUser(userData: {
+  name: string;
+  username: string;
+  email: string;
+  altEmail?: string;
+  phone?: string;
+  role: UserRole;
+  contractor?: string;
+  contractorId?: string;
+  area?: string;
+  password: string;
 }) {
-  const res = await fetch('/api/auth/verify-recovery', {
+  const headers = getAuthHeaders();
+  const res = await fetch('/api/admin/users', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params)
+    headers,
+    body: JSON.stringify(userData)
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
 }
 
-/**
- * Submits new password for recovery through Express backend.
- * Never supplies or trusts verifiedUserId or login accessToken from browser.
- */
-export async function resetPasswordWithRecoveryToken(params: {
-  newPassword: string;
-  confirmPassword: string;
-  recoveryToken?: string;
-  code?: string;
-  token_hash?: string;
-}) {
-  const res = await fetch('/api/auth/reset-password', {
+export async function adminResetPassword(targetUserId: string, newPassword: string, confirmPassword: string) {
+  const headers = getAuthHeaders();
+  const res = await fetch('/api/auth/admin/reset-password', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params)
+    headers,
+    body: JSON.stringify({ targetUserId, newPassword, confirmPassword })
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+export async function adminUpdateUserStatus(targetUserId: string, status: 'active' | 'inactive' | 'locked' | 'unlocked', reason?: string) {
+  const headers = getAuthHeaders();
+  const res = await fetch(`/api/admin/users/${targetUserId}/status`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ status, reason })
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+export async function adminRevokeSessions(targetUserId: string) {
+  const headers = getAuthHeaders();
+  const res = await fetch(`/api/admin/users/${targetUserId}/revoke-sessions`, {
+    method: 'POST',
+    headers
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+export async function adminUpdateUser(targetUserId: string, userData: Partial<User>) {
+  const headers = getAuthHeaders();
+  const res = await fetch(`/api/admin/users/${targetUserId}`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(userData)
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };

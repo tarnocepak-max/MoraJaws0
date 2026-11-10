@@ -78,9 +78,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
   const visibleContractors = isRoleRestricted && userContractor
     ? contractors.filter(c => {
         if (!c) return false;
-        const cName = (c.name || '').toLowerCase().trim();
-        const cCode = (c.code || '').toLowerCase().trim();
-        return cName === userContractor || cName.includes(userContractor) || userContractor.includes(cName) || cCode === userContractor;
+        const cName = String(c.name || '').toLowerCase().trim();
+        const cCode = String(c.code || '').toLowerCase().trim();
+        return cName === userContractor || (cName && userContractor && (cName.includes(userContractor) || userContractor.includes(cName))) || cCode === userContractor;
       })
     : contractors;
 
@@ -88,14 +88,19 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
   const visibleCoverageAreas = isRoleRestricted
     ? coverageAreas.filter(a => {
         if (!a) return false;
-        const aName = (a.name || '').toLowerCase().trim();
-        const matchesUserArea = userArea && (aName === userArea || aName.includes(userArea) || userArea.includes(aName));
+        const aName = String(a.name || '').toLowerCase().trim();
+        const matchesUserArea = Boolean(userArea && (aName === userArea || aName.includes(userArea) || userArea.includes(aName)));
         const matchedContractorObj = contractors.find(c => {
           if (!c) return false;
-          const cName = (c.name || '').toLowerCase().trim();
-          return cName === userContractor || cName.includes(userContractor) || userContractor.includes(cName);
+          const cName = String(c.name || '').toLowerCase().trim();
+          return cName === userContractor || (cName && userContractor && (cName.includes(userContractor) || userContractor.includes(cName)));
         });
-        const inContractorCoverage = matchedContractorObj?.coverageAreas?.some(ca => (ca || '').toLowerCase().trim() === aName);
+        const cAreas = Array.isArray(matchedContractorObj?.coverageAreas)
+          ? matchedContractorObj!.coverageAreas
+          : Array.isArray((matchedContractorObj as any)?.coverage_areas)
+          ? (matchedContractorObj as any).coverage_areas
+          : [];
+        const inContractorCoverage = cAreas.some(ca => String(ca || '').toLowerCase().trim() === aName);
         return matchesUserArea || inContractorCoverage;
       })
     : coverageAreas;
@@ -122,15 +127,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
 
   const totalInstallers = isRoleRestricted
     ? users.filter(u => u.role === 'installer' && u.active && (
-        (userContractor && u.contractor && (u.contractor.toLowerCase().includes(userContractor) || userContractor.includes(u.contractor.toLowerCase()))) ||
-        (userArea && u.area && (u.area.toLowerCase().includes(userArea) || userArea.includes(u.area.toLowerCase())))
+        (userContractor && u.contractor && (String(u.contractor).toLowerCase().includes(userContractor) || userContractor.includes(String(u.contractor).toLowerCase()))) ||
+        (userArea && u.area && (String(u.area).toLowerCase().includes(userArea) || userArea.includes(String(u.area).toLowerCase())))
       )).length
     : users.filter(u => u.role === 'installer' && u.active).length;
 
   const totalLeaders = isRoleRestricted
     ? users.filter(u => u.role === 'leader' && u.active && (
-        (userContractor && u.contractor && (u.contractor.toLowerCase().includes(userContractor) || userContractor.includes(u.contractor.toLowerCase()))) ||
-        (userArea && u.area && (u.area.toLowerCase().includes(userArea) || userArea.includes(u.area.toLowerCase())))
+        (userContractor && u.contractor && (String(u.contractor).toLowerCase().includes(userContractor) || userContractor.includes(String(u.contractor).toLowerCase()))) ||
+        (userArea && u.area && (String(u.area).toLowerCase().includes(userArea) || userArea.includes(String(u.area).toLowerCase())))
       )).length
     : users.filter(u => u.role === 'leader' && u.active).length;
 
@@ -157,12 +162,18 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
   });
 
   const filteredContractorRows = contractorRows.filter(row => {
-    const searchLow = (contractorSearch || '').toLowerCase();
-    const matchesSearch = (row.contractor?.name || '').toLowerCase().includes(searchLow) ||
-      (row.contractor?.code || '').toLowerCase().includes(searchLow) ||
-      (row.contractor?.leaderName && row.contractor.leaderName.toLowerCase().includes(searchLow));
+    const searchLow = String(contractorSearch || '').toLowerCase();
+    const cName = String(row.contractor?.name || '').toLowerCase();
+    const cCode = String(row.contractor?.code || '').toLowerCase();
+    const leader = String(row.contractor?.leaderName || '').toLowerCase();
+    const matchesSearch = !searchLow || cName.includes(searchLow) || cCode.includes(searchLow) || leader.includes(searchLow);
 
-    const matchesArea = selectedAreaFilter === 'ALL' || (row.contractor?.coverageAreas || []).includes(selectedAreaFilter);
+    const cAreas = Array.isArray(row.contractor?.coverageAreas)
+      ? row.contractor.coverageAreas
+      : Array.isArray((row.contractor as any)?.coverage_areas)
+      ? (row.contractor as any).coverage_areas
+      : [];
+    const matchesArea = selectedAreaFilter === 'ALL' || cAreas.includes(selectedAreaFilter);
     return matchesSearch && matchesArea;
   });
 
@@ -174,7 +185,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
     const pending = aTickets.filter(t => !t.installerName || ['Pending Technical', 'Failed / Cancelled'].includes(t.statusWOInstaller)).length;
 
     // Associated contractors
-    const assocContractors = visibleContractors.filter(c => c.coverageAreas.includes(area.name));
+    const assocContractors = visibleContractors.filter(c => {
+      const cAreas = Array.isArray(c?.coverageAreas)
+        ? c.coverageAreas
+        : Array.isArray((c as any)?.coverage_areas)
+        ? (c as any).coverage_areas
+        : [];
+      return cAreas.includes(area.name);
+    });
 
     return {
       area,
@@ -664,7 +682,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
                     </td>
                     <td className="py-2.5 px-3">
                       <div className="flex flex-wrap gap-1">
-                        {row.contractor.coverageAreas.map(area => (
+                        {(Array.isArray(row.contractor?.coverageAreas)
+                          ? row.contractor.coverageAreas
+                          : Array.isArray((row.contractor as any)?.coverage_areas)
+                          ? (row.contractor as any).coverage_areas
+                          : []
+                        ).map(area => (
                           <span key={area} className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-700 dark:text-slate-300">
                             {area}
                           </span>

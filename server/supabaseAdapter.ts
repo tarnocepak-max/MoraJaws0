@@ -760,11 +760,7 @@ export async function findUserInSupabaseDetailed(identifier: string): Promise<Su
 
     if (errFb) {
       const classified = classifySupabaseError(errFb);
-      if (classified.isSchemaError) {
-        console.warn('[Supabase DAL] findUser schema notice (users table not initialized):', classified.message);
-      } else {
-        console.error('[Supabase DAL] findUser query error (firebase_uid):', classified.message);
-      }
+      console.error('[Supabase DAL] findUser query error (firebase_uid):', classified.message);
       return { success: false, data: null, error: classified };
     }
     if (byFbUid) {
@@ -781,11 +777,7 @@ export async function findUserInSupabaseDetailed(identifier: string): Promise<Su
 
     if (errId) {
       const classified = classifySupabaseError(errId);
-      if (classified.isSchemaError) {
-        console.warn('[Supabase DAL] findUser schema notice (users table not initialized):', classified.message);
-      } else {
-        console.error('[Supabase DAL] findUser query error (id):', classified.message);
-      }
+      console.error('[Supabase DAL] findUser query error (id):', classified.message);
       return { success: false, data: null, error: classified };
     }
     if (byId) {
@@ -827,11 +819,7 @@ export async function findUserInSupabaseDetailed(identifier: string): Promise<Su
 
       if (errEmail) {
         const classified = classifySupabaseError(errEmail);
-        if (classified.isSchemaError) {
-          console.warn('[Supabase DAL] findUser schema notice (users table not initialized):', classified.message);
-        } else {
-          console.error('[Supabase DAL] findUser query error (email):', classified.message);
-        }
+        console.error('[Supabase DAL] findUser query error (email):', classified.message);
         return { success: false, data: null, error: classified };
       }
       if (byEmail) {
@@ -847,11 +835,7 @@ export async function findUserInSupabaseDetailed(identifier: string): Promise<Su
 
       if (errAlt) {
         const classified = classifySupabaseError(errAlt);
-        if (classified.isSchemaError) {
-          console.warn('[Supabase DAL] findUser schema notice (users table not initialized):', classified.message);
-        } else {
-          console.error('[Supabase DAL] findUser query error (alt_email):', classified.message);
-        }
+        console.error('[Supabase DAL] findUser query error (alt_email):', classified.message);
         return { success: false, data: null, error: classified };
       }
       if (Array.isArray(byAltList) && byAltList.length > 0) {
@@ -874,11 +858,7 @@ export async function findUserInSupabaseDetailed(identifier: string): Promise<Su
 
     if (errUser) {
       const classified = classifySupabaseError(errUser);
-      if (classified.isSchemaError) {
-        console.warn('[Supabase DAL] findUser schema notice (users table not initialized):', classified.message);
-      } else {
-        console.error('[Supabase DAL] findUser query error (username):', classified.message);
-      }
+      console.error('[Supabase DAL] findUser query error (username):', classified.message);
       return { success: false, data: null, error: classified };
     }
     if (byUsername) {
@@ -912,11 +892,7 @@ export async function getUsersFromSupabase(includeDeleted = false): Promise<Supa
     const { data, error } = await query;
     if (error) {
       const classified = classifySupabaseError(error);
-      if (classified.isSchemaError) {
-        console.warn('[Supabase DAL] getUsers schema notice (users table not initialized):', classified.message);
-      } else {
-        console.error('[Supabase DAL] getUsers error:', classified.message);
-      }
+      console.error('[Supabase DAL] getUsers error:', classified.message);
       return { success: false, error: classified };
     }
 
@@ -1204,11 +1180,7 @@ export async function getWorkOrdersFromSupabase(options: GetWorkOrdersOptions = 
     const { data, error } = await query;
     if (error) {
       const classified = classifySupabaseError(error);
-      if (classified.isSchemaError) {
-        console.warn('[Supabase DAL] getWorkOrders schema notice (work_orders table not initialized):', classified.message);
-      } else {
-        console.error('[Supabase DAL] getWorkOrders error:', classified.message);
-      }
+      console.error('[Supabase DAL] getWorkOrders error:', classified.message);
       return { success: false, error: classified };
     }
 
@@ -2287,6 +2259,29 @@ export async function bulkImportWorkOrdersToSupabase(
 // DATA ACCESS LAYER: CONTRACTORS
 // ------------------------------------------------------------------------------
 
+export function mapSupabaseContractorToModel(row: any): any {
+  if (!row) return null;
+  const rawAreas = row.coverageAreas ?? row.coverage_areas ?? [];
+  const coverageAreas = Array.isArray(rawAreas) ? rawAreas : [];
+  return {
+    ...row,
+    id: String(row.id ?? ''),
+    name: String(row.name ?? ''),
+    code: String(row.code ?? ''),
+    coverageAreas,
+    coverage_areas: coverageAreas,
+    leaderId: row.leaderId ?? row.leader_id ?? null,
+    leaderName: row.leaderName ?? row.leader_name ?? '',
+    leaderPhone: row.leaderPhone ?? row.leader_phone ?? '',
+    leaderEmail: row.leaderEmail ?? row.leader_email ?? '',
+    active: row.active !== false,
+    isArchived: Boolean(row.isArchived ?? row.is_archived),
+    archivedAt: row.archivedAt ?? row.archived_at ?? null,
+    createdAt: row.createdAt ?? row.created_at ?? new Date().toISOString(),
+    updatedAt: row.updatedAt ?? row.updated_at ?? new Date().toISOString()
+  };
+}
+
 export async function getContractorsFromSupabase(includeArchived = false): Promise<SupabaseOpResult<any[]>> {
   const client = getSupabaseBackendClient();
   if (!client) {
@@ -2301,7 +2296,7 @@ export async function getContractorsFromSupabase(includeArchived = false): Promi
     if (error) {
       return { success: false, error: classifySupabaseError(error) };
     }
-    return { success: true, data: data || [] };
+    return { success: true, data: (data || []).map(mapSupabaseContractorToModel) };
   } catch (err: any) {
     return { success: false, error: classifySupabaseError(err) };
   }
@@ -2317,7 +2312,7 @@ export async function getContractorByIdFromSupabase(id: string): Promise<Supabas
     if (error) {
       return { success: false, error: classifySupabaseError(error) };
     }
-    return { success: true, data: data || null };
+    return { success: true, data: data ? mapSupabaseContractorToModel(data) : null };
   } catch (err: any) {
     return { success: false, error: classifySupabaseError(err) };
   }
@@ -2349,7 +2344,7 @@ export async function insertContractorToSupabase(contractor: any): Promise<Supab
     if (error) {
       return { success: false, error: classifySupabaseError(error) };
     }
-    return { success: true, data };
+    return { success: true, data: data ? mapSupabaseContractorToModel(data) : null };
   } catch (err: any) {
     return { success: false, error: classifySupabaseError(err) };
   }
@@ -2377,7 +2372,7 @@ export async function updateContractorInSupabase(id: string, updates: any): Prom
     if (error) {
       return { success: false, error: classifySupabaseError(error) };
     }
-    return { success: true, data };
+    return { success: true, data: data ? mapSupabaseContractorToModel(data) : null };
   } catch (err: any) {
     return { success: false, error: classifySupabaseError(err) };
   }
@@ -2804,22 +2799,12 @@ export async function insertAuditLogToSupabase(log: {
 
     const { error } = await client.from('audit_logs').insert([entry]);
     if (error) {
-      const classified = classifySupabaseError(error);
-      if (classified.isSchemaError) {
-        console.warn('[Supabase DAL] insertAuditLog schema notice (audit_logs table not initialized):', error.message);
-      } else {
-        console.error('[Supabase DAL] insertAuditLog error:', error.message);
-      }
+      console.error('[Supabase DAL] insertAuditLog error:', error.message);
       return false;
     }
     return true;
   } catch (err: any) {
-    const classified = classifySupabaseError(err);
-    if (classified.isSchemaError) {
-      console.warn('[Supabase DAL] insertAuditLog schema notice (exception):', err?.message || err);
-    } else {
-      console.error('[Supabase DAL] insertAuditLog exception:', err?.message || err);
-    }
+    console.error('[Supabase DAL] insertAuditLog exception:', err?.message || err);
     return false;
   }
 }

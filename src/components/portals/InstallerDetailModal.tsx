@@ -63,7 +63,7 @@ export const InstallerDetailModal: React.FC<InstallerDetailModalProps> = ({
   );
 
   const pendingWOs = installerTickets.filter(
-    t => t.statusWOInstaller === 'Pending Technical' || t.statusWhatsApp === 'reschedule_requested' || t.remarksWOInstaller?.toLowerCase().includes('reschedule')
+    t => t.statusWOInstaller === 'Pending Technical' || t.statusWhatsApp === 'reschedule_requested' || String(t.remarksWOInstaller ?? '').toLowerCase().includes('reschedule')
   );
 
   const problemWOs = installerTickets.filter(

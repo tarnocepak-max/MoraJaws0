@@ -121,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       const raw = t.appointmentDate;
       if (!raw) return false;
       const clean = String(raw).slice(0, 10);
-      return clean === todayWIB || (raw.includes('T') && raw.split('T')[0] === todayWIB);
+      return clean === todayWIB || (String(raw).includes('T') && String(raw).split('T')[0] === todayWIB);
     });
   }, [tickets, todayWIB]);
 
@@ -162,7 +162,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       .filter(item => {
         if (item.visible === false) return false;
         if (item.id === 'templates' && userRole !== 'super_admin' && userRole !== 'dispatch') return false;
-        if (item.roles && !item.roles.includes(userRole)) return false;
+        if (Array.isArray(item.roles) && item.roles.length > 0 && !item.roles.includes(userRole)) return false;
         return true;
       })
       .sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -185,7 +185,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         if (cat.isActive === false) return false;
         // Role DISPATCH dan LEADER tidak boleh melihat kategori installer (Hanya super_admin & installer)
         if ((userRole === 'dispatch' || userRole === 'leader') && 
-            (cat.id === 'cat_installer' || cat.id === 'installer' || (cat.name && cat.name.toLowerCase().includes('installer')))) {
+            (cat.id === 'cat_installer' || cat.id === 'installer' || (cat.name && String(cat.name).toLowerCase().includes('installer')))) {
           return false;
         }
         return true;
@@ -208,7 +208,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             if (sub.id === 'templates' && userRole !== 'super_admin' && userRole !== 'dispatch') {
               return false;
             }
-            if (sub.roles && !sub.roles.includes(userRole)) return false;
+            if (Array.isArray(sub.roles) && sub.roles.length > 0 && !sub.roles.includes(userRole)) return false;
             return true;
           })
           .sort((a, b) => (a.order || 0) - (b.order || 0));

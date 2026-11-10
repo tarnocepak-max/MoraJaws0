@@ -167,7 +167,8 @@ export const DatabaseManagementView: React.FC = () => {
         });
       }
       if (t.installerName) {
-        const found = users.some(u => u.role === 'installer' && u.name.toLowerCase().includes(t.installerName!.toLowerCase().trim()));
+        const instTarget = String(t.installerName).toLowerCase().trim();
+        const found = users.some(u => u.role === 'installer' && String(u.name || '').toLowerCase().includes(instTarget));
         if (!found) {
           issues.push({
             id: `iss-inst-${t.id}`,
@@ -189,13 +190,13 @@ export const DatabaseManagementView: React.FC = () => {
     return tickets.filter(t => {
       if (searchWo.trim()) {
         const query = searchWo.toLowerCase().trim();
-        const matchWo = (t.woNumber || '').toLowerCase().includes(query);
-        const matchCust = (t.customerName || '').toLowerCase().includes(query);
-        const matchCid = (t.idCustomer || t.customerId || '').toLowerCase().includes(query);
+        const matchWo = String(t.woNumber || '').toLowerCase().includes(query);
+        const matchCust = String(t.customerName || '').toLowerCase().includes(query);
+        const matchCid = String(t.idCustomer || t.customerId || '').toLowerCase().includes(query);
         if (!matchWo && !matchCust && !matchCid) return false;
       }
       if (selectedContractor !== 'all') {
-        const cName = (t.contactorName || t.contractorName || '').toLowerCase();
+        const cName = String(t.contactorName || t.contractorName || '').toLowerCase();
         if (!cName.includes(selectedContractor.toLowerCase())) return false;
       }
       if (selectedStatus !== 'all') {

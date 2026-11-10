@@ -21,6 +21,10 @@ export interface User {
   permissions?: string[];
   mustChangePassword?: boolean;
   lastLoginAt?: string;
+  lastLoginIp?: string;
+  passwordChangedAt?: string;
+  accountStatus?: 'active' | 'inactive' | 'locked';
+  lockedUntil?: string;
   loginCount?: number;
   isArchived?: boolean;
   isDeleted?: boolean;
@@ -247,8 +251,6 @@ export interface Ticket {
   address?: string;
   city?: string;
   postalCode?: string;
-  latitude?: number;
-  longitude?: number;
   clusterName?: string;
   area: string;
 

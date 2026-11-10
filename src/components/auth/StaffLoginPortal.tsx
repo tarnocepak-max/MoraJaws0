@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import { useAnimation } from '../../context/AnimationContext';
 import { MoraJawsLogo } from '../common/MoraJawsLogo';
 import { UserRole } from '../../types/index.ts';
-import { PasswordRecoveryModal } from './PasswordRecoveryModal';
 import {
   Lock,
   User,
@@ -32,27 +31,6 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [rememberSession, setRememberSession] = useState(true);
-
-  // Password Recovery Modal State
-  const [isRecoveryOpen, setIsRecoveryOpen] = useState(false);
-  const [recoveryMode, setRecoveryMode] = useState<'request' | 'reset'>('request');
-
-  // Automatic detection of Supabase Recovery Redirect (hash #access_token or query ?code= / ?token_hash=)
-  useEffect(() => {
-    const hash = window.location.hash ? window.location.hash.substring(1) : '';
-    const searchParams = new URLSearchParams(window.location.search);
-    const hashParams = new URLSearchParams(hash);
-
-    const hasAccessToken = Boolean(hashParams.get('access_token'));
-    const isRecoveryType = hashParams.get('type') === 'recovery' || searchParams.get('type') === 'recovery';
-    const hasCode = Boolean(searchParams.get('code'));
-    const hasTokenHash = Boolean(searchParams.get('token_hash'));
-
-    if ((hasAccessToken && isRecoveryType) || hasCode || (hasTokenHash && isRecoveryType)) {
-      setRecoveryMode('reset');
-      setIsRecoveryOpen(true);
-    }
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,95 +61,35 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
         const errorMsg = res.error || 'Kredensial login tidak valid. Pastikan nama pengguna dan kata sandi benar.';
         setError(errorMsg);
 
-        // Precise error categorization: Do not map non-credential errors to MJ-AUTH-001
-        if (res.errorCode === 'NEEDS_MAPPING') {
+        if (res.errorCode === 'ACCOUNT_NOT_FOUND' || res.errorCode === 'auth/user-not-found') {
           showGlobalError({
-            errorCode: 'MJ-AUTH-004',
+            errorCode: 'MJ-AUTH-002',
             module: 'Authentication',
-            operation: 'Staff Auth UID Mapping',
-            description: 'Profil staf belum memiliki pemetaan Supabase Auth UID yang disetujui.',
-            message: 'Kata sandi diverifikasi, tetapi akun Anda membutuhkan persetujuan pemetaan Auth UID oleh Super Admin.',
-            technicalDetails: errorMsg,
-            severity: 'HIGH',
-            status: 'OPEN'
-          });
-        } else if (res.errorCode === 'AUTH_UID_MISMATCH') {
-          showGlobalError({
-            errorCode: 'MJ-AUTH-004',
-            module: 'Authentication',
-            operation: 'Staff Identity Integrity',
-            description: 'Auth UID tidak cocok dengan profil staf terdaftar.',
-            message: 'Akses ditolak demi keamanan: identitas token tidak cocok dengan data staf.',
-            technicalDetails: errorMsg,
-            severity: 'CRITICAL',
-            status: 'OPEN'
-          });
-        } else if (res.errorCode === 'STAFF_AUTH_EMAIL_MISSING') {
-          showGlobalError({
-            errorCode: 'MJ-AUTH-004',
-            module: 'Authentication',
-            operation: 'Staff Email Configuration',
-            description: 'Email autentikasi staf belum terdaftar.',
-            message: 'Profil staf ditemukan, namun belum memiliki email untuk Supabase Auth. Hubungi Super Admin.',
+            operation: 'User Lookup',
+            description: 'Akun tidak terdaftar pada direktori internal MoraJaws.',
+            message: 'Hubungi Superadmin untuk mendapatkan akses MoraJaws.',
             technicalDetails: errorMsg,
             severity: 'MEDIUM',
             status: 'OPEN'
           });
-        } else if (res.errorCode === 'AUTH_EMAIL_NOT_CONFIRMED') {
+        } else if (res.errorCode === 'ACCOUNT_LOCKED' || res.errorCode === 'auth/too-many-requests') {
           showGlobalError({
-            errorCode: 'MJ-AUTH-004',
+            errorCode: 'MJ-AUTH-LOCK',
             module: 'Authentication',
-            operation: 'Email Confirmation',
-            description: 'Email akun belum dikonfirmasi.',
-            message: 'Email akun Supabase belum dikonfirmasi. Periksa kotak masuk email atau hubungi Super Admin.',
-            technicalDetails: errorMsg,
-            severity: 'MEDIUM',
-            status: 'OPEN'
-          });
-        } else if (
-          res.errorCode === 'SUPABASE_NOT_CONFIGURED' ||
-          res.errorCode === 'CONFIGURATION_MISMATCH' ||
-          res.errorCode === 'ENVIRONMENT_INVALID'
-        ) {
-          showGlobalError({
-            errorCode: 'MJ-SYS-001',
-            module: 'Authentication',
-            operation: 'Supabase Configuration',
-            description: 'Konfigurasi Supabase backend belum lengkap atau terjadi ketidakcocokan project.',
-            message: 'Konfigurasi Supabase backend belum lengkap atau tidak cocok pada environment server.',
+            operation: 'Brute Force Protection',
+            description: 'Akun dikunci sementara karena terlalu banyak percobaan gagal.',
+            message: 'Terlalu banyak percobaan login gagal. Akun dikunci sementara demi keamanan.',
             technicalDetails: errorMsg,
             severity: 'HIGH',
             status: 'OPEN'
           });
-        } else if (res.errorCode === 'SCHEMA_NOT_INITIALIZED') {
+        } else if (res.errorCode === 'ACCOUNT_DISABLED' || res.errorCode === 'auth/user-disabled') {
           showGlobalError({
-            errorCode: 'MJ-SYS-001',
-            module: 'Database Schema',
-            operation: 'Supabase Schema Initialization',
-            description: 'Skema tabel database Supabase belum diinisialisasi.',
-            message: 'Tabel database MoraJaws belum diinisialisasi pada database Supabase. Terapkan migrasi migrations/001_core_morajaws_schema.sql.',
-            technicalDetails: errorMsg,
-            severity: 'CRITICAL',
-            status: 'OPEN'
-          });
-        } else if (res.errorCode === 'AUTH_PROVIDER_UNAVAILABLE' || res.errorCode === 'DATABASE_UNAVAILABLE') {
-          showGlobalError({
-            errorCode: 'MJ-AUTH-NET-001',
+            errorCode: 'MJ-AUTH-DISABLED',
             module: 'Authentication',
-            operation: 'Supabase Service Reachability',
-            description: 'Layanan Supabase backend/Auth tidak dapat dijangkau.',
-            message: 'Koneksi ke layanan Supabase gagal atau database tidak dapat diakses.',
-            technicalDetails: errorMsg,
-            severity: 'HIGH',
-            status: 'OPEN'
-          });
-        } else if (res.errorCode === 'SESSION_STORE_ERROR') {
-          showGlobalError({
-            errorCode: 'MJ-SYS-001',
-            module: 'Authentication',
-            operation: 'Session Creation',
-            description: 'Gagal membuat sesi penyimpanan server.',
-            message: 'Gagal membuat sesi server setelah verifikasi kredensial. Coba kembali.',
+            operation: 'Account Status Check',
+            description: 'Akun dinonaktifkan.',
+            message: 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Superadmin.',
             technicalDetails: errorMsg,
             severity: 'HIGH',
             status: 'OPEN'
@@ -192,6 +110,17 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
             severity: 'MEDIUM',
             status: 'OPEN'
           });
+        } else if (res.errorCode === 'DATABASE_UNAVAILABLE') {
+          showGlobalError({
+            errorCode: 'MJ-DB-001',
+            module: 'Authentication',
+            operation: 'Database Connectivity',
+            description: 'Database Supabase PostgreSQL tidak dapat dijangkau.',
+            message: 'Database PostgreSQL tidak dapat diakses saat login.',
+            technicalDetails: errorMsg,
+            severity: 'HIGH',
+            status: 'OPEN'
+          });
         } else if (res.errorCode === 'auth/network-request-failed' || res.errorCode === 'NETWORK_OFFLINE') {
           showGlobalError({
             errorCode: 'MJ-NET-001',
@@ -203,24 +132,18 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
             severity: 'HIGH',
             status: 'OPEN'
           });
-        } else if (res.errorCode === 'auth/user-disabled' || res.errorCode === 'ACCOUNT_DISABLED' || res.errorCode === 'ACCOUNT_DELETED' || errorMsg.includes('dinonaktifkan')) {
+        } else if (res.errorCode === 'auth/user-disabled' || errorMsg.includes('dinonaktifkan')) {
           showGlobalError({
             errorCode: 'MJ-AUTH-003',
             module: 'Authentication',
             operation: 'Staff Account Status',
-            description: 'Akun staf dinonaktifkan atau dihapus.',
+            description: 'Akun staf dinonaktifkan.',
             message: 'Akun telah dinonaktifkan oleh Administrator.',
             technicalDetails: errorMsg,
             severity: 'HIGH',
             status: 'OPEN'
           });
-        } else if (
-          res.errorCode === 'auth/user-not-found' ||
-          res.errorCode === 'ACCOUNT_NOT_FOUND' ||
-          res.errorCode === 'STAFF_NOT_FOUND' ||
-          res.errorCode === 'PROFILE_NOT_FOUND' ||
-          errorMsg.includes('tidak terdaftar')
-        ) {
+        } else if (res.errorCode === 'auth/user-not-found' || errorMsg.includes('tidak ditemukan') || errorMsg.includes('tidak terdaftar')) {
           showGlobalError({
             errorCode: 'MJ-AUTH-002',
             module: 'Authentication',
@@ -317,7 +240,7 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
             <ShieldCheck className="w-5 h-5 text-[#D8B4FE] shrink-0" />
             <div className="leading-snug">
               <span className="font-bold text-white block">Portal Autentikasi Staf MoraJaws</span>
-              <span className="text-[#D8B4FE]/80 text-[11px]">Terhubung langsung ke Supabase Auth & Verifikasi RBAC</span>
+              <span className="text-[#D8B4FE]/80 text-[11px]">MoraJaws Custom Authentication &amp; Supabase PostgreSQL</span>
             </div>
           </div>
 
@@ -374,7 +297,7 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
               </div>
             </div>
 
-            {/* Remember session checkbox and Forgot Password trigger */}
+            {/* Remember session checkbox */}
             <div className="flex items-center justify-between text-xs pt-1">
               <label className="flex items-center gap-2 cursor-pointer select-none text-[#D8B4FE]/80">
                 <input
@@ -385,17 +308,6 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
                 />
                 <span>Simpan sesi aktif terproteksi</span>
               </label>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setRecoveryMode('request');
-                  setIsRecoveryOpen(true);
-                }}
-                className="text-xs text-[#D8B4FE] hover:text-white hover:underline transition-colors cursor-pointer font-medium"
-              >
-                Lupa kata sandi?
-              </button>
             </div>
 
             {/* Submit button */}
@@ -427,17 +339,6 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
           </div>
         </div>
       </div>
-
-      {/* Supabase Password Recovery Modal */}
-      <PasswordRecoveryModal
-        isOpen={isRecoveryOpen}
-        onClose={() => setIsRecoveryOpen(false)}
-        initialMode={recoveryMode}
-        onSuccessLoginRedirect={() => {
-          setIsRecoveryOpen(false);
-          toast.success('Silakan masuk dengan kata sandi baru Anda.', 'KATA SANDI DIPERBARUI');
-        }}
-      />
     </div>
   );
 };

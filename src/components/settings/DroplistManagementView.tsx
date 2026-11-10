@@ -273,12 +273,12 @@ export const DroplistManagementView: React.FC = () => {
       .map(status => {
         if (!q) return status;
 
-        const statusMatch = status.name.toLowerCase().includes(q) || (status.code && status.code.toLowerCase().includes(q));
+        const statusMatch = String(status.name || '').toLowerCase().includes(q) || (status.code && String(status.code).toLowerCase().includes(q));
         const matchingReasons = (status.reasons || [])
           .map(reason => {
-            const reasonMatch = reason.name.toLowerCase().includes(q) || (reason.code && reason.code.toLowerCase().includes(q));
+            const reasonMatch = String(reason.name || '').toLowerCase().includes(q) || (reason.code && String(reason.code).toLowerCase().includes(q));
             const matchingRemarks = (reason.remarks || []).filter(rem =>
-              (rem.text || rem.name).toLowerCase().includes(q)
+              String(rem.text || rem.name || '').toLowerCase().includes(q)
             );
             if (reasonMatch || matchingRemarks.length > 0) {
               return {

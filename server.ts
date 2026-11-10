@@ -1,5 +1,6 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
+import cookieParser from 'cookie-parser';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
@@ -10,22 +11,27 @@ export type { Ticket };
 
 import { checkSupabaseConnection, getLastSupabaseHealthStatus, getSupabaseBackendClient } from './server/supabaseClient.ts';
 import {
-  getAppEnvironment,
-  getEnvironmentConfig,
-  getSessionCookieName,
-  validateEnvironmentStartup
-} from './server/environmentConfig.ts';
-import {
   signInWithSupabaseAuth,
   verifySupabaseAuthToken,
   refreshSupabaseAuthSession,
+  signOutSupabaseAuth,
   resetSupabaseAuthPassword,
-  verifySupabaseRecoveryToken,
-  updateSupabaseUserPassword,
   approveAuthUidMapping
 } from './server/supabaseAuthAdapter.ts';
+import {
+  loginWithCustomAuth,
+  verifyAccessToken,
+  rotateRefreshToken,
+  revokeSingleSession,
+  revokeAllUserSessions,
+  hashPasswordWithBcrypt,
+  verifyUserPasswordEx,
+  validatePasswordStrength,
+  LOCAL_AUTH_SESSIONS,
+  LOCAL_REFRESH_TOKENS,
+  LOCAL_LOGIN_ATTEMPTS
+} from './server/customAuthService.ts';
 import { checkFirebaseAdminHealth, verifyFirebaseIdToken } from './server/firebaseAdmin.ts';
-import { sessionStore, SERVER_SESSIONS_BUFFER as SERVER_SESSIONS, type ISessionStore } from './server/sessionStore.ts';
 import { EventEmitter } from 'events';
 import {
   findUserInSupabase,
@@ -304,22 +310,14 @@ export const PROTECTED_PRODUCTION_WO_IDS = new Set<string>([
 ]);
 
 export function isLocalJsonModeAllowed(): boolean {
-  if (process.env.NODE_ENV === 'production' || getAppEnvironment() === 'production') return false;
+  if (process.env.NODE_ENV === 'production') return false;
   const hasSupabaseUrl = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_URL.trim());
   const hasServiceKey = Boolean(
     (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY.trim()) ||
     (process.env.SUPABASE_SECRET_KEY && process.env.SUPABASE_SECRET_KEY.trim())
   );
-  if (hasSupabaseUrl && hasServiceKey) {
-    const health = getLastSupabaseHealthStatus();
-    // In development mode, if Supabase is connected but tables are not yet initialized (PGRST205 / schema_not_initialized),
-    // allow local development fixture fallback so developers and UI preview can function while migrations are pending.
-    if (health.status === 'schema_not_initialized') {
-      return true;
-    }
-    return false;
-  }
-  return process.env.ALLOW_LOCAL_JSON_MODE === 'true';
+  if (hasSupabaseUrl && hasServiceKey) return false;
+  return true;
 }
 
 export function isSupabaseMode(): boolean {
@@ -367,7 +365,6 @@ export interface ServerUser {
 export interface ServerSession {
   sessionId: string;
   token: string;
-  refreshToken?: string;
   userId: string;
   username: string;
   name: string;
@@ -430,12 +427,12 @@ const INITIAL_SEED_USERS: ServerUser[] = [
   {
     id: 'u-ray',
     name: 'Ray (Super Admin)',
-    username: 'ray',
-    email: 'rayjs666@gmail.com',
-    altEmail: 'rayhanafirzanx@gmail.com, superadmin@morajaws.net, tarnocepak@gmail.com',
+    username: 'rays',
+    email: 'rayhanafirzanx@gmail.com',
+    altEmail: 'rayjs666@gmail.com, superadmin@morajaws.net, tarnocepak@gmail.com',
     role: 'super_admin',
     active: true,
-    passwordHash: DEFAULT_HASH,
+    passwordHash: 'pbkdf2:sha256:310000:f53df92fa13b39f33eee3aaf263b0382:ae3de0d03c3ee7377cce06f04cd5fddab5bc0b7101c4b1b335b7758d9e2e2dc3',
     mustChangePassword: true,
     createdAt: '2026-01-01T00:00:00Z'
   },
@@ -913,10 +910,11 @@ function loadDatabaseFromDisk() {
           storageMetadata: Array.isArray(parsed.storageMetadata) ? parsed.storageMetadata : []
         };
         if (Array.isArray(parsed.sessions)) {
-          sessionStore.loadSessions?.(parsed.sessions);
+          SERVER_SESSIONS.length = 0;
+          SERVER_SESSIONS.push(...parsed.sessions);
         }
         // Ensure Ray Super Admin is present in user directory
-        if (!db.users.some(u => u.username.toLowerCase() === 'ray' || u.email.toLowerCase() === 'rayjs666@gmail.com')) {
+        if (!db.users.some(u => u.username.toLowerCase() === 'rays' || u.email.toLowerCase() === 'rayhanafirzanx@gmail.com')) {
           db.users.unshift(INITIAL_SEED_USERS[0]);
           saveDatabaseToDisk();
         }
@@ -932,7 +930,7 @@ function loadDatabaseFromDisk() {
             u.mustChangePassword = true;
           }
         });
-        console.log(`[Database] Loaded ${db.tickets.length} tickets, ${db.users.length} users, ${db.contractors.length} contractors, ${sessionStore.getAllSessions().length} sessions from persistent disk storage.`);
+        console.log(`[Database] Loaded ${db.tickets.length} tickets, ${db.users.length} users, ${db.contractors.length} contractors, ${SERVER_SESSIONS.length} sessions from persistent disk storage.`);
         return;
       }
     }
@@ -953,7 +951,7 @@ export function saveDatabaseToDisk() {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    db.sessions = sessionStore.getAllSessions();
+    db.sessions = SERVER_SESSIONS;
     const tempFile = DB_FILE + '.tmp';
     fs.writeFileSync(tempFile, JSON.stringify(db, null, 2), 'utf-8');
     fs.renameSync(tempFile, DB_FILE);
@@ -1055,25 +1053,13 @@ export async function logServerAuditAsync(
       });
 
       if (!persisted) {
-        const supaStatus = getLastSupabaseHealthStatus().status;
-        const isSchemaUninit = supaStatus === 'schema_not_initialized';
-        if (isSchemaUninit) {
-          console.warn(`[Audit Log] Supabase audit store belum diinisialisasi (${action} [${entity}:${entityId}]), menyimpan log ke buffer server.`);
-        } else {
-          console.error(`[Audit Log] GAGAL menyimpan audit log ke Supabase untuk ${action} [${entity}:${entityId}]`);
-        }
-        db.auditLogs.unshift(localEntry);
-        if (db.auditLogs.length > 1000) db.auditLogs.pop();
-        saveDatabaseToDisk();
-
+        console.error(`[Audit Log] GAGAL menyimpan audit log ke Supabase untuk ${action} [${entity}:${entityId}]`);
         return {
-          success: isSchemaUninit,
+          success: false,
           logId,
-          status: isSchemaUninit ? 'unverified' : 'failed',
+          status: 'failed',
           level,
-          error: isSchemaUninit
-            ? 'Skema tabel audit_logs Supabase belum diinisialisasi; log disimpan di buffer server.'
-            : 'Supabase menolak penyimpanan audit log atau tabel audit_logs tidak dapat diakses.'
+          error: 'Supabase menolak penyimpanan audit log atau tabel audit_logs tidak dapat diakses.'
         };
       }
 
@@ -1146,8 +1132,8 @@ export function broadcastSupabaseChange(table: string, eventType: string, record
   backendRealtimeBus.emit('change', { table, eventType, record, timestamp: new Date().toISOString() });
 }
 
-// --- Session Store (ISessionStore singleton) ---
-export { sessionStore, SERVER_SESSIONS };
+// --- Session Store ---
+export const SERVER_SESSIONS: ServerSession[] = [];
 const LOGIN_ATTEMPTS = new Map<string, { count: number; lastAttempt: number; lockedUntil?: number }>();
 
 function getOperationalDate(): { date: string; isAuto: boolean; timezone: string } {
@@ -1317,126 +1303,13 @@ export function validateCsrfProtection(req: { method?: string; headers?: Record<
   return { valid: true };
 }
 
-/**
- * Extracts and decodes cookies from incoming request headers without requiring external dependencies.
- */
-export function parseRequestCookies(req: Request): Record<string, string> {
-  const list: Record<string, string> = {};
-  const rc = req.headers.cookie;
-  if (rc) {
-    rc.split(';').forEach(cookie => {
-      const parts = cookie.split('=');
-      if (parts.length >= 2) {
-        const name = parts[0].trim();
-        const val = parts.slice(1).join('=').trim();
-        list[name] = decodeURIComponent(val);
-      }
-    });
-  }
-  return list;
-}
-
-/**
- * Issues a partitioned, HttpOnly, secure cookie suitable for cross-origin iframes and standard browsers.
- */
-export function setSecureSessionCookie(
-  res: Response,
-  cookieName: string,
-  tokenValue: string,
-  maxAgeMs: number,
-  isHttps: boolean
-): void {
-  const cookieOptions: express.CookieOptions = {
-    httpOnly: true,
-    secure: isHttps,
-    sameSite: isHttps ? 'none' : 'lax',
-    path: '/',
-    maxAge: maxAgeMs
-  };
-  if (isHttps) {
-    (cookieOptions as any).partitioned = true;
-  }
-  res.cookie(cookieName, tokenValue, cookieOptions);
-}
-
-/**
- * Clears the session cookie safely across environments.
- */
-export function clearSecureSessionCookie(
-  res: Response,
-  cookieName: string,
-  isHttps: boolean
-): void {
-  const cookieOptions: express.CookieOptions = {
-    httpOnly: true,
-    secure: isHttps,
-    sameSite: isHttps ? 'none' : 'lax',
-    path: '/'
-  };
-  if (isHttps) {
-    (cookieOptions as any).partitioned = true;
-  }
-  res.clearCookie(cookieName, cookieOptions);
-}
-
-/**
- * Validates that active environment and Supabase project binding are fail-closed.
- * Rejects auth operations with HTTP 503 if environment configuration is invalid.
- */
-export function checkAuthEnvironmentValid(res: Response): boolean {
-  const validation = validateEnvironmentStartup();
-  if (!validation.valid) {
-    res.status(503).json({
-      success: false,
-      error: 'Environment konfigurasi server tidak valid atau terjadi pelanggaran isolasi antar-lingkungan.',
-      code: 'ENVIRONMENT_INVALID',
-      details: validation.errors
-    });
-    return false;
-  }
-  return true;
-}
-
-/**
- * Accurately detects whether an incoming request originates from a browser client.
- * Browser requests are NEVER sent raw tokens in JSON; instead they receive HttpOnly cookies.
- */
-export function isBrowserClientRequest(req: Request): boolean {
-  const clientHeader = (req.headers['x-morajaws-client'] as string || '').toLowerCase();
-  if (clientHeader === 'browser' || clientHeader === 'web-browser') {
-    return true;
-  }
-  if (
-    req.headers['sec-fetch-dest'] !== undefined ||
-    req.headers['sec-fetch-mode'] !== undefined ||
-    req.headers['sec-fetch-site'] !== undefined
-  ) {
-    return true;
-  }
-  const userAgent = (req.headers['user-agent'] as string || '');
-  if (/Mozilla|Chrome|Safari|Firefox|Edge|Android|iPhone|iPad/i.test(userAgent)) {
-    return true;
-  }
-  if (req.headers['x-suppress-tokens'] === 'true') {
-    return true;
-  }
-  const cookieName = getSessionCookieName();
-  const cookies = parseRequestCookies(req);
-  if (cookies[cookieName]) {
-    return true;
-  }
-  if (req.headers['origin'] || req.headers['referer']) {
-    return true;
-  }
-  return false;
-}
-
 async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  // Production Cutover Guard: Block Firebase auth indicator in production
-  if (!isLocalJsonModeAllowed() && req.headers['x-auth-provider'] === 'firebase') {
+  // Production Cutover Guard: Block Firebase / Google auth indicator
+  const authProvider = req.headers['x-auth-provider'];
+  if (authProvider === 'firebase' || authProvider === 'google') {
     return res.status(403).json({
-      error: 'Firebase Authentication dinonaktifkan pada lingkungan produksi MoraJaws. Seluruh autentikasi wajib melalui Supabase Auth.',
-      code: 'FIREBASE_AUTH_DISABLED_PRODUCTION'
+      error: 'Autentikasi pihak ketiga dinonaktifkan. MoraJaws mewajibkan Custom Authentication internal.',
+      code: 'EXTERNAL_AUTH_DISABLED'
     });
   }
 
@@ -1449,70 +1322,65 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
   const authHeader = req.headers['authorization'];
   let rawToken = (authHeader && authHeader.startsWith('Bearer ')) ? authHeader.substring(7).trim() : undefined;
 
-  // HttpOnly Session Cookie Support (Phase 15A.7.3)
-  // Evaluates environment-specific cookie (morajaws_session_staging | morajaws_session_prod | morajaws_session_dev)
-  if (!rawToken) {
-    const cookies = parseRequestCookies(req);
-    const cookieName = getSessionCookieName();
-    if (cookies[cookieName]) {
-      rawToken = cookies[cookieName];
-    }
+  // Support token from HttpOnly cookie
+  if (!rawToken && (req as any).cookies?.mora_access_token) {
+    rawToken = (req as any).cookies.mora_access_token;
   }
 
   if (rawToken) {
     const token = rawToken;
 
     // Fast-fail if this token was explicitly revoked in server sessions
-    let knownSession: ServerSession | undefined;
-    try {
-      knownSession = await sessionStore.findSession(token, { allowInactive: true });
-    } catch (storeErr: any) {
-      console.error('[Auth Middleware] Session store error:', storeErr);
-      return res.status(503).json({
-        error: 'Layanan verifikasi sesi tidak tersedia saat ini.',
-        code: 'SESSION_STORE_UNAVAILABLE'
-      });
-    }
-
+    const knownSession = SERVER_SESSIONS.find(s => s.token === token);
     if (knownSession && knownSession.status === 'revoked') {
-      if (req.path === '/api/auth/logout' || req.path === '/api/auth/supabase-logout') {
-        req.session = knownSession;
-        return next();
-      }
       return res.status(401).json({
         error: 'Sesi login telah dicabut atau Anda telah logout. Silakan login kembali.',
         code: 'SESSION_REVOKED'
       });
     }
 
-    if (knownSession) {
-      const isExpired = knownSession.status === 'expired' || new Date(knownSession.expiresAt).getTime() < now;
-      if (isExpired) {
-        knownSession.status = 'expired';
-        await sessionStore.updateSession(knownSession.sessionId, { status: 'expired' });
-        // Expired session must NOT authenticate - clear session and skip token checks
-        req.user = undefined;
-        req.session = undefined;
-        return next();
+    // 1. Primary: Custom Authentication Token Verification (backed by Supabase PostgreSQL auth_sessions)
+    try {
+      const customRes = await verifyAccessToken(token);
+      if (customRes.success && customRes.data) {
+        authSource = 'server_session';
+        found = customRes.data.user;
+        activeSession = {
+          sessionId: customRes.data.session.id,
+          token,
+          userId: found.id,
+          username: found.username,
+          name: found.name,
+          role: found.role,
+          contractor: found.contractor,
+          sessionVersion: found.sessionVersion || 1,
+          loginAt: customRes.data.session.createdAt,
+          lastActivityAt: customRes.data.session.lastActivityAt,
+          expiresAt: customRes.data.session.expiresAt,
+          status: 'active'
+        };
+      } else if (customRes.error?.code === 'SESSION_REVOKED') {
+        return res.status(401).json({
+          error: 'Sesi login telah dicabut karena perubahan akun atau logout.',
+          code: 'SESSION_REVOKED'
+        });
+      } else if (customRes.error?.code === 'TOKEN_EXPIRED') {
+        return res.status(401).json({
+          error: customRes.error.message || 'Token sesi login telah kedaluwarsa.',
+          code: 'TOKEN_EXPIRED'
+        });
       }
+    } catch (customErr) {
+      // Fallback
     }
 
-    // Production Cutover Guard: Block local session tokens in production
-    if (!isLocalJsonModeAllowed() && token.startsWith('mora_')) {
-      return res.status(401).json({
-        error: 'Sesi login lokal dinonaktifkan pada lingkungan produksi MoraJaws. Seluruh autentikasi wajib melalui Supabase Auth.',
-        code: 'LOCAL_AUTH_DISABLED_PRODUCTION'
-      });
-    }
-
-    // 1. Supabase Auth JWT Token Verification (Sole Production Authentication Mechanism)
-    if (token.startsWith('eyJ')) {
+    // 2. Fallback: JWT Token Verification if token format starts with eyJ
+    if (!found && token.startsWith('eyJ')) {
       try {
         const saRes = await verifySupabaseAuthToken(token, knownSession?.sessionVersion);
         if (saRes.success && saRes.data) {
-          authSource = 'supabase_auth';
+          authSource = 'server_session';
           found = saRes.data as ServerUser;
-          activeSession = knownSession;
         } else if (saRes.error?.code === 'SESSION_REVOKED') {
           return res.status(401).json({
             error: 'Sesi login telah dicabut karena perubahan akun atau logout.',
@@ -1520,7 +1388,7 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
           });
         } else if (saRes.error?.code === 'TOKEN_EXPIRED') {
           return res.status(401).json({
-            error: saRes.error.message || 'Token Supabase Auth telah kedaluwarsa.',
+            error: saRes.error.message || 'Token telah kedaluwarsa.',
             code: 'TOKEN_EXPIRED'
           });
         }
@@ -1529,104 +1397,69 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
       }
     }
 
-    // 1.B. Firebase Admin ID Token Verification (Strictly disabled in production per Phase 13E)
-    if (!found && isLocalJsonModeAllowed()) {
-      try {
-        const decodedFirebaseToken = await verifyFirebaseIdToken(token);
-        if (decodedFirebaseToken && decodedFirebaseToken.uid) {
-          authSource = 'firebase_token';
-          verifiedDecodedFirebaseToken = decodedFirebaseToken;
-
-          const cleanEmail = (decodedFirebaseToken.email || '').toLowerCase().trim();
-          found = db.users.find(u =>
-            !u.isDeleted && u.active && (
-              (u.firebaseUid && u.firebaseUid === decodedFirebaseToken.uid) ||
-              (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail) ||
-              (cleanEmail && u.altEmail && u.altEmail.toLowerCase() === cleanEmail)
-            )
-          );
-
-          if (found && !found.firebaseUid) {
-            found.firebaseUid = decodedFirebaseToken.uid;
-            saveDatabaseToDisk();
-          }
-        }
-      } catch (fbErr) {
-        console.warn('[Auth Middleware] Firebase token check warning (dev only):', fbErr);
-      }
-    }
-
-    // 2. Server Session Verification with strict sessionVersion checking
+    // 3. Server Session Verification with strict sessionVersion checking
     if (!found) {
-      try {
-        activeSession = await sessionStore.findSession(token);
-      } catch (storeErr: any) {
-        return res.status(503).json({
-          error: 'Layanan verifikasi sesi tidak tersedia.',
-          code: 'SESSION_STORE_UNAVAILABLE'
-        });
-      }
-
+      activeSession = SERVER_SESSIONS.find(s => s.token === token && s.status === 'active');
       if (activeSession) {
-        const lastAct = new Date(activeSession.lastActivityAt).getTime();
-        const idleLimitMs = (db.sessionConfig.idleTimeoutMinutes || 60) * 60 * 1000;
-        if (now - lastAct > idleLimitMs) {
-          await sessionStore.updateSession(activeSession.sessionId, { status: 'expired' });
+        if (new Date(activeSession.expiresAt).getTime() < now) {
+          activeSession.status = 'expired';
           activeSession = undefined;
         } else {
-          // Retrieve authoritative user state
-          let authoritativeUser: ServerUser | null = null;
-          if (isSupabaseMode()) {
-            try {
-              const sbRes = await findUserInSupabaseDetailed(activeSession.userId);
-              if (sbRes.success && sbRes.data) {
-                authoritativeUser = sbRes.data;
-              } else if (!sbRes.success && !isLocalJsonModeAllowed()) {
-                // Fail closed: Database is down or rejected query in production
-                return res.status(503).json({
-                  error: 'Database authoritative tidak tersedia saat verifikasi kredensial sesi.',
-                  code: 'DATABASE_UNAVAILABLE'
-                });
-              }
-            } catch {
-              if (!isLocalJsonModeAllowed()) {
-                return res.status(503).json({
-                  error: 'Database authoritative gagal diakses.',
-                  code: 'DATABASE_UNAVAILABLE'
-                });
+          const lastAct = new Date(activeSession.lastActivityAt).getTime();
+          const idleLimitMs = (db.sessionConfig.idleTimeoutMinutes || 60) * 60 * 1000;
+          if (now - lastAct > idleLimitMs) {
+            activeSession.status = 'expired';
+            activeSession = undefined;
+          } else {
+            // Retrieve authoritative user state
+            let authoritativeUser: ServerUser | null = null;
+            if (isSupabaseMode()) {
+              try {
+                const sbRes = await findUserInSupabaseDetailed(activeSession.userId);
+                if (sbRes.success && sbRes.data) {
+                  authoritativeUser = sbRes.data;
+                } else if (!sbRes.success && !isLocalJsonModeAllowed()) {
+                  return res.status(503).json({
+                    error: 'Database authoritative tidak tersedia saat verifikasi kredensial sesi.',
+                    code: 'DATABASE_UNAVAILABLE'
+                  });
+                }
+              } catch {
+                if (!isLocalJsonModeAllowed()) {
+                  return res.status(503).json({
+                    error: 'Database authoritative gagal diakses.',
+                    code: 'DATABASE_UNAVAILABLE'
+                  });
+                }
               }
             }
-          }
 
-          if (!authoritativeUser && isLocalJsonModeAllowed()) {
-            authoritativeUser = db.users.find(u => u.id === activeSession!.userId) || null;
-          }
+            if (!authoritativeUser && isLocalJsonModeAllowed()) {
+              authoritativeUser = db.users.find(u => u.id === activeSession!.userId) || null;
+            }
 
-          if (!authoritativeUser || authoritativeUser.isDeleted || !authoritativeUser.active) {
-            await sessionStore.revokeSession(activeSession.sessionId);
-            activeSession = undefined;
-            found = undefined;
-          } else {
-            // Authoritative sessionVersion check
-            const authoritativeVersion = authoritativeUser.sessionVersion || 1;
-            const sessionVersion = activeSession.sessionVersion || 1;
-
-            if (authoritativeVersion !== sessionVersion) {
-              // Token has been revoked due to account change or logout
-              await sessionStore.revokeSession(activeSession.sessionId);
+            if (!authoritativeUser || authoritativeUser.isDeleted || !authoritativeUser.active) {
+              activeSession.status = 'revoked';
               activeSession = undefined;
               found = undefined;
             } else {
-              const updates: Partial<ServerSession> = {
-                role: authoritativeUser.role,
-                contractor: authoritativeUser.contractor
-              };
-              if (db.sessionConfig.extendOnActivity) {
-                updates.lastActivityAt = new Date().toISOString();
+              // Authoritative sessionVersion check
+              const authoritativeVersion = authoritativeUser.sessionVersion || 1;
+              const sessionVersion = activeSession.sessionVersion || 1;
+
+              if (authoritativeVersion !== sessionVersion) {
+                activeSession.status = 'revoked';
+                activeSession = undefined;
+                found = undefined;
+              } else {
+                if (db.sessionConfig.extendOnActivity) {
+                  activeSession.lastActivityAt = new Date().toISOString();
+                }
+                authSource = 'server_session';
+                found = authoritativeUser;
+                activeSession.role = authoritativeUser.role;
+                activeSession.contractor = authoritativeUser.contractor;
               }
-              await sessionStore.updateSession(activeSession.sessionId, updates);
-              authSource = 'server_session';
-              found = authoritativeUser;
             }
           }
         }
@@ -1656,11 +1489,12 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
 
 function requireSuperAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   if (!req.user) {
-    return res.status(401).json({ error: 'Tidak terautentikasi', code: 'UNAUTHENTICATED' });
+    return res.status(401).json({ success: false, error: 'Tidak terautentikasi', code: 'UNAUTHENTICATED' });
   }
   if (req.user.role !== 'super_admin') {
     logServerAudit('Access Denied (Super Admin Required)', 'rbac', req.originalUrl, `User ${req.user.name} (${req.user.role}) ditolak mengakses resource Super Admin`, req.user);
     return res.status(403).json({
+      success: false,
       error: 'Akses Ditolak: Otoritas ini dibatasi HANYA untuk Super Admin.',
       code: 'REQUIRE_SUPER_ADMIN'
     });
@@ -1922,26 +1756,11 @@ export function getBackendTicketWODate(t: any): string | null {
   return null;
 }
 
-// ==============================================================================
-// MORAJAWS RECOVERY RATE LIMITING & SECURITY DEFENSE
-// - In-process token bucket with IP and normalized identity isolation.
-// - Multi-Instance Distributed Cache: BLOCKED (Requires Redis / Valkey infrastructure
-//   not currently provisioned in environment). In-process sliding window enforced.
-// ==============================================================================
-export const RECOVERY_ATTEMPTS = new Map<string, { count: number; lockedUntil?: number; lastAttempt: number }>();
-
-export const clearAllRecoveryRateLimitsForTesting = (): void => {
-  RECOVERY_ATTEMPTS.clear();
-};
-
 export async function createExpressApp(options?: { skipVite?: boolean }): Promise<express.Express> {
   loadDatabaseFromDisk();
 
   const app = express();
   const PORT = 3000;
-
-  // Configure trusted proxy to handle reverse proxies (Cloud Run / load balancers)
-  app.set('trust proxy', 1);
 
   // Production CORS & Security Headers
   const configuredCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
@@ -1963,14 +1782,17 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
       const isAiStudioPreview = /(?:\.run\.app|\.aistudio-preview\.app|\.google\.com|\.googleusercontent\.com)(:\d+)?$/.test(origin);
 
-      if (isLocalhost || isAiStudioPreview) {
+      if (isDev || isLocalhost || isAiStudioPreview) {
         isAllowed = true;
         allowedOriginToSet = origin;
-      } else if (configuredCorsOrigins.length > 0 && configuredCorsOrigins.includes(origin)) {
-        isAllowed = true;
-        allowedOriginToSet = origin;
+      } else if (configuredCorsOrigins.length > 0) {
+        // Strict exact match only - NO wildcards permitted
+        if (configuredCorsOrigins.includes(origin)) {
+          isAllowed = true;
+          allowedOriginToSet = origin;
+        }
       } else {
-        // Strictly reject unknown external origins across all environments
+        // Strictly reject unknown external origins in production
         isAllowed = false;
       }
     }
@@ -1990,7 +1812,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     }
 
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-id, x-username, x-user-role, x-google-access-token, Accept, X-Requested-With, Cache-Control, X-Morajaws-Client, x-session-id');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-id, x-username, x-user-role, x-google-access-token, Accept, X-Requested-With, Cache-Control');
 
     if (req.method === 'OPTIONS') {
       return res.sendStatus(204);
@@ -1998,6 +1820,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     next();
   });
 
+  app.use(cookieParser());
   app.use(express.json({ limit: '50mb' }));
   app.use(resolveUserFromHeader);
 
@@ -2149,7 +1972,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
   // Current Auth Session Endpoint
   app.get('/api/auth/session', (req: AuthenticatedRequest, res) => {
-    if (!checkAuthEnvironmentValid(res)) return;
     if (!req.user) {
       return res.json({
         authenticated: false,
@@ -2158,25 +1980,10 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       });
     }
     const { passwordHash: _, ...safeUser } = req.user;
-    const safeSession = req.session ? {
-      sessionId: req.session.sessionId,
-      userId: req.session.userId,
-      username: req.session.username,
-      name: req.session.name,
-      role: req.session.role,
-      contractor: req.session.contractor,
-      sessionVersion: req.session.sessionVersion,
-      loginAt: req.session.loginAt,
-      lastActivityAt: req.session.lastActivityAt,
-      expiresAt: req.session.expiresAt,
-      status: req.session.status,
-      deviceType: req.session.deviceType
-    } : null;
-
     res.json({
       authenticated: true,
       user: safeUser,
-      session: safeSession
+      session: req.session || null
     });
   });
 
@@ -2251,7 +2058,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         if (u.isDeleted) return false;
         if (cleanEmail && (
           u.email.toLowerCase() === cleanEmail ||
-          (u.altEmail && u.altEmail.toLowerCase() === cleanEmail)
+          (u.altEmail && u.altEmail.toLowerCase().includes(cleanEmail))
         )) return true;
         if (cleanUid && u.firebaseUid === cleanUid) return true;
         return false;
@@ -2307,7 +2114,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       deviceType
     };
 
-    await sessionStore.addSession(newSession);
+    SERVER_SESSIONS.unshift(newSession);
     user.lastLoginAt = nowIso;
     user.loginCount = (user.loginCount || 0) + 1;
     if (isLocalJsonModeAllowed()) {
@@ -2434,6 +2241,19 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
     const scopedTickets = user ? scopeTicketsForUser(baseTickets, user) : [];
 
+    const safeContractors = (contractorsList || []).map((c: any) => {
+      const rawAreas = c?.coverageAreas ?? c?.coverage_areas ?? [];
+      const coverageAreas = Array.isArray(rawAreas) ? rawAreas : [];
+      return {
+        ...c,
+        id: String(c?.id ?? ''),
+        name: String(c?.name ?? ''),
+        code: String(c?.code ?? ''),
+        coverageAreas,
+        coverage_areas: coverageAreas
+      };
+    });
+
     res.json({
       success: true,
       isAuthenticated: Boolean(user),
@@ -2450,7 +2270,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         active: user.active
       } : null,
       tickets: scopedTickets,
-      contractors: contractorsList,
+      contractors: safeContractors,
       coverageAreas: coverageAreasList,
       templates: templatesList,
       globalConfig: db.globalConfig,
@@ -2508,7 +2328,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       if (!user) {
         user = db.users.find(u => {
           if (u.isDeleted) return false;
-          if (u.altEmail && u.altEmail.toLowerCase() === clean) return true;
+          if (u.altEmail && u.altEmail.toLowerCase().includes(clean)) return true;
           const prefix = (u.email || '').split('@')[0].toLowerCase();
           return prefix === clean;
         }) || null;
@@ -2597,1027 +2417,176 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     res.json({ success: true });
   });
 
-  // --- Auth Endpoints with Brute-Force Rate Limiting & Session Lifecycle ---
-  app.post('/api/auth/login', async (req: AuthenticatedRequest, res) => {
-    if (!isLocalJsonModeAllowed()) {
-      return res.status(403).json({
-        success: false,
-        error: 'Endpoint /api/auth/login telah dinonaktifkan pada mode produksi. Seluruh autentikasi wajib melalui /api/auth/supabase-login.',
-        code: 'DEPRECATED_AUTH_ENDPOINT'
-      });
-    }
+  // --- MoraJaws Custom Authentication Endpoints (Supabase PostgreSQL Authoritative) ---
 
-    const rawUser = req.body.username || req.body.identifier;
-    const { password, firebaseUid } = req.body;
-    if (!rawUser || !password) {
-      return res.status(400).json({
-        success: false,
-        error: 'Nama pengguna dan kata sandi wajib diisi.',
-        code: 'INVALID_INPUT'
-      });
-    }
-
-    const cleanUser = String(rawUser).trim().toLowerCase();
-    const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
-    const rateLimitKey = `${cleanUser}_${clientIp}`;
-
-    const attemptInfo = LOGIN_ATTEMPTS.get(rateLimitKey);
-    const nowMs = Date.now();
-    if (attemptInfo && attemptInfo.lockedUntil && attemptInfo.lockedUntil > nowMs) {
-      const waitSeconds = Math.ceil((attemptInfo.lockedUntil - nowMs) / 1000);
-      return res.status(429).json({
-        success: false,
-        error: `Terlalu banyak percobaan login yang gagal. Akun/IP ditangguhkan sementara demi keamanan. Coba lagi dalam ${waitSeconds} detik.`,
-        code: 'auth/too-many-requests'
-      });
-    }
-
-    let user: ServerUser | null = null;
-
-    if (isSupabaseMode()) {
-      try {
-        const sbUser = await findUserInSupabase(cleanUser);
-        if (sbUser && !sbUser.isDeleted) {
-          user = sbUser;
-        } else if (!sbUser && !isLocalJsonModeAllowed()) {
-          await logServerAuditAsync('Login Failed (User Not Found)', 'auth', cleanUser, `Percobaan login untuk identitas tidak dikenal: ${cleanUser}`, null, { level: 'critical' });
-          return res.status(404).json({
-            success: false,
-            error: `Nama pengguna atau email "${rawUser}" tidak ditemukan dalam direktori staf MoraJaws.`,
-            code: 'auth/user-not-found'
-          });
-        }
-      } catch (err: any) {
-        if (!isLocalJsonModeAllowed()) {
-          return res.status(503).json({
-            success: false,
-            error: 'Database authoritative Supabase tidak dapat diakses saat login.',
-            code: 'DATABASE_UNAVAILABLE'
-          });
-        }
-      }
-    }
-
-    if (!user && isLocalJsonModeAllowed()) {
-      user = db.users.find(
-        u => !u.isDeleted && (
-          u.username.toLowerCase() === cleanUser ||
-          u.email.toLowerCase() === cleanUser
-        )
-      ) || null;
-
-      if (!user) {
-        user = db.users.find(
-          u => !u.isDeleted && (
-            (u.altEmail && u.altEmail.toLowerCase() === cleanUser)
-          )
-        ) || null;
-      }
-    }
-
-    if (!user) {
-      await logServerAuditAsync('Login Failed (User Not Found)', 'auth', cleanUser, `Percobaan login untuk identitas tidak dikenal: ${cleanUser}`, null, { level: 'critical' });
-      return res.status(404).json({
-        success: false,
-        error: `Nama pengguna atau email "${rawUser}" tidak ditemukan dalam direktori staf MoraJaws.`,
-        code: 'auth/user-not-found'
-      });
-    }
-
-    if (!user.active) {
-      await logServerAuditAsync('Login Blocked Inactive', 'auth', user.id, `Akun nonaktif mencoba login: ${user.username}`, user, { level: 'critical' });
-      return res.status(403).json({
-        success: false,
-        error: 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.',
-        code: 'auth/user-disabled'
-      });
-    }
-
-    const attemptedHash = hashPassword(password);
-    const isDefaultAllowed = (password === '12345678' || attemptedHash === DEFAULT_HASH) && user.mustChangePassword;
-    const isHashMatched = user.passwordHash === attemptedHash || isDefaultAllowed;
-
-    if (!isHashMatched) {
-      const currentAttempts = (attemptInfo?.count || 0) + 1;
-      let lockedUntil: number | undefined;
-      if (currentAttempts >= 5) {
-        lockedUntil = nowMs + 5 * 60 * 1000;
-      }
-      LOGIN_ATTEMPTS.set(rateLimitKey, {
-        count: currentAttempts,
-        lastAttempt: nowMs,
-        lockedUntil
-      });
-
-      await logServerAuditAsync('Login Failed (Wrong Password)', 'auth', cleanUser, `Percobaan login gagal untuk: ${cleanUser} (${currentAttempts}x gagal)`, null, { level: 'critical' });
-      return res.status(401).json({
-        success: false,
-        error: 'Autentikasi gagal. Kredensial tidak cocok. Pastikan kata sandi yang Anda masukkan benar.',
-        code: 'MJ-AUTH-001'
-      });
-    }
-
-    if (isDefaultAllowed) {
-      user.mustChangePassword = true;
-    }
-
-    if (firebaseUid && !user.firebaseUid) {
-      user.firebaseUid = String(firebaseUid).trim();
-    }
-
-    LOGIN_ATTEMPTS.delete(rateLimitKey);
-
-    const nowIso = new Date().toISOString();
-    const sessionMaxDurationMs = (db.sessionConfig.sessionMaxDurationHours || 8) * 3600 * 1000;
-    const expiresIso = new Date(nowMs + sessionMaxDurationMs).toISOString();
-
-    if (db.sessionConfig.revokePreviousOnLogin) {
-      await sessionStore.revokeUserSessions(user!.id);
-    } else {
-      const activeUserSessions = await sessionStore.getActiveSessionsForUser(user!.id);
-      if (activeUserSessions.length >= (db.sessionConfig.maxActiveSessionsPerUser || 3)) {
-        const oldest = activeUserSessions.sort((a, b) => new Date(a.loginAt).getTime() - new Date(b.loginAt).getTime())[0];
-        if (oldest) {
-          await sessionStore.revokeSession(oldest.sessionId);
-        }
-      }
-    }
-
-    const sessionId = 'sess_' + Date.now() + '_' + crypto.randomBytes(6).toString('hex');
-    const token = crypto.randomBytes(32).toString('hex');
-    const userAgent = req.headers['user-agent'] || 'Web Browser';
-    const deviceType = userAgent.toLowerCase().includes('mobi') ? 'mobile' : 'desktop';
-
-    const newSession: ServerSession = {
-      sessionId,
-      token,
-      userId: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
-      contractor: user.contractor,
-      sessionVersion: user.sessionVersion || 1,
-      loginAt: nowIso,
-      lastActivityAt: nowIso,
-      expiresAt: expiresIso,
-      status: 'active',
-      ipAddress: clientIp,
-      userAgent,
-      deviceType
-    };
-
-    await sessionStore.addSession(newSession);
-
-    user.sessionVersion = user.sessionVersion || 1;
-    user.lastLoginAt = nowIso;
-    user.loginCount = (user.loginCount || 0) + 1;
-    if (isLocalJsonModeAllowed()) {
-      saveDatabaseToDisk();
-    }
-
-    await logServerAuditAsync('Login Success', 'auth', user.id, `User ${user.name} (${user.role}) berhasil masuk ke sistem`, user, { level: 'critical' });
-
-    const { passwordHash: _, ...safeUser } = user;
-
-    res.json({
-      success: true,
-      token,
-      sessionId,
-      expiresAt: expiresIso,
-      user: safeUser
-    });
-  });
-
-  // --- Authoritative Unified Logout Handler (Phase 15A.7.6.2) ---
-  const handleAuthoritativeLogout = async (req: Request, res: Response) => {
-    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
-    if (!checkAuthEnvironmentValid(res)) return;
-
-    const cookieName = getSessionCookieName();
-    const cookies = parseRequestCookies(req);
-    const authHeader = req.headers['authorization'];
-    const currentToken = (authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : undefined) || cookies[cookieName];
-    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || getAppEnvironment() !== 'development';
-
-    try {
-      let matchedSession: ServerSession | undefined;
-      if (currentToken) {
-        matchedSession = await sessionStore.findSession(currentToken, { allowInactive: true });
-      }
-
-      const isAlreadyRevoked = matchedSession?.status === 'revoked';
-      const isExpired = matchedSession?.status === 'expired' || (matchedSession && new Date(matchedSession.expiresAt).getTime() < Date.now());
-
-      // 1. Revoke matched session via ISessionStore
-      if (matchedSession) {
-        await sessionStore.revokeSession(matchedSession.sessionId);
-      }
-      if (currentToken && (!matchedSession || matchedSession.token !== currentToken)) {
-        await sessionStore.revokeSession(currentToken);
-      }
-
-      // 2. Identify target user
-      const authUser = (req as AuthenticatedRequest).user;
-      const targetUserId = authUser?.id || matchedSession?.userId;
-
-      // 3. Revoke all active sessions for this user ID via ISessionStore
-      if (targetUserId) {
-        await sessionStore.revokeUserSessions(targetUserId);
-      }
-
-      let nextVersion: number | undefined;
-
-      // 4. Update sessionVersion in authoritative database
-      if (targetUserId) {
-        if (isSupabaseMode()) {
-          try {
-            const userLookup = await getUserByIdFromSupabase(targetUserId);
-            const currentVersion = userLookup.success && userLookup.data?.sessionVersion ? userLookup.data.sessionVersion : (authUser?.sessionVersion || 1);
-            nextVersion = currentVersion + 1;
-            const updateRes = await updateUserInSupabase(targetUserId, { sessionVersion: nextVersion });
-            if (!updateRes.success) {
-              return res.status(500).json({
-                success: false,
-                error: 'Gagal mencabut versi sesi di database authoritative.',
-                code: 'SESSION_REVOCATION_FAILED'
-              });
-            }
-          } catch (dbErr) {
-            return res.status(500).json({
-              success: false,
-              error: 'Database gagal diakses saat logout.',
-              code: 'DATABASE_UNAVAILABLE'
-            });
-          }
-        } else if (isLocalJsonModeAllowed()) {
-          const localUser = db.users.find(u => u.id === targetUserId);
-          if (localUser) {
-            nextVersion = (localUser.sessionVersion || 1) + 1;
-            localUser.sessionVersion = nextVersion;
-            saveDatabaseToDisk();
-          }
-        }
-
-        const userName = authUser?.name || matchedSession?.name || targetUserId;
-        const userRole = authUser?.role || matchedSession?.role || 'user';
-        await logServerAuditAsync(
-          'Logout Success',
-          'auth',
-          targetUserId,
-          `User ${userName} (${userRole}) logout dari sistem`,
-          authUser,
-          { level: 'critical' }
-        );
-      }
-
-      // 5. Clear cookie with consistent attributes across environments
-      // Note: Do not call client.auth.signOut() on a shared backend client as it mutates global backend auth state.
-      clearSecureSessionCookie(res, cookieName, isHttps);
-
-      return res.json({
-        success: true,
-        message: isAlreadyRevoked
-          ? 'Sesi sebelumnya telah dicabut. Cookie telah dibersihkan.'
-          : (isExpired ? 'Sesi kedaluwarsa telah dibersihkan.' : 'Sesi berhasil diakhiri.'),
-        sessionVersion: nextVersion || authUser?.sessionVersion
-      });
-    } catch (storeErr: any) {
-      console.error('[Logout] Session store error during revocation:', storeErr);
-      return res.status(500).json({
-        success: false,
-        error: 'Terjadi kegagalan pada session store saat logout.',
-        code: 'LOGOUT_STORE_ERROR'
-      });
-    }
-  };
-
-  // Primary logout endpoint
-  app.post('/api/auth/logout', handleAuthoritativeLogout);
-
-  // --- Supabase Authentication Backend Endpoints (Production Architecture Target) ---
-  app.post('/api/auth/supabase-login', async (req: Request, res: Response) => {
-    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
-    if (!checkAuthEnvironmentValid(res)) return;
-
-    // CRITICAL SECURITY ENFORCEMENT: Reject any client attempt to specify environment or Supabase target project
-    if (
-      req.body?.environment !== undefined ||
-      req.body?.supabaseUrl !== undefined ||
-      req.body?.projectId !== undefined ||
-      req.body?.targetProjectId !== undefined ||
-      req.body?.appEnv !== undefined
-    ) {
-      return res.status(400).json({
-        success: false,
-        error: 'Permintaan tidak valid: Penentuan environment atau target project dari browser dilarang demi keamanan.',
-        code: 'UNAUTHORIZED_ENVIRONMENT_MANIPULATION'
-      });
-    }
-
-    const { identifier, email, password } = req.body || {};
-    const targetIdent = identifier || email;
-
+  const handleLogin = async (req: Request, res: Response) => {
+    const { identifier, username, email, password } = req.body || {};
+    const targetIdent = identifier || username || email;
     if (!targetIdent || !password) {
       return res.status(400).json({
         success: false,
-        error: 'Email/username dan kata sandi wajib diisi.',
+        error: 'Nama pengguna atau email dan kata sandi wajib diisi.',
         code: 'INVALID_INPUT'
       });
     }
 
-    const cleanIdent = String(targetIdent).trim().toLowerCase();
     const clientIp = (req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
-    const rateLimitKey = `${cleanIdent}_${clientIp}`;
-    const attemptInfo = LOGIN_ATTEMPTS.get(rateLimitKey);
-    const nowMs = Date.now();
-
-    if (attemptInfo && attemptInfo.lockedUntil && attemptInfo.lockedUntil > nowMs) {
-      const waitSeconds = Math.ceil((attemptInfo.lockedUntil - nowMs) / 1000);
-      return res.status(429).json({
-        success: false,
-        error: `Terlalu banyak percobaan login yang gagal. Akun/IP ditangguhkan sementara demi keamanan. Coba lagi dalam ${waitSeconds} detik.`,
-        code: 'auth/too-many-requests'
-      });
-    }
-
-    const authRes = await signInWithSupabaseAuth(targetIdent, password);
-    if (!authRes.success || !authRes.data) {
-      const errCode = authRes.error?.code || 'AUTH_FAILED';
-      let statusCode = 401;
-
-      if (
-        errCode === 'DATABASE_UNAVAILABLE' ||
-        errCode === 'SUPABASE_NOT_CONFIGURED' ||
-        errCode === 'AUTH_PROVIDER_UNAVAILABLE' ||
-        errCode === 'AUTH_PROVIDER_ERROR' ||
-        errCode === 'CONFIGURATION_MISMATCH' ||
-        errCode === 'ENVIRONMENT_INVALID'
-      ) {
-        statusCode = 503;
-      } else if (
-        errCode === 'auth/user-not-found' ||
-        errCode === 'ACCOUNT_NOT_FOUND' ||
-        errCode === 'STAFF_NOT_FOUND' ||
-        errCode === 'PROFILE_NOT_FOUND'
-      ) {
-        statusCode = 404;
-      } else if (
-        errCode === 'ACCOUNT_DISABLED' ||
-        errCode === 'ACCOUNT_DELETED' ||
-        errCode === 'auth/user-disabled' ||
-        errCode === 'AUTH_EMAIL_NOT_CONFIRMED' ||
-        errCode === 'AUTH_UID_MISMATCH' ||
-        errCode === 'NEEDS_MAPPING' ||
-        errCode === 'INVALID_ROLE'
-      ) {
-        statusCode = 403;
-      } else if (errCode === 'STAFF_AUTH_EMAIL_MISSING') {
-        statusCode = 409;
-      } else if (
-        errCode === 'AUTH_INVALID_CREDENTIALS' ||
-        errCode === 'INVALID_CREDENTIALS' ||
-        errCode === 'auth/wrong-password' ||
-        errCode === 'MJ-AUTH-001'
-      ) {
-        statusCode = 401;
-        const currentAttempts = (attemptInfo?.count || 0) + 1;
-        let lockedUntil: number | undefined;
-        if (currentAttempts >= 5) {
-          lockedUntil = nowMs + 5 * 60 * 1000;
-        }
-        LOGIN_ATTEMPTS.set(rateLimitKey, {
-          count: currentAttempts,
-          lastAttempt: nowMs,
-          lockedUntil
-        });
-      } else {
-        statusCode = 400;
-      }
-
-      await logServerAuditAsync(
-        'Login Failed (Supabase Auth)',
-        'auth',
-        targetIdent,
-        `Percobaan login Supabase Auth gagal untuk ${targetIdent}: ${authRes.error?.message || 'Invalid credentials'} [${errCode}]`,
-        null,
-        { level: 'critical' }
-      );
-      const safeDetails = authRes.error?.details ? {
-        staffId: authRes.error.details.staffId,
-        username: authRes.error.details.username
-      } : undefined;
-
-      return res.status(statusCode).json({
-        success: false,
-        error: authRes.error?.message || 'Autentikasi Supabase Auth gagal.',
-        code: errCode,
-        details: safeDetails
-      });
-    }
-
-    // Reset failed attempts on success
-    LOGIN_ATTEMPTS.delete(rateLimitKey);
-
-    const { user, tokens, sessionVersion } = authRes.data;
-
-    // Create tracking server session for unified revocation and backend token handling
-    const sessionId = 'sess_' + Date.now() + '_' + crypto.randomBytes(6).toString('hex');
-    const nowIso = new Date().toISOString();
-    const expiresIso = new Date(Date.now() + (tokens.expiresIn || 3600) * 1000).toISOString();
     const userAgent = req.headers['user-agent'] || 'Web Browser';
-    const deviceType = userAgent.toLowerCase().includes('mobi') ? 'mobile' : 'desktop';
 
-    try {
-      await sessionStore.addSession({
-        sessionId,
-        token: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        userId: user.id,
-        username: user.username,
-        name: user.name,
-        role: user.role,
-        contractor: user.contractor,
-        sessionVersion: sessionVersion || 1,
-        loginAt: nowIso,
-        lastActivityAt: nowIso,
-        expiresAt: expiresIso,
-        status: 'active',
-        ipAddress: req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1',
-        userAgent,
-        deviceType
-      });
-    } catch (storeErr: any) {
-      console.error('[Supabase Login] Session store error:', storeErr);
-      return res.status(500).json({
+    const loginRes = await loginWithCustomAuth({
+      identifier: String(targetIdent),
+      password: String(password),
+      ipAddress: clientIp,
+      userAgent
+    });
+
+    if (!loginRes.success || !loginRes.data) {
+      const errCode = loginRes.error?.code || 'AUTH_FAILED';
+      const status = errCode === 'ACCOUNT_LOCKED' ? 429 :
+                     (errCode === 'ACCOUNT_DISABLED' || errCode === 'ACCOUNT_DELETED') ? 403 :
+                     errCode === 'DATABASE_UNAVAILABLE' ? 503 : 401;
+      return res.status(status).json({
         success: false,
-        error: 'Gagal membuat sesi penyimpanan server.',
-        code: 'SESSION_STORE_ERROR'
+        error: loginRes.error?.message || 'Autentikasi gagal.',
+        code: errCode
       });
     }
 
-    await logServerAuditAsync(
-      'Login Success (Supabase Auth)',
-      'auth',
-      user.id,
-      `User ${user.name} (${user.role}) berhasil masuk melalui Supabase Auth authoritative`,
-      user as ServerUser,
-      { level: 'critical' }
-    );
+    const { user, tokens, sessionId } = loginRes.data;
 
-    // Set secure HttpOnly session cookie isolated by environment (with Partitioned support for iframes)
-    const cookieName = getSessionCookieName();
-    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || getAppEnvironment() !== 'development';
-    const maxAgeMs = (tokens.expiresIn || 3600) * 1000;
+    // Secure HttpOnly SameSite Cookies
+    res.cookie('mora_access_token', tokens.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 8 * 3600 * 1000,
+      path: '/'
+    });
 
-    setSecureSessionCookie(res, cookieName, tokens.accessToken, maxAgeMs, isHttps);
+    res.cookie('mora_refresh_token', tokens.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 3600 * 1000,
+      path: '/api/auth'
+    });
 
-    // Audit Remediation (Phase 15A.7.4): Browser clients NEVER receive tokens in JSON response
-    if (isBrowserClientRequest(req)) {
-      return res.json({
-        success: true,
-        authSystem: 'Supabase Auth',
-        sessionId,
-        user,
-        sessionVersion
-      });
-    }
-
-    res.json({
+    return res.json({
       success: true,
-      authSystem: 'Supabase Auth',
+      authSystem: 'Custom Authentication',
       tokens,
+      token: tokens.accessToken,
       sessionId,
       user,
-      sessionVersion
-    });
-  });
-
-  const IN_FLIGHT_REFRESH_PROMISES = new Map<string, Promise<any>>();
-
-  app.post('/api/auth/supabase-refresh', async (req: Request, res: Response) => {
-    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
-    if (!checkAuthEnvironmentValid(res)) return;
-
-    // CRITICAL SECURITY ENFORCEMENT: Reject any client attempt to specify environment or Supabase target project
-    if (
-      req.body?.environment !== undefined ||
-      req.body?.supabaseUrl !== undefined ||
-      req.body?.projectId !== undefined ||
-      req.body?.targetProjectId !== undefined ||
-      req.body?.appEnv !== undefined
-    ) {
-      return res.status(400).json({
-        success: false,
-        error: 'Permintaan tidak valid: Penentuan environment atau target project dari browser dilarang demi keamanan.',
-        code: 'UNAUTHORIZED_ENVIRONMENT_MANIPULATION'
-      });
-    }
-
-    const isBrowser = isBrowserClientRequest(req);
-    const cookieName = getSessionCookieName();
-    const cookies = parseRequestCookies(req);
-
-    // Browser Contract Enforcement:
-    // 1. Browser client must NEVER send access token or refresh token via JSON body
-    // 2. Browser client must NEVER send refresh token via Authorization header
-    // 3. Refresh only uses server-verified HttpOnly session cookie
-    if (isBrowser) {
-      if (req.body?.refreshToken !== undefined || req.body?.accessToken !== undefined || req.body?.token !== undefined) {
-        return res.status(400).json({
-          success: false,
-          error: 'Browser client dilarang mengirim token atau refreshToken melalui request body demi keamanan session cookie.',
-          code: 'BROWSER_TOKEN_TRANSMISSION_REJECTED'
-        });
-      }
-      if (req.query?.refreshToken !== undefined || req.query?.token !== undefined || req.query?.accessToken !== undefined) {
-        return res.status(400).json({
-          success: false,
-          error: 'Browser client dilarang mengirim token atau refreshToken melalui query parameter.',
-          code: 'BROWSER_TOKEN_TRANSMISSION_REJECTED'
-        });
-      }
-      if (req.headers['authorization']) {
-        return res.status(400).json({
-          success: false,
-          error: 'Browser client dilarang mengirim token melalui Authorization header. Gunakan HttpOnly session cookie.',
-          code: 'BROWSER_AUTH_HEADER_REJECTED'
-        });
-      }
-
-      const sessionCookie = cookies[cookieName];
-      if (!sessionCookie) {
-        return res.status(401).json({
-          success: false,
-          error: 'Sesi browser tidak ditemukan atau cookie hilang. Silakan login kembali.',
-          code: 'UNAUTHORIZED_NO_SESSION'
-        });
-      }
-
-      let activeSession: ServerSession | undefined;
-      try {
-        activeSession = await sessionStore.findSession(sessionCookie);
-      } catch (storeErr: any) {
-        return res.status(503).json({
-          success: false,
-          error: 'Layanan verifikasi sesi tidak tersedia saat ini.',
-          code: 'SESSION_STORE_UNAVAILABLE'
-        });
-      }
-
-      // Concurrency deduplication: ensure concurrent refreshes for the same session share single in-flight call
-      let refreshPromise = IN_FLIGHT_REFRESH_PROMISES.get(sessionCookie);
-      if (!refreshPromise && activeSession) {
-        refreshPromise = IN_FLIGHT_REFRESH_PROMISES.get(activeSession.sessionId);
-      }
-
-      if (!activeSession && !refreshPromise) {
-        return res.status(401).json({
-          success: false,
-          error: 'Sesi browser tidak valid atau telah kedaluwarsa/dicabut.',
-          code: 'SESSION_INVALID'
-        });
-      }
-
-      let isInitiator = false;
-      if (!refreshPromise && activeSession) {
-        const serverRefreshToken = activeSession.refreshToken;
-        if (!serverRefreshToken) {
-          return res.status(401).json({
-            success: false,
-            error: 'Refresh token tidak ditemukan pada sesi server.',
-            code: 'NO_SERVER_REFRESH_TOKEN'
-          });
-        }
-        isInitiator = true;
-        refreshPromise = refreshSupabaseAuthSession(serverRefreshToken);
-        IN_FLIGHT_REFRESH_PROMISES.set(sessionCookie, refreshPromise);
-        IN_FLIGHT_REFRESH_PROMISES.set(activeSession.sessionId, refreshPromise);
-      }
-
-      let refreshRes: any;
-      try {
-        refreshRes = await refreshPromise;
-      } finally {
-        if (isInitiator) {
-          // Keep promise in map briefly to allow in-flight concurrent requests to pick it up, then clear
-          setTimeout(() => {
-            IN_FLIGHT_REFRESH_PROMISES.delete(sessionCookie);
-            if (activeSession) {
-              IN_FLIGHT_REFRESH_PROMISES.delete(activeSession.sessionId);
-            }
-          }, 100);
-        }
-      }
-
-      if (!refreshRes || !refreshRes.success || !refreshRes.data) {
-        return res.status(401).json({
-          success: false,
-          error: refreshRes?.error?.message || 'Gagal memperbarui token.',
-          code: refreshRes?.error?.code || 'REFRESH_FAILED'
-        });
-      }
-
-      // If activeSession was not resolved initially (because another concurrent request already updated it),
-      // look it up again by token or sessionId
-      if (!activeSession && refreshRes.data.accessToken) {
-        activeSession = await sessionStore.findSession(refreshRes.data.accessToken);
-      }
-
-      if (activeSession && refreshRes.data.accessToken) {
-        await sessionStore.updateSession(activeSession.sessionId, {
-          token: refreshRes.data.accessToken,
-          refreshToken: refreshRes.data.refreshToken || activeSession.refreshToken,
-          lastActivityAt: new Date().toISOString(),
-          expiresAt: new Date(Date.now() + (refreshRes.data.expiresIn || 3600) * 1000).toISOString()
-        });
-
-        const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || getAppEnvironment() !== 'development';
-        const maxAgeMs = (refreshRes.data.expiresIn || 3600) * 1000;
-        setSecureSessionCookie(res, cookieName, refreshRes.data.accessToken, maxAgeMs, isHttps);
-      }
-
-      // Browser client NEVER receives tokens in JSON response
-      return res.json({
-        success: true,
-        message: 'Sesi Supabase Auth berhasil diperbarui via backend.',
-        sessionVersion: activeSession?.sessionVersion || 1
-      });
-    }
-
-    // Non-browser client compatibility (automated server-side test runners / CLI)
-    let targetRefreshToken = req.body?.refreshToken;
-    const incomingToken = (req.headers['authorization']?.startsWith('Bearer ') ? req.headers['authorization'].substring(7).trim() : undefined) || cookies[cookieName];
-
-    let activeSession = incomingToken ? await sessionStore.findSession(incomingToken) : undefined;
-
-    if (!targetRefreshToken && activeSession?.refreshToken) {
-      targetRefreshToken = activeSession.refreshToken;
-    }
-
-    if (!targetRefreshToken) {
-      return res.status(400).json({ success: false, error: 'refreshToken atau sesi aktif wajib disertakan.', code: 'INVALID_INPUT' });
-    }
-
-    const refreshRes = await refreshSupabaseAuthSession(targetRefreshToken);
-    if (!refreshRes.success || !refreshRes.data) {
-      return res.status(401).json({ success: false, error: refreshRes.error?.message || 'Gagal memperbarui token.', code: refreshRes.error?.code || 'REFRESH_FAILED' });
-    }
-
-    if (activeSession && refreshRes.data.accessToken) {
-      await sessionStore.updateSession(activeSession.sessionId, {
-        token: refreshRes.data.accessToken,
-        refreshToken: refreshRes.data.refreshToken || activeSession.refreshToken,
-        lastActivityAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + (refreshRes.data.expiresIn || 3600) * 1000).toISOString()
-      });
-    }
-
-    if (refreshRes.data.accessToken) {
-      const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || getAppEnvironment() !== 'development';
-      const maxAgeMs = (refreshRes.data.expiresIn || 3600) * 1000;
-      setSecureSessionCookie(res, cookieName, refreshRes.data.accessToken, maxAgeMs, isHttps);
-    }
-
-    res.json({ success: true, tokens: refreshRes.data });
-  });
-
-  // Compatibility adapter for Supabase Auth logout: routes directly to handleAuthoritativeLogout
-  app.post('/api/auth/supabase-logout', handleAuthoritativeLogout);
-
-  // Recovery endpoints and rate limiting
-
-  const checkRecoveryRateLimit = (key: string, maxAttempts = 5, lockDurationMs = 10 * 60 * 1000): { allowed: boolean; waitSeconds?: number } => {
-    const now = Date.now();
-    const entry = RECOVERY_ATTEMPTS.get(key);
-    if (!entry) return { allowed: true };
-    if (entry.lockedUntil && entry.lockedUntil > now) {
-      return { allowed: false, waitSeconds: Math.ceil((entry.lockedUntil - now) / 1000) };
-    }
-    // Auto-reset if last attempt was older than lock window
-    if (now - entry.lastAttempt > lockDurationMs) {
-      RECOVERY_ATTEMPTS.delete(key);
-      return { allowed: true };
-    }
-    return { allowed: true };
-  };
-
-  const recordRecoveryFailure = (key: string, maxAttempts = 5, lockDurationMs = 10 * 60 * 1000) => {
-    const now = Date.now();
-    const entry = RECOVERY_ATTEMPTS.get(key) || { count: 0, lastAttempt: now };
-    entry.count += 1;
-    entry.lastAttempt = now;
-    if (entry.count >= maxAttempts) {
-      entry.lockedUntil = now + lockDurationMs;
-    }
-    RECOVERY_ATTEMPTS.set(key, entry);
-  };
-
-  const clearRecoveryRateLimit = (key: string) => {
-    RECOVERY_ATTEMPTS.delete(key);
-  };
-
-  const handleForgotPassword = async (req: Request, res: Response) => {
-    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
-    if (!checkAuthEnvironmentValid(res)) return;
-
-    const clientIp = (req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
-
-    // CRITICAL SECURITY ENFORCEMENT: Reject any client attempt to specify environment or Supabase target project
-    if (req.body?.environment !== undefined || req.body?.supabaseUrl !== undefined || req.body?.projectId !== undefined || req.body?.targetProjectId !== undefined || req.body?.appEnv !== undefined) {
-      return res.status(400).json({
-        success: false,
-        error: 'Permintaan tidak valid: Penentuan environment atau target project dari browser dilarang demi keamanan.',
-        code: 'UNAUTHORIZED_ENVIRONMENT_MANIPULATION'
-      });
-    }
-
-    const { email, emailOrUsername, identifier, redirectTo } = req.body || {};
-    const targetIdent = (identifier || emailOrUsername || email || '').trim();
-    if (!targetIdent) {
-      return res.status(400).json({ success: false, error: 'Email atau nama pengguna wajib diisi.', code: 'INVALID_INPUT' });
-    }
-
-    const cleanNormalized = targetIdent.toLowerCase();
-    const ipRateKey = `forgot_ip_${clientIp}`;
-    const identRateKey = `forgot_id_${cleanNormalized}`;
-
-    const ipCheck = checkRecoveryRateLimit(ipRateKey, 5, 15 * 60 * 1000);
-    if (!ipCheck.allowed) {
-      return res.status(429).json({
-        success: false,
-        error: `Terlalu banyak permintaan pemulihan kata sandi dari perangkat ini. Silakan tunggu ${ipCheck.waitSeconds} detik.`,
-        code: 'auth/too-many-requests'
-      });
-    }
-
-    const identCheck = checkRecoveryRateLimit(identRateKey, 5, 15 * 60 * 1000);
-    if (!identCheck.allowed) {
-      return res.status(429).json({
-        success: false,
-        error: `Terlalu banyak permintaan pemulihan untuk akun ini. Silakan tunggu ${identCheck.waitSeconds} detik.`,
-        code: 'auth/too-many-requests'
-      });
-    }
-
-    const resetRes = await resetSupabaseAuthPassword(targetIdent, redirectTo);
-    if (!resetRes.success) {
-      recordRecoveryFailure(ipRateKey, 5, 15 * 60 * 1000);
-      recordRecoveryFailure(identRateKey, 5, 15 * 60 * 1000);
-
-      // CRITICAL ANTI-ENUMERATION DEFENSE:
-      // If user is not found, do not leak non-existence to the browser.
-      // Return identical generic success response so attackers cannot harvest usernames.
-      if (resetRes.error?.code === 'USER_NOT_FOUND' || resetRes.error?.code === 'STAFF_AUTH_EMAIL_MISSING') {
-        return res.json({
-          success: true,
-          message: 'Jika akun terdaftar dalam direktori staf MoraJaws, instruksi pemulihan kata sandi telah dikirim ke alamat email resmi terdaftar.'
-        });
-      }
-
-      return res.status(400).json({
-        success: false,
-        error: resetRes.error?.message || 'Gagal mengirim email reset kata sandi.',
-        code: resetRes.error?.code || 'RESET_FAILED'
-      });
-    }
-
-    await logServerAuditAsync(
-      'Password Reset Requested',
-      'auth',
-      targetIdent,
-      `Permintaan pemulihan kata sandi diproses untuk "${targetIdent}" (Redirect: ${resetRes.data?.redirectTo})`,
-      undefined,
-      { level: 'informational' }
-    );
-
-    // ANTI-ENUMERATION CONTRACT: Do not expose email in response
-    res.json({
-      success: true,
-      message: 'Jika akun terdaftar dalam direktori staf MoraJaws, instruksi pemulihan kata sandi telah dikirim ke alamat email resmi terdaftar.'
+      sessionVersion: user.sessionVersion || 1
     });
   };
 
-  app.post('/api/auth/supabase-reset-password', handleForgotPassword);
-  app.post('/api/auth/forgot-password', handleForgotPassword);
+  app.post('/api/auth/login', handleLogin);
+  app.post('/api/auth/supabase-login', handleLogin);
 
-  app.post('/api/auth/verify-recovery', async (req: Request, res: Response) => {
-    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
-    if (!checkAuthEnvironmentValid(res)) return;
+  const handleRefresh = async (req: Request, res: Response) => {
+    const tokenFromCookie = (req as any).cookies?.mora_refresh_token;
+    const tokenFromBody = req.body?.refreshToken;
+    const refreshToken = tokenFromCookie || tokenFromBody;
 
-    const clientIp = (req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
-    
-    // CRITICAL SECURITY ENFORCEMENT: Reject any client-supplied target UID
-    if (req.body?.verifiedUserId !== undefined || req.body?.userId !== undefined) {
+    if (!refreshToken) {
       return res.status(400).json({
         success: false,
-        error: 'Permintaan tidak valid: Pengiriman UID target dari browser dilarang demi keamanan. Identitas akun wajib ditentukan secara eksklusif oleh bukti recovery backend.',
-        code: 'UNAUTHORIZED_TARGET_UID'
-      });
-    }
-
-    // CRITICAL SECURITY ENFORCEMENT: Reject any client attempt to specify environment or Supabase target project
-    if (req.body?.environment !== undefined || req.body?.supabaseUrl !== undefined || req.body?.projectId !== undefined || req.body?.targetProjectId !== undefined || req.body?.appEnv !== undefined) {
-      return res.status(400).json({
-        success: false,
-        error: 'Permintaan tidak valid: Penentuan environment atau target project dari browser dilarang demi keamanan.',
-        code: 'UNAUTHORIZED_ENVIRONMENT_MANIPULATION'
-      });
-    }
-
-    const rateKey = `verify_${clientIp}`;
-    const rateCheck = checkRecoveryRateLimit(rateKey, 10, 10 * 60 * 1000);
-    if (!rateCheck.allowed) {
-      return res.status(429).json({
-        success: false,
-        error: `Terlalu banyak percobaan verifikasi pemulihan. Silakan tunggu ${rateCheck.waitSeconds} detik.`,
-        code: 'auth/too-many-requests'
-      });
-    }
-
-    const { accessToken, recoveryToken, code, token_hash } = req.body || {};
-
-    // Reject standard login access tokens outright
-    if (accessToken && !recoveryToken && !code && !token_hash) {
-      recordRecoveryFailure(rateKey, 10, 10 * 60 * 1000);
-      return res.status(400).json({
-        success: false,
-        error: 'Access token sesi login biasa tidak dapat digunakan sebagai bukti pemulihan kata sandi. Wajib menggunakan tautan atau kode pemulihan resmi dari email.',
-        code: 'LOGIN_TOKEN_REJECTED_AS_RECOVERY_PROOF'
-      });
-    }
-
-    if (!recoveryToken && !code && !token_hash) {
-      return res.status(400).json({
-        success: false,
-        error: 'Kredensial token pemulihan (code, token_hash, atau recoveryToken) wajib disertakan.',
-        code: 'MISSING_RECOVERY_CREDENTIALS'
-      });
-    }
-
-    const verifyRes = await verifySupabaseRecoveryToken({ accessToken, recoveryToken, code, token_hash });
-    if (!verifyRes.success || !verifyRes.data?.userId) {
-      recordRecoveryFailure(rateKey, 10, 10 * 60 * 1000);
-      return res.status(400).json({
-        success: false,
-        error: verifyRes.error?.message || 'Token pemulihan tidak valid atau telah kedaluwarsa.',
-        code: verifyRes.error?.code || 'INVALID_RECOVERY_TOKEN'
-      });
-    }
-
-    // Mask user email for privacy and security in UI
-    const rawEmail = verifyRes.data.email || '';
-    let maskedEmail = rawEmail;
-    if (rawEmail.includes('@')) {
-      const [localPart, domainPart] = rawEmail.split('@');
-      const visibleStart = localPart.slice(0, 2);
-      const maskedLocal = visibleStart + '***';
-      maskedEmail = `${maskedLocal}@${domainPart}`;
-    }
-
-    // Note: Never return raw userId to browser to prevent client-side identifier spoofing.
-    // Return bound, short-lived, single-use recoveryToken.
-    res.json({
-      success: true,
-      valid: true,
-      email: maskedEmail,
-      recoveryToken: verifyRes.data.recoveryToken
-    });
-  });
-
-  app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
-    // FAIL-CLOSED ENVIRONMENT CHECK: Refuse to serve auth endpoints if environment configuration is invalid
-    if (!checkAuthEnvironmentValid(res)) return;
-
-    const clientIp = (req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
-
-    // CRITICAL SECURITY ENFORCEMENT:
-    // Reject any attempt to supply client-controlled target UID (e.g. verifiedUserId, userId).
-    if (req.body?.verifiedUserId !== undefined || req.body?.userId !== undefined) {
-      console.warn(`[Security Alert] Client attempt to supply unverified target UID from IP ${clientIp}. Request rejected.`);
-      return res.status(400).json({
-        success: false,
-        error: 'Permintaan tidak valid: Pengiriman UID target dari browser dilarang demi keamanan. Identitas akun wajib ditentukan secara eksklusif oleh bukti recovery backend.',
-        code: 'UNAUTHORIZED_TARGET_UID'
-      });
-    }
-
-    // CRITICAL SECURITY ENFORCEMENT: Reject any client attempt to specify environment or Supabase target project
-    if (req.body?.environment !== undefined || req.body?.supabaseUrl !== undefined || req.body?.projectId !== undefined || req.body?.targetProjectId !== undefined || req.body?.appEnv !== undefined) {
-      return res.status(400).json({
-        success: false,
-        error: 'Permintaan tidak valid: Penentuan environment atau target project dari browser dilarang demi keamanan.',
-        code: 'UNAUTHORIZED_ENVIRONMENT_MANIPULATION'
-      });
-    }
-
-    const rateKey = `reset_${clientIp}`;
-    const rateCheck = checkRecoveryRateLimit(rateKey, 5, 10 * 60 * 1000);
-    if (!rateCheck.allowed) {
-      return res.status(429).json({
-        success: false,
-        error: `Terlalu banyak percobaan reset kata sandi. Silakan tunggu ${rateCheck.waitSeconds} detik.`,
-        code: 'auth/too-many-requests'
-      });
-    }
-
-    const { newPassword, confirmPassword, recoveryToken, code, token_hash, accessToken } = req.body || {};
-
-    // Reject standard login access tokens outright
-    if (accessToken && !recoveryToken && !code && !token_hash) {
-      recordRecoveryFailure(rateKey, 5, 10 * 60 * 1000);
-      return res.status(400).json({
-        success: false,
-        error: 'Access token sesi login biasa tidak dapat digunakan sebagai bukti pemulihan kata sandi. Wajib menggunakan tautan atau kode pemulihan resmi dari email.',
-        code: 'LOGIN_TOKEN_REJECTED_AS_RECOVERY_PROOF'
-      });
-    }
-
-    if (!newPassword || typeof newPassword !== 'string') {
-      return res.status(400).json({
-        success: false,
-        error: 'Kata sandi baru wajib diisi.',
+        error: 'Refresh token wajib disertakan via cookie atau body.',
         code: 'INVALID_INPUT'
       });
     }
 
-    if (confirmPassword !== undefined && newPassword !== confirmPassword) {
-      return res.status(400).json({
+    const clientIp = (req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+    const userAgent = req.headers['user-agent'] || 'Web Browser';
+
+    const refreshRes = await rotateRefreshToken(refreshToken, clientIp, userAgent);
+    if (!refreshRes.success || !refreshRes.data) {
+      return res.status(401).json({
         success: false,
-        error: 'Konfirmasi kata sandi tidak cocok dengan kata sandi baru.',
-        code: 'PASSWORD_MISMATCH'
+        error: refreshRes.error?.message || 'Gagal memperbarui sesi token.',
+        code: refreshRes.error?.code || 'REFRESH_FAILED'
       });
     }
 
-    if (newPassword.length < 8) {
-      return res.status(400).json({
-        success: false,
-        error: 'Kata sandi baru minimal harus 8 karakter.',
-        code: 'INVALID_PASSWORD_LENGTH'
-      });
-    }
+    const { tokens, user } = refreshRes.data;
 
-    if (!recoveryToken && !code && !token_hash) {
-      return res.status(400).json({
-        success: false,
-        error: 'Bukti sesi token pemulihan (recoveryToken, code, atau token_hash) tidak sah atau tidak ditemukan.',
-        code: 'MISSING_RECOVERY_CREDENTIALS'
-      });
-    }
-
-    // Cryptographically enforce Supabase Auth recovery verification & account binding
-    const updateRes = await updateSupabaseUserPassword({
-      newPassword,
-      confirmPassword,
-      recoveryToken,
-      code,
-      token_hash,
-      accessToken
+    res.cookie('mora_access_token', tokens.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 8 * 3600 * 1000,
+      path: '/'
     });
 
-    if (!updateRes.success) {
-      recordRecoveryFailure(rateKey, 5, 10 * 60 * 1000);
-      return res.status(400).json({
-        success: false,
-        error: updateRes.error?.message || 'Gagal memperbarui kata sandi akun.',
-        code: updateRes.error?.code || 'UPDATE_PASSWORD_FAILED'
-      });
-    }
+    res.cookie('mora_refresh_token', tokens.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 3600 * 1000,
+      path: '/api/auth'
+    });
 
-    clearRecoveryRateLimit(rateKey);
-
-    await logServerAuditAsync(
-      'Password Reset Success',
-      'auth',
-      updateRes.data?.email || 'staff',
-      `Kata sandi akun (${updateRes.data?.email || 'staf'}) berhasil diperbarui melalui alur pemulihan kata sandi resmi.`,
-      undefined,
-      { level: 'critical' }
-    );
-
-    res.json({
+    return res.json({
       success: true,
-      message: 'Kata sandi akun MoraJaws Anda berhasil diperbarui. Silakan masuk kembali menggunakan kata sandi baru.'
+      tokens,
+      token: tokens.accessToken,
+      user
     });
-  });
+  };
 
-  // --- Identity Mapping Approval (Super Admin Only) ---
-  app.post('/api/auth/approve-mapping', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
-    const { staffId, authUserId } = req.body || {};
-    const result = await approveAuthUidMapping({
-      staffId,
-      authUserId,
-      adminUser: req.user!
-    });
-    if (!result.success) {
-      const status = result.error?.code === 'FORBIDDEN' ? 403 : result.error?.code === 'INVALID_INPUT' ? 400 : 500;
-      return res.status(status).json(result);
+  app.post('/api/auth/refresh', handleRefresh);
+  app.post('/api/auth/supabase-refresh', handleRefresh);
+
+  const handleLogout = async (req: AuthenticatedRequest, res: Response) => {
+    const authHeader = req.headers['authorization'];
+    const rawToken = (authHeader && authHeader.startsWith('Bearer '))
+      ? authHeader.substring(7).trim()
+      : (req as any).cookies?.mora_access_token;
+
+    if (rawToken) {
+      await revokeSingleSession(rawToken);
     }
-    return res.json(result);
-  });
 
-  // --- Change Password for Authenticated Users (Enforces transition from default seed password) ---
+    if (req.user) {
+      await logServerAuditAsync(
+        'USER_LOGOUT',
+        'auth',
+        req.user.id,
+        `User ${req.user.name} (${req.user.role}) logout dari sistem.`,
+        req.user,
+        { level: 'informational' }
+      );
+    }
+
+    res.clearCookie('mora_access_token', { path: '/' });
+    res.clearCookie('mora_refresh_token', { path: '/api/auth' });
+
+    return res.json({
+      success: true,
+      message: 'Sesi login berhasil diakhiri.'
+    });
+  };
+
+  app.post('/api/auth/logout', handleLogout);
+  app.post('/api/auth/supabase-logout', handleLogout);
+
+  // Reject Public Registration & Signup
+  const blockPublicRegister = (_req: Request, res: Response) => {
+    return res.status(403).json({
+      success: false,
+      error: 'Registrasi mandiri publik tidak tersedia. Hubungi Superadmin untuk mendapatkan akses MoraJaws.',
+      code: 'PUBLIC_REGISTRATION_FORBIDDEN'
+    });
+  };
+  app.post('/api/auth/register', blockPublicRegister);
+  app.post('/api/auth/signup', blockPublicRegister);
+
+  // User Self-Service Change Password
   app.post('/api/auth/change-password', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-    const { currentPassword, newPassword } = req.body || {};
+    const user = req.user!;
+    const { currentPassword, newPassword, confirmPassword } = req.body || {};
 
     if (!currentPassword || !newPassword) {
       return res.status(400).json({
@@ -3627,35 +2596,26 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       });
     }
 
-    if (String(newPassword).length < 8) {
+    if (confirmPassword !== undefined && newPassword !== confirmPassword) {
       return res.status(400).json({
         success: false,
-        error: 'Kata sandi baru minimal harus terdiri dari 8 karakter.',
-        code: 'PASSWORD_TOO_SHORT'
+        error: 'Konfirmasi kata sandi tidak cocok dengan kata sandi baru.',
+        code: 'PASSWORDS_DO_NOT_MATCH'
       });
     }
 
-    if (newPassword === '12345678') {
+    const strength = validatePasswordStrength(newPassword);
+    if (!strength.valid) {
       return res.status(400).json({
         success: false,
-        error: 'Kata sandi baru tidak boleh menggunakan kata sandi default "12345678".',
-        code: 'CANNOT_USE_DEFAULT_PASSWORD'
+        error: strength.error || 'Kata sandi tidak memenuhi kriteria keamanan.',
+        code: 'WEAK_PASSWORD'
       });
     }
 
-    if (isSupabaseMode()) {
-      return res.status(400).json({
-        success: false,
-        error: 'Perubahan kata sandi lokal dinonaktifkan di mode produksi. Gunakan reset password Supabase Auth (SUPABASE_PASSWORD_CHANGE_NOT_IMPLEMENTED).',
-        code: 'LOCAL_PASSWORD_DISABLED'
-      });
-    }
-
-    const user = req.user!;
-
-    const currentHash = hashPassword(currentPassword);
-    const matchesCurrent = user.passwordHash === currentHash || (currentPassword === '12345678' && user.passwordHash === DEFAULT_HASH);
-    if (!matchesCurrent) {
+    // Verify current password
+    const checkCurrent = await verifyUserPasswordEx(currentPassword, user.passwordHash);
+    if (!checkCurrent.valid) {
       return res.status(401).json({
         success: false,
         error: 'Kata sandi saat ini yang Anda masukkan salah.',
@@ -3663,28 +2623,46 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       });
     }
 
-    const newHash = hashPassword(newPassword);
-    const newVersion = (user.sessionVersion || 1) + 1;
-    user.passwordHash = newHash;
-    user.mustChangePassword = false;
-    user.sessionVersion = newVersion;
-
-    // Invalidate all other sessions for this user
-    await sessionStore.revokeUserSessions(user.id, req.session?.sessionId);
-
-    if (req.session) {
-      req.session.sessionVersion = newVersion;
+    // Check new password is not identical to current
+    const checkOldSame = await verifyUserPasswordEx(newPassword, user.passwordHash);
+    if (checkOldSame.valid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Kata sandi baru tidak boleh sama dengan kata sandi lama Anda.',
+        code: 'PASSWORD_CANNOT_BE_REUSED'
+      });
     }
 
-    if (isSupabaseMode()) {
+    // Hash new password using bcrypt
+    const newHash = await hashPasswordWithBcrypt(newPassword);
+    const nowIso = new Date().toISOString();
+    const newVersion = (user.sessionVersion || 1) + 1;
+
+    user.passwordHash = newHash;
+    user.sessionVersion = newVersion;
+    user.mustChangePassword = false;
+
+    // Persist to Supabase PostgreSQL
+    const client = getSupabaseBackendClient();
+    if (client) {
       try {
-        await updateUserInSupabase(user.id, {
-          passwordHash: newHash,
-          mustChangePassword: false,
-          sessionVersion: newVersion
+        await client
+          .from('users')
+          .update({
+            password_hash: newHash,
+            password_changed_at: nowIso,
+            session_version: newVersion,
+            must_change_password: false,
+            updated_at: nowIso,
+            payload: { ...(user as any).payload, passwordHash: newHash, sessionVersion: newVersion }
+          })
+          .eq('id', user.id);
+      } catch (err: any) {
+        return res.status(500).json({
+          success: false,
+          error: 'Gagal memperbarui kata sandi di database PostgreSQL.',
+          code: 'DB_UPDATE_ERROR'
         });
-      } catch (sbErr) {
-        console.error('[Change Password] Supabase update failed:', sbErr);
       }
     }
 
@@ -3692,20 +2670,494 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       saveDatabaseToDisk();
     }
 
-    const auditRes = await logServerAuditAsync('Password Changed', 'auth', user.id, `User ${user.name} (@${user.username}) berhasil memperbarui kata sandi`, user, { level: 'critical' });
+    // Revoke other active sessions
+    await revokeAllUserSessions(user.id);
+
+    await logServerAuditAsync(
+      'USER_PASSWORD_CHANGED',
+      'auth',
+      user.id,
+      `Pengguna ${user.name} (@${user.username}) berhasil memperbarui kata sandi akunnya.`,
+      user,
+      { level: 'critical' }
+    );
 
     const { passwordHash: _, ...safeUser } = user;
     return res.json({
       success: true,
-      message: 'Kata sandi Anda berhasil diperbarui. Silakan gunakan kata sandi baru untuk login berikutnya.',
-      auditStatus: auditRes.success ? 'PERSISTED' : 'FAILED',
+      message: 'Kata sandi Anda berhasil diperbarui.',
       user: safeUser
+    });
+  });
+
+  // Superadmin Reset Password
+  app.post('/api/auth/admin/reset-password', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
+    const { targetUserId, newPassword, confirmPassword } = req.body || {};
+
+    if (!targetUserId || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'ID pengguna dan kata sandi baru wajib diisi.',
+        code: 'INVALID_INPUT'
+      });
+    }
+
+    if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'Konfirmasi kata sandi tidak cocok dengan kata sandi baru.',
+        code: 'PASSWORDS_DO_NOT_MATCH'
+      });
+    }
+
+    const strength = validatePasswordStrength(newPassword);
+    if (!strength.valid) {
+      return res.status(400).json({
+        success: false,
+        error: strength.error || 'Kata sandi tidak memenuhi kriteria keamanan.',
+        code: 'WEAK_PASSWORD'
+      });
+    }
+
+    // Lookup target user in Supabase PostgreSQL
+    let targetUser: ServerUser | null = null;
+    const client = getSupabaseBackendClient();
+    if (client) {
+      const userRes = await findUserInSupabaseDetailed(targetUserId);
+      if (userRes.success && userRes.data) {
+        targetUser = userRes.data;
+      }
+    }
+    if (!targetUser && isLocalJsonModeAllowed()) {
+      targetUser = db.users.find(u => u.id === targetUserId) || null;
+    }
+
+    if (!targetUser || targetUser.isDeleted) {
+      return res.status(404).json({
+        success: false,
+        error: 'Pengguna yang dituju tidak ditemukan.',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+
+    // Ensure new password cannot be reused from previous password
+    const oldSameCheck = await verifyUserPasswordEx(newPassword, targetUser.passwordHash);
+    if (oldSameCheck.valid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Kata sandi baru tidak boleh sama dengan kata sandi sebelumnya.',
+        code: 'PASSWORD_CANNOT_BE_REUSED'
+      });
+    }
+
+    // Hash new password using bcrypt
+    const newHash = await hashPasswordWithBcrypt(newPassword);
+    const nowIso = new Date().toISOString();
+    const nextVersion = (targetUser.sessionVersion || 1) + 1;
+
+    targetUser.passwordHash = newHash;
+    targetUser.sessionVersion = nextVersion;
+    targetUser.mustChangePassword = false;
+
+    // Persist update in Supabase PostgreSQL
+    if (client) {
+      try {
+        const { error: updErr } = await client
+          .from('users')
+          .update({
+            password_hash: newHash,
+            password_changed_at: nowIso,
+            session_version: nextVersion,
+            must_change_password: false,
+            failed_login_count: 0,
+            locked_until: null,
+            account_status: 'active',
+            updated_at: nowIso,
+            payload: {
+              ...(targetUser as any).payload,
+              passwordHash: newHash,
+              sessionVersion: nextVersion,
+              passwordChangedAt: nowIso
+            }
+          })
+          .eq('id', targetUser.id);
+
+        if (updErr) {
+          return res.status(500).json({
+            success: false,
+            error: `Gagal memperbarui kata sandi di Supabase PostgreSQL: ${updErr.message}`,
+            code: 'DB_UPDATE_ERROR'
+          });
+        }
+      } catch (err: any) {
+        return res.status(500).json({
+          success: false,
+          error: 'Database PostgreSQL tidak tersedia saat reset kata sandi.',
+          code: 'DATABASE_UNAVAILABLE'
+        });
+      }
+    }
+
+    if (isLocalJsonModeAllowed()) {
+      saveDatabaseToDisk();
+    }
+
+    // Revoke ALL active sessions for this target user immediately
+    await revokeAllUserSessions(targetUser.id, req.user!.id);
+
+    // Record audit log
+    await logServerAuditAsync(
+      'ADMIN_RESET_PASSWORD',
+      'auth',
+      targetUser.id,
+      `Superadmin ${req.user!.name} mereset kata sandi akun ${targetUser.name} (@${targetUser.username}). Seluruh sesi aktif dibatalkan.`,
+      req.user,
+      { targetUserId: targetUser.id, level: 'critical' }
+    );
+
+    return res.json({
+      success: true,
+      message: `Kata sandi untuk pengguna ${targetUser.name} berhasil direset. Seluruh sesi aktif pengguna telah dicabut.`,
+      passwordChangedAt: nowIso
+    });
+  });
+
+  // --- Superadmin User Management Endpoints ---
+
+  app.post('/api/admin/users', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
+    const { name, username, email, altEmail, phone, role, contractor, contractorId, area, password } = req.body || {};
+
+    if (!name || !username || !email || !role || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nama, username, email, role, dan kata sandi awal wajib diisi.',
+        code: 'INVALID_INPUT'
+      });
+    }
+
+    const VALID_ROLES = ['super_admin', 'dispatch', 'leader', 'installer', 'management_data', 'it_support'];
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: `Role tidak valid. Pilihan role: ${VALID_ROLES.join(', ')}`,
+        code: 'INVALID_ROLE'
+      });
+    }
+
+    if ((role === 'leader' || role === 'installer') && !contractor) {
+      return res.status(400).json({
+        success: false,
+        error: 'Role Leader dan Installer wajib terafiliasi dengan Contractor.',
+        code: 'CONTRACTOR_REQUIRED'
+      });
+    }
+
+    const strength = validatePasswordStrength(password);
+    if (!strength.valid) {
+      return res.status(400).json({
+        success: false,
+        error: strength.error || 'Kata sandi awal tidak memenuhi standar keamanan.',
+        code: 'WEAK_PASSWORD'
+      });
+    }
+
+    const cleanName = String(name).trim().replace(/\s+/g, ' ');
+    const cleanUsername = String(username).trim().toLowerCase().replace(/\s+/g, '');
+    const cleanEmail = String(email).trim().toLowerCase();
+
+    const client = getSupabaseBackendClient();
+
+    // Check unique username & email in Supabase PostgreSQL
+    if (client) {
+      try {
+        const { data: existingUser } = await client
+          .from('users')
+          .select('id, username, email')
+          .or(`username.ilike.${cleanUsername},email.ilike.${cleanEmail}`)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingUser) {
+          return res.status(409).json({
+            success: false,
+            error: 'Nama pengguna atau email sudah terdaftar dalam sistem.',
+            code: 'USER_ALREADY_EXISTS'
+          });
+        }
+      } catch {}
+    }
+
+    if (isLocalJsonModeAllowed()) {
+      const exists = db.users.some(
+        u => !u.isDeleted && (u.username.toLowerCase() === cleanUsername || u.email.toLowerCase() === cleanEmail)
+      );
+      if (exists) {
+        return res.status(409).json({
+          success: false,
+          error: 'Nama pengguna atau email sudah terdaftar dalam sistem.',
+          code: 'USER_ALREADY_EXISTS'
+        });
+      }
+    }
+
+    const passwordHash = await hashPasswordWithBcrypt(password);
+    const nowIso = new Date().toISOString();
+    const userId = 'u-' + Date.now() + '-' + crypto.randomBytes(3).toString('hex');
+
+    const newUser: ServerUser = {
+      id: userId,
+      name: cleanName,
+      username: cleanUsername,
+      email: cleanEmail,
+      altEmail: altEmail?.trim() || undefined,
+      phone: phone?.trim() || undefined,
+      role,
+      contractor: contractor || undefined,
+      contractorId: contractorId || undefined,
+      area: area || undefined,
+      active: true,
+      passwordHash,
+      sessionVersion: 1,
+      mustChangePassword: false,
+      createdAt: nowIso
+    };
+
+    if (client) {
+      try {
+        const insRes = await insertUserToSupabase(newUser);
+        if (!insRes.success) {
+          return res.status(500).json({
+            success: false,
+            error: insRes.error?.message || 'Gagal menyimpan pengguna ke Supabase PostgreSQL.',
+            code: 'DB_INSERT_ERROR'
+          });
+        }
+      } catch (err: any) {
+        return res.status(500).json({
+          success: false,
+          error: 'Database PostgreSQL tidak dapat diakses saat mendaftarkan akun.',
+          code: 'DATABASE_UNAVAILABLE'
+        });
+      }
+    }
+
+    if (isLocalJsonModeAllowed()) {
+      db.users.push(newUser);
+      saveDatabaseToDisk();
+    }
+
+    await logServerAuditAsync(
+      'ADMIN_CREATE_USER',
+      'users',
+      newUser.id,
+      `Superadmin ${req.user!.name} mendaftarkan akun baru: ${newUser.name} (@${newUser.username}) dengan role ${newUser.role}.`,
+      req.user,
+      { targetUserId: newUser.id, level: 'critical' }
+    );
+
+    const { passwordHash: _, ...safeUser } = newUser;
+    return res.status(201).json({
+      success: true,
+      message: 'Akun staf berhasil dibuat oleh Superadmin.',
+      user: safeUser
+    });
+  });
+
+  app.get('/api/admin/users', requireSuperAdmin, async (_req: AuthenticatedRequest, res: Response) => {
+    const client = getSupabaseBackendClient();
+    let usersList: ServerUser[] = [];
+
+    if (client) {
+      const listRes = await getUsersFromSupabase(true);
+      if (listRes.success && Array.isArray(listRes.data)) {
+        usersList = listRes.data;
+      }
+    }
+
+    if (usersList.length === 0 && isLocalJsonModeAllowed()) {
+      usersList = db.users;
+    }
+
+    const safeUsers = usersList.map(u => {
+      const { passwordHash: _, ...rest } = u as any;
+      return {
+        ...rest,
+        accountStatus: u.active ? ((u as any).account_status || 'active') : 'inactive'
+      };
+    });
+
+    return res.json({
+      success: true,
+      users: safeUsers,
+      total: safeUsers.length
+    });
+  });
+
+  app.put('/api/admin/users/:id', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
+    const { id } = req.params;
+    const { name, username, email, altEmail, phone, role, contractor, contractorId, area } = req.body || {};
+
+    let existingUser: ServerUser | null = null;
+    const client = getSupabaseBackendClient();
+    if (client) {
+      const resUser = await getUserByIdFromSupabase(id);
+      if (resUser.success && resUser.data) {
+        existingUser = resUser.data;
+      }
+    }
+    if (!existingUser && isLocalJsonModeAllowed()) {
+      existingUser = db.users.find(u => u.id === id) || null;
+    }
+
+    if (!existingUser || existingUser.isDeleted) {
+      return res.status(404).json({ success: false, error: 'Pengguna tidak ditemukan.', code: 'USER_NOT_FOUND' });
+    }
+
+    const updates: Partial<ServerUser> = {};
+    if (name) updates.name = String(name).trim();
+    if (username) updates.username = String(username).trim().toLowerCase().replace(/\s+/g, '');
+    if (email) updates.email = String(email).trim().toLowerCase();
+    if (altEmail !== undefined) updates.altEmail = altEmail ? String(altEmail).trim() : undefined;
+    if (phone !== undefined) updates.phone = phone ? String(phone).trim() : undefined;
+    if (role) updates.role = role;
+    if (contractor !== undefined) updates.contractor = contractor || undefined;
+    if (contractorId !== undefined) updates.contractorId = contractorId || undefined;
+    if (area !== undefined) updates.area = area || undefined;
+
+    // If role is changing, increment sessionVersion to revoke previous permissions instantly
+    if (role && role !== existingUser.role) {
+      updates.sessionVersion = (existingUser.sessionVersion || 1) + 1;
+      await revokeAllUserSessions(id, req.user!.id);
+    }
+
+    if (client) {
+      const updRes = await updateUserInSupabase(id, updates);
+      if (!updRes.success) {
+        return res.status(500).json({ success: false, error: updRes.error?.message || 'Gagal memperbarui profil pengguna di Supabase.', code: 'DB_UPDATE_ERROR' });
+      }
+    }
+
+    if (isLocalJsonModeAllowed()) {
+      const localU = db.users.find(u => u.id === id);
+      if (localU) {
+        Object.assign(localU, updates);
+        saveDatabaseToDisk();
+      }
+    }
+
+    await logServerAuditAsync(
+      'ADMIN_UPDATE_USER',
+      'users',
+      id,
+      `Superadmin ${req.user!.name} memperbarui profil pengguna ${existingUser.name} (@${existingUser.username}).`,
+      req.user,
+      { targetUserId: id, level: 'critical' }
+    );
+
+    const updatedUser = { ...existingUser, ...updates };
+    const { passwordHash: _, ...safeUser } = updatedUser;
+    return res.json({ success: true, user: safeUser });
+  });
+
+  app.patch('/api/admin/users/:id/status', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
+    const { id } = req.params;
+    const { status, reason } = req.body || {};
+
+    if (!status || !['active', 'inactive', 'locked', 'unlocked'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Status tidak valid. Pilihan status: active, inactive, locked, unlocked.',
+        code: 'INVALID_STATUS'
+      });
+    }
+
+    let existingUser: ServerUser | null = null;
+    const client = getSupabaseBackendClient();
+    if (client) {
+      const resUser = await getUserByIdFromSupabase(id);
+      if (resUser.success && resUser.data) {
+        existingUser = resUser.data;
+      }
+    }
+    if (!existingUser && isLocalJsonModeAllowed()) {
+      existingUser = db.users.find(u => u.id === id) || null;
+    }
+
+    if (!existingUser || existingUser.isDeleted) {
+      return res.status(404).json({ success: false, error: 'Pengguna tidak ditemukan.', code: 'USER_NOT_FOUND' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const willBeActive = status === 'active' || status === 'unlocked';
+    const newAccountStatus = status === 'unlocked' ? 'active' : status;
+
+    // If deactivating or locking, revoke all active sessions
+    if (!willBeActive) {
+      await revokeAllUserSessions(id, req.user!.id);
+    }
+
+    if (client) {
+      await client
+        .from('users')
+        .update({
+          active: willBeActive,
+          account_status: newAccountStatus,
+          failed_login_count: willBeActive ? 0 : (existingUser as any).failed_login_count,
+          locked_until: willBeActive ? null : new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+          updated_at: nowIso
+        })
+        .eq('id', id);
+    }
+
+    if (isLocalJsonModeAllowed()) {
+      const localU = db.users.find(u => u.id === id);
+      if (localU) {
+        localU.active = willBeActive;
+        (localU as any).accountStatus = newAccountStatus;
+        saveDatabaseToDisk();
+      }
+    }
+
+    await logServerAuditAsync(
+      'ADMIN_UPDATE_USER_STATUS',
+      'users',
+      id,
+      `Superadmin ${req.user!.name} mengubah status akun ${existingUser.name} menjadi "${status}". Alasan: ${reason || 'Tidak ada keterangan'}`,
+      req.user,
+      { targetUserId: id, level: 'critical' }
+    );
+
+    return res.json({
+      success: true,
+      message: `Status akun pengguna berhasil diubah menjadi ${status}.`,
+      active: willBeActive,
+      accountStatus: newAccountStatus
+    });
+  });
+
+  app.post('/api/admin/users/:id/revoke-sessions', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
+    const { id } = req.params;
+    await revokeAllUserSessions(id, req.user!.id);
+
+    await logServerAuditAsync(
+      'ADMIN_REVOKE_SESSIONS',
+      'auth',
+      id,
+      `Superadmin ${req.user!.name} membatalkan seluruh sesi aktif untuk pengguna ID ${id}.`,
+      req.user,
+      { targetUserId: id, level: 'critical' }
+    );
+
+    return res.json({
+      success: true,
+      message: 'Seluruh sesi aktif pengguna berhasil dibatalkan.'
     });
   });
 
   app.get('/api/auth/me', requireAuth, (req: AuthenticatedRequest, res) => {
     const { passwordHash: _, ...safeUser } = req.user!;
     res.json({
+      success: true,
       user: safeUser,
       session: req.session ? {
         sessionId: req.session.sessionId,
@@ -5710,7 +5162,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     if (isSensitiveMod) {
       user.sessionVersion = (user.sessionVersion || 1) + 1;
       updates.sessionVersion = user.sessionVersion;
-      await sessionStore.revokeUserSessions(user!.id);
+      SERVER_SESSIONS.forEach(s => {
+        if (s.userId === user!.id) s.status = 'revoked';
+      });
     }
 
     if (isSupabaseMode()) {
@@ -5763,7 +5217,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     user.active = newActive;
     user.sessionVersion = newSessionVersion;
 
-    await sessionStore.revokeUserSessions(user!.id);
+    SERVER_SESSIONS.forEach(s => {
+      if (s.userId === user!.id) s.status = 'revoked';
+    });
 
     if (isSupabaseMode()) {
       const supaRes = await updateUserInSupabase(id, {
@@ -5821,7 +5277,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     user.mustChangePassword = true;
     user.sessionVersion = newSessionVersion;
 
-    await sessionStore.revokeUserSessions(user!.id);
+    SERVER_SESSIONS.forEach(s => {
+      if (s.userId === user!.id) s.status = 'revoked';
+    });
 
     if (isSupabaseMode()) {
       const supaRes = await updateUserInSupabase(id, {
@@ -5887,7 +5345,11 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     }
 
     // Revoke all sessions for target user immediately
-    await sessionStore.revokeUserSessions(id);
+    SERVER_SESSIONS.forEach(s => {
+      if (s.userId === id) {
+        s.status = 'revoked';
+      }
+    });
 
     if (isSupabaseMode()) {
       const delRes = await deleteUserInSupabase(id, req.user?.name, reason);
@@ -5925,26 +5387,30 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   // --- Session Management Endpoints ---
-  app.get('/api/sessions', requireSuperAdmin, async (_req, res) => {
-    await sessionStore.cleanupExpired();
-    const allSessions = sessionStore.getAllSessions();
-    const safeSessions = allSessions.map(s => {
-      const { token: _, refreshToken: __, ...safe } = s;
+  app.get('/api/sessions', requireSuperAdmin, (_req, res) => {
+    const now = Date.now();
+    SERVER_SESSIONS.forEach(s => {
+      if (s.status === 'active' && new Date(s.expiresAt).getTime() < now) {
+        s.status = 'expired';
+      }
+    });
+    const safeSessions = SERVER_SESSIONS.map(s => {
+      const { token: _, ...safe } = s;
       return safe;
     });
     res.json({ sessions: safeSessions });
   });
 
-  app.post('/api/sessions/revoke', requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/sessions/revoke', requireAuth, (req: AuthenticatedRequest, res) => {
     const { sessionId, reason } = req.body;
-    const session = await sessionStore.findSession(sessionId, { allowInactive: true });
+    const session = SERVER_SESSIONS.find(s => s.sessionId === sessionId);
     if (!session) return res.status(404).json({ error: 'Sesi tidak ditemukan.' });
 
     if (session.userId !== req.user!.id && req.user!.role !== 'super_admin') {
       return res.status(403).json({ error: 'Akses Ditolak: Anda hanya dapat mencabut sesi Anda sendiri.' });
     }
 
-    await sessionStore.revokeSession(sessionId);
+    session.status = 'revoked';
     logServerAudit('Session Revoked', 'session', sessionId, `Sesi dicabut oleh ${req.user!.name}. Alasan: ${reason || 'Pencabutan manual'}`, req.user);
     res.json({ success: true, message: 'Sesi berhasil dicabut.' });
   });
@@ -8150,7 +7616,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         inMemoryUser.sessionVersion = newVersion;
       }
 
-      await sessionStore.revokeUserSessions(id);
+      SERVER_SESSIONS.forEach(s => {
+        if (s.userId === id) s.status = 'revoked';
+      });
 
       const result = await updateUserInSupabase(id, { ...updates, sessionVersion: newVersion });
       if (!result.success) {
@@ -8216,7 +7684,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       }
 
       // Revoke sessions
-      await sessionStore.revokeUserSessions(id);
+      SERVER_SESSIONS.forEach(s => {
+        if (s.userId === id) s.status = 'revoked';
+      });
 
       const inMemoryUser = db.users.find(u => u.id === id);
       if (inMemoryUser) {
@@ -8252,7 +7722,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const user = req.user!;
 
       // Revoke all sessions
-      await sessionStore.revokeUserSessions(id);
+      SERVER_SESSIONS.forEach(s => {
+        if (s.userId === id) s.status = 'revoked';
+      });
 
       const existingUser = db.users.find(u => u.id === id);
       const newVersion = (existingUser?.sessionVersion || 1) + 1;
@@ -9550,15 +9022,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 }
 
 export async function startServer() {
-  const envValidation = validateEnvironmentStartup();
-  if (!envValidation.valid) {
-    console.error('[FATAL CONFIGURATION ERROR] Validasi environment gagal pada startup:');
-    envValidation.errors.forEach(err => console.error(` - ${err}`));
-    if (getAppEnvironment() === 'production' || getAppEnvironment() === 'staging') {
-      throw new Error(`Environment startup validation failed: ${envValidation.errors.join('; ')}`);
-    }
-  }
-
   const app = await createExpressApp();
   const PORT = 3000;
 

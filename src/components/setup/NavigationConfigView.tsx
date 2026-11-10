@@ -1564,7 +1564,7 @@ export const NavigationConfigView: React.FC = () => {
                       </>
                     ) : (
                       sortedStandaloneMenus
-                        .filter(m => m.visible !== false && (!m.roles || m.roles.includes(previewRole)))
+                        .filter(m => m.visible !== false && (!m.roles || (Array.isArray(m.roles) && m.roles.includes(previewRole))))
                         .map((m, idx) => {
                           const IconComp = getIconComp(m.icon);
                           return (
@@ -1591,7 +1591,7 @@ export const NavigationConfigView: React.FC = () => {
                         .filter(c => c.isActive !== false)
                         .map(c => {
                           const subs = (submenusByCategory.get(c.id) || []).filter(
-                            s => s.visible !== false && (!s.roles || s.roles.includes(previewRole))
+                            s => s.visible !== false && (!s.roles || (Array.isArray(s.roles) && s.roles.includes(previewRole)))
                           );
                           if (subs.length === 0) return null;
 

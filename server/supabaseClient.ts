@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { getEnvironmentConfig, extractSupabaseProjectId, STAGING_SUPABASE_PROJECT_ID } from './environmentConfig.ts';
 
 // ==============================================================================
 // MORAJAWS SUPABASE BACKEND CLIENT MODULE
@@ -193,31 +192,12 @@ export function getSupabaseBackendClient(): SupabaseClient | null {
     return supabaseInstance;
   }
 
-  const envConfig = getEnvironmentConfig();
-  const supabaseUrl = envConfig.supabaseUrl?.trim();
-  const serviceRoleKey = envConfig.supabaseServiceRoleKey?.trim();
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
   // Strict check: Secret key is mandatory. Never substitute with anon key.
   if (!supabaseUrl || !serviceRoleKey) {
     return null;
-  }
-
-  // Cross-environment isolation checks
-  if (envConfig.env === 'production') {
-    const extractedId = extractSupabaseProjectId(supabaseUrl);
-    if (extractedId === STAGING_SUPABASE_PROJECT_ID) {
-      console.error('[Supabase Backend Security Alert] Cross-environment violation: Production environment attempting to connect to Staging Supabase project.');
-      return null;
-    }
-  }
-
-  if (envConfig.env === 'staging') {
-    const extractedId = extractSupabaseProjectId(supabaseUrl);
-    // Staging must strictly match staging project ID and not target production
-    if (!extractedId || extractedId !== STAGING_SUPABASE_PROJECT_ID) {
-      console.warn('[Supabase Backend Security Alert] Staging environment attempting to connect to non-staging Supabase project.');
-      return null;
-    }
   }
 
   if (!isValidSupabaseUrl(supabaseUrl)) {
@@ -272,10 +252,9 @@ export function resetSupabaseBackendClientForTesting(): void {
  * - 'disconnected': network unreachable / failure to fetch.
  */
 export async function checkSupabaseConnection(): Promise<SupabaseHealthResult> {
-  const envConfig = getEnvironmentConfig();
-  const supabaseUrl = envConfig.supabaseUrl?.trim();
-  const serviceRoleKey = envConfig.supabaseServiceRoleKey?.trim();
-  const anonKey = envConfig.supabaseAnonKey?.trim();
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
 
   const urlConfigured = isValidSupabaseUrl(supabaseUrl);
   const serviceRoleConfigured = isValidSupabaseSecretKey(serviceRoleKey);
@@ -454,8 +433,7 @@ export function getLastSupabaseHealthStatus(): SupabaseHealthResult {
  * Returns true if both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured with valid formats.
  */
 export function isSupabaseConfigured(): boolean {
-  const envConfig = getEnvironmentConfig();
-  const supabaseUrl = envConfig.supabaseUrl?.trim();
-  const serviceRoleKey = envConfig.supabaseServiceRoleKey?.trim();
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)?.trim();
   return Boolean(supabaseUrl && serviceRoleKey && isValidSupabaseUrl(supabaseUrl) && isValidSupabaseSecretKey(serviceRoleKey));
 }

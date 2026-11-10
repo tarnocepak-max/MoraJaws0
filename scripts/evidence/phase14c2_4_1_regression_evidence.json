@@ -1,8 +1,8 @@
 {
   "suite": "Phase14C.2.4.1_Regression",
-  "test_run_id": "run_phase14c241regression_1794079074825_z1lr36",
+  "test_run_id": "run_phase14c241regression_1794060313921_4lmj5e",
   "environment": "isolated_mock_staging_loopback",
-  "generated_at": "2026-11-07T19:17:54.894Z",
+  "generated_at": "2026-11-07T14:05:13.960Z",
   "total_http_calls_executed": 1,
   "all_passed": true,
   "evidence": [
@@ -27,32 +27,32 @@
         {
           "assertion_name": "HTTP Status Code matches expected (200)",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T19:17:54.894Z"
+          "assertion_timestamp": "2026-11-07T14:05:13.960Z"
         },
         {
           "assertion_name": "Response status is strictly 200",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T19:17:54.894Z"
+          "assertion_timestamp": "2026-11-07T14:05:13.960Z"
         },
         {
           "assertion_name": "Response body is non-null object",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T19:17:54.894Z"
+          "assertion_timestamp": "2026-11-07T14:05:13.960Z"
         },
         {
           "assertion_name": "Rendered template contains customer name",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T19:17:54.894Z"
+          "assertion_timestamp": "2026-11-07T14:05:13.960Z"
         },
         {
           "assertion_name": "Generated URL starts with https://wa.me/",
           "assertion_passed": true,
-          "assertion_timestamp": "2026-11-07T19:17:54.894Z"
+          "assertion_timestamp": "2026-11-07T14:05:13.960Z"
         }
       ],
       "result": "PASS",
-      "timestamp": "2026-11-07T19:17:54.894Z",
-      "test_run_id": "run_phase14c241regression_1794079074825_z1lr36",
+      "timestamp": "2026-11-07T14:05:13.960Z",
+      "test_run_id": "run_phase14c241regression_1794060313921_4lmj5e",
       "environment": "isolated_mock_staging_loopback"
     }
   ]

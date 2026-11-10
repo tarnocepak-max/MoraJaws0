@@ -98,7 +98,7 @@ export const ContractorAreaRecapView: React.FC = () => {
         const q = searchQuery.toLowerCase().trim();
         const matchArea = ticketArea.toLowerCase().includes(q);
         const matchContractor = ticketContractor.toLowerCase().includes(q);
-        const matchWo = t.woNumber?.toLowerCase().includes(q);
+        const matchWo = String(t.woNumber ?? '').toLowerCase().includes(q);
         if (!matchArea && !matchContractor && !matchWo) return false;
       }
 

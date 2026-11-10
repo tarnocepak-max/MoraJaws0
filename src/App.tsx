@@ -190,21 +190,22 @@ const MainLayout: React.FC = () => {
   // Scoped unassigned tickets count for Leader's contractor
   const leaderUnassignedCount = useMemo(() => {
     if (!isLoggedIn || currentUser?.role !== 'leader') return 0;
-    const myContractor = (currentUser?.contractor || '').toLowerCase().trim();
+    const myContractor = String(currentUser?.contractor || '').toLowerCase().trim();
     return tickets.filter(t => {
       if (t.isArchived || t.isDeleted) return false;
       if (t.installerName) return false;
       if (!myContractor) return true;
-      const tContractor = (t.contactorName || t.contractorName || '').toLowerCase().trim();
-      return tContractor.includes(myContractor) || myContractor.includes(tContractor);
+      const tContractor = String(t.contactorName || t.contractorName || '').toLowerCase().trim();
+      return (tContractor && myContractor && (tContractor.includes(myContractor) || myContractor.includes(tContractor)));
     }).length;
   }, [isLoggedIn, tickets, currentUser]);
 
   // Helper matching for logged-in technician
   const isInstallerMatch = (ticketInstaller: string | undefined, installerName: string) => {
     if (!ticketInstaller || !ticketInstaller.trim()) return false;
-    const tInst = ticketInstaller.toLowerCase().trim();
-    const effInst = installerName.toLowerCase().trim();
+    const tInst = String(ticketInstaller).toLowerCase().trim();
+    const effInst = String(installerName).toLowerCase().trim();
+    if (!tInst || !effInst) return false;
     if (tInst === effInst) return true;
     if (tInst.includes(effInst) || effInst.includes(tInst)) return true;
     const cleanEff = effInst.replace(/\(.*?\)/g, '').trim();

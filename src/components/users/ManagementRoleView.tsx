@@ -167,7 +167,8 @@ export const ManagementRoleView: React.FC = () => {
                     <div className="text-[10px] text-slate-400 font-mono">{perm.key} ({perm.category})</div>
                   </td>
                   {roles.map(r => {
-                    const has = (ROLE_PERMISSIONS[r.role] || []).includes(perm.key);
+                    const perms = ROLE_PERMISSIONS[r.role];
+                    const has = Array.isArray(perms) ? perms.includes(perm.key) : false;
                     return (
                       <td key={r.role} className="py-2.5 px-3 text-center">
                         {has ? (

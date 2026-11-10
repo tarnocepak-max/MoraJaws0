@@ -449,8 +449,8 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
     if (
       t.statusWOInstaller === 'Pending Technical' ||
       t.statusWhatsApp === 'reschedule_requested' ||
-      t.remarksWOInstaller?.toLowerCase().includes('reschedule') ||
-      t.remarksAgent?.toLowerCase().includes('reschedule')
+      String(t.remarksWOInstaller ?? '').toLowerCase().includes('reschedule') ||
+      String(t.remarksAgent ?? '').toLowerCase().includes('reschedule')
     ) {
       return { category: 'pending', label: 'Tertunda / Reschedule', progressPercent: 40, color: 'text-amber-600' };
     }
@@ -614,14 +614,14 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
       // Search query filter (WO Number, Customer ID, Customer Name, Phone, Installer, Cluster, Street)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchWo = t.woNumber.toLowerCase().includes(q);
-        const matchCustId = (t.idCustomer || '').toLowerCase().includes(q);
-        const matchCustName = (t.customerName || '').toLowerCase().includes(q);
-        const matchPhone = (t.customerPhone || '').toLowerCase().includes(q);
-        const matchInst = (t.installerName || '').toLowerCase().includes(q);
-        const matchCluster = (t.clusterName || '').toLowerCase().includes(q);
-        const matchStreet = (t.streetName || '').toLowerCase().includes(q);
-        const matchArea = (t.area || '').toLowerCase().includes(q);
+        const matchWo = String(t.woNumber ?? '').toLowerCase().includes(q);
+        const matchCustId = String(t.idCustomer || '').toLowerCase().includes(q);
+        const matchCustName = String(t.customerName || '').toLowerCase().includes(q);
+        const matchPhone = String(t.customerPhone || '').toLowerCase().includes(q);
+        const matchInst = String(t.installerName || '').toLowerCase().includes(q);
+        const matchCluster = String(t.clusterName || '').toLowerCase().includes(q);
+        const matchStreet = String(t.streetName || '').toLowerCase().includes(q);
+        const matchArea = String(t.area || '').toLowerCase().includes(q);
 
         if (!matchWo && !matchCustId && !matchCustName && !matchPhone && !matchInst && !matchCluster && !matchStreet && !matchArea) {
           return false;

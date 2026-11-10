@@ -656,12 +656,12 @@ async function runPhase14C2Suite() {
         `HTTP ${res.status}: Refresh tanpa refreshToken ditolak.`);
     }
 
-    // Test 5: POST /api/auth/supabase-logout - Unauthenticated handled safely/idempotently (HTTP 200 or 401)
+    // Test 5: POST /api/auth/supabase-logout - Unauthenticated returns HTTP 401
     {
       const res = await makeRequest(PORT, 'POST', '/api/auth/supabase-logout');
-      const pass = res.status === 200 || (res.status === 401 && res.data.code === 'UNAUTHENTICATED');
-      recordTest(5, 'POST /api/auth/supabase-logout - Unauthenticated Handled Safely (HTTP 200/401)', 'Auth & Sessions', pass,
-        `HTTP ${res.status}: Logout tanpa sesi ditangani secara aman dan idempoten.`);
+      const pass = res.status === 401 && res.data.code === 'UNAUTHENTICATED';
+      recordTest(5, 'POST /api/auth/supabase-logout - Unauthenticated Rejected (HTTP 401)', 'Auth & Sessions', pass,
+        `HTTP ${res.status}: Logout tanpa token ditolak.`);
     }
 
     // Test 6: POST /api/auth/supabase-logout - Authenticated logout revokes session

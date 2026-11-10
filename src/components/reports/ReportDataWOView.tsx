@@ -166,42 +166,42 @@ export const ReportDataWOView: React.FC = () => {
       }
       if (colFilters.customerId.trim()) {
         const q = colFilters.customerId.toLowerCase().trim();
-        const cid = (t.idCustomer || t.customerId || '').toLowerCase();
+        const cid = String(t.idCustomer || t.customerId || '').toLowerCase();
         if (!cid.includes(q)) return false;
       }
       if (colFilters.customerName.trim()) {
         const q = colFilters.customerName.toLowerCase().trim();
-        if (!(t.customerName ? String(t.customerName).toLowerCase() : '').includes(q)) return false;
+        if (!String(t.customerName ?? '').toLowerCase().includes(q)) return false;
       }
       if (colFilters.area.trim()) {
         const q = colFilters.area.toLowerCase().trim();
-        if (!(t.area || '').toLowerCase().includes(q)) return false;
+        if (!String(t.area ?? '').toLowerCase().includes(q)) return false;
       }
       if (colFilters.appointmentDate.trim()) {
         const q = colFilters.appointmentDate.toLowerCase().trim();
-        const d = (t.appointmentDate || '').toLowerCase();
+        const d = String(t.appointmentDate ?? '').toLowerCase();
         if (!d.includes(q)) return false;
       }
       if (colFilters.slotTime.trim()) {
         const q = colFilters.slotTime.toLowerCase().trim();
-        if (!(t.slotTime || '').toLowerCase().includes(q)) return false;
+        if (!String(t.slotTime ?? '').toLowerCase().includes(q)) return false;
       }
       if (colFilters.contractor.trim()) {
         const q = colFilters.contractor.toLowerCase().trim();
-        const c = (t.contactorName || t.contractorName || '').toLowerCase();
+        const c = String(t.contactorName || t.contractorName || '').toLowerCase();
         if (!c.includes(q)) return false;
       }
       if (colFilters.installer.trim()) {
         const q = colFilters.installer.toLowerCase().trim();
-        if (!(t.installerName || '').toLowerCase().includes(q)) return false;
+        if (!String(t.installerName ?? '').toLowerCase().includes(q)) return false;
       }
       if (colFilters.statusInstaller.trim()) {
         const q = colFilters.statusInstaller.toLowerCase().trim();
-        if (!(t.statusWOInstaller || '').toLowerCase().includes(q)) return false;
+        if (!String(t.statusWOInstaller ?? '').toLowerCase().includes(q)) return false;
       }
       if (colFilters.remarks.trim()) {
         const q = colFilters.remarks.toLowerCase().trim();
-        const r = (t.technicalReport?.rootCause || t.remarksWOInstaller || t.remarksAgent || '').toLowerCase();
+        const r = String(t.technicalReport?.rootCause || t.remarksWOInstaller || t.remarksAgent || '').toLowerCase();
         if (!r.includes(q)) return false;
       }
 

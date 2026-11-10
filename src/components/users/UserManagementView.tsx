@@ -16,18 +16,33 @@ import {
   Phone,
   Mail,
   Lock,
+  Unlock,
   Trash2,
   ShieldAlert,
   Search,
   X,
   Edit2,
   ChevronDown,
-  MapPin
+  MapPin,
+  Eye,
+  EyeOff,
+  LogOut,
+  Clock,
+  Sparkles,
+  Database,
+  Cpu
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { SuperAdminDeleteModal } from '../common/SuperAdminDeleteModal';
 import { SortableColumnHeader } from '../common/SortableColumnHeader';
 import { SortState, getNextSortDirection, sortDataArray } from '../../utils/tableSorting';
+import {
+  adminCreateUser,
+  adminResetPassword,
+  adminUpdateUserStatus,
+  adminRevokeSessions,
+  adminUpdateUser
+} from '../../services/authService';
 
 interface SearchableAreaDropdownProps {
   value: string;
@@ -63,7 +78,7 @@ export const SearchableAreaDropdown: React.FC<SearchableAreaDropdownProps> = ({
   const filteredAreas = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return areas;
-    return areas.filter(a => a.name.toLowerCase().includes(q));
+    return areas.filter(a => String(a?.name || '').toLowerCase().includes(q));
   }, [areas, query]);
 
   const handleSelect = (areaName: string) => {
@@ -171,30 +186,14 @@ export const UserManagementView: React.FC = () => {
     users,
     contractors,
     coverageAreas,
-    registerDispatchAccount,
-    registerLeaderAccount,
     updateUser,
-    toggleUserStatus,
-    resetUserPassword
+    refreshFirestoreData
   } = useApp();
   const { toast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'users_list' | 'create_dispatch' | 'create_leader'>('users_list');
+  const [activeTab, setActiveTab] = useState<'users_list' | 'create_user'>('users_list');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
-
-  // Dispatch Form State
-  const [dispName, setDispName] = useState('');
-  const [dispUsername, setDispUsername] = useState('');
-  const [dispPhone, setDispPhone] = useState('');
-  const [dispEmail, setDispEmail] = useState('');
-
-  // Leader Form State
-  const [leadName, setLeadName] = useState('');
-  const [leadUsername, setLeadUsername] = useState('');
-  const [leadPhone, setLeadPhone] = useState('');
-  const [leadEmail, setLeadEmail] = useState('');
-  const [leadContractor, setLeadContractor] = useState('');
-  const [leadArea, setLeadArea] = useState(coverageAreas[0]?.name || 'Jakarta Selatan');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [userToDelete, setUserToDelete] = useState<UserType | null>(null);
@@ -211,9 +210,34 @@ export const UserManagementView: React.FC = () => {
   const [editActive, setEditActive] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
 
+  // Reset Password Modal State (Super Admin Exclusive)
+  const [resetModalUser, setResetModalUser] = useState<UserType | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetModalError, setResetModalError] = useState<string | null>(null);
+
+  // Universal User Registration State (Super Admin Exclusive, 6 Roles)
+  const [createName, setCreateName] = useState('');
+  const [createUsername, setCreateUsername] = useState('');
+  const [createEmail, setCreateEmail] = useState('');
+  const [createAltEmail, setCreateAltEmail] = useState('');
+  const [createPhone, setCreatePhone] = useState('');
+  const [createRole, setCreateRole] = useState<UserRole>('dispatch');
+  const [createContractor, setCreateContractor] = useState('');
+  const [createArea, setCreateArea] = useState(coverageAreas[0]?.name || 'Jakarta Selatan');
+  const [createPassword, setCreatePassword] = useState('');
+  const [createConfirmPassword, setCreateConfirmPassword] = useState('');
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [showCreateConfirmPassword, setShowCreateConfirmPassword] = useState(false);
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
   const triggerNotice = (type: 'success' | 'error', text: string) => {
     setNotice({ type, text });
-    setTimeout(() => setNotice(null), 4500);
+    setTimeout(() => setNotice(null), 5000);
   };
 
   const handleOpenEdit = (user: UserType) => {
@@ -256,89 +280,202 @@ export const UserManagementView: React.FC = () => {
     }
 
     setIsUpdating(true);
-    const res = await updateUser(editingUser.id, {
-      name: trimmedName,
-      username: cleanUsername,
-      role: editRole,
-      contractor: editContractor.trim() || undefined,
-      area: editArea.trim() || undefined,
-      phone: editPhone.trim() || undefined,
-      email: editEmail.trim() || undefined,
-      active: editActive
-    });
-    setIsUpdating(false);
+    try {
+      // Update in Supabase PostgreSQL
+      const apiRes = await adminUpdateUser(editingUser.id, {
+        name: trimmedName,
+        username: cleanUsername,
+        role: editRole,
+        contractor: editContractor.trim() || undefined,
+        area: editArea.trim() || undefined,
+        phone: editPhone.trim() || undefined,
+        email: editEmail.trim() || undefined,
+        active: editActive
+      });
 
-    if (res.success) {
-      toast.success(`Data akun ${trimmedName} berhasil diperbarui di Firestore.`, 'Perubahan Tersimpan');
-      triggerNotice('success', `Profil pengguna ${trimmedName} berhasil diperbarui.`);
-      setEditingUser(null);
-    } else {
-      toast.error(res.error || 'Gagal memperbarui profil pengguna.', 'Gagal Update');
-      triggerNotice('error', res.error || 'Gagal memperbarui profil pengguna.');
+      // Update in AppContext / Firestore
+      await updateUser(editingUser.id, {
+        name: trimmedName,
+        username: cleanUsername,
+        role: editRole,
+        contractor: editContractor.trim() || undefined,
+        area: editArea.trim() || undefined,
+        phone: editPhone.trim() || undefined,
+        email: editEmail.trim() || undefined,
+        active: editActive
+      });
+
+      if (apiRes.ok || apiRes.status === 200) {
+        toast.success(`Data akun ${trimmedName} berhasil diperbarui di Supabase PostgreSQL.`, 'Perubahan Tersimpan');
+        triggerNotice('success', `Profil pengguna ${trimmedName} (@${cleanUsername}) berhasil diperbarui.`);
+        setEditingUser(null);
+        await refreshFirestoreData?.();
+      } else {
+        const msg = apiRes.data?.error || 'Gagal memperbarui profil pengguna.';
+        toast.error(msg, 'Gagal Update');
+        triggerNotice('error', msg);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal update user', 'Error');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
-  const handleCreateDispatch = (e: React.FormEvent) => {
+  // Open Reset Password Modal
+  const handleOpenResetModal = (user: UserType) => {
+    setResetModalUser(user);
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setResetModalError(null);
+  };
+
+  // Submit Password Reset (Argon2id / bcrypt, no plaintext, revokes sessions, logs audit)
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!dispName.trim() || !dispUsername.trim()) {
-      triggerNotice('error', 'Nama lengkap dan Username wajib diisi.');
+    if (!resetModalUser) return;
+    setResetModalError(null);
+
+    if (newPassword.length < 8) {
+      setResetModalError('Kata sandi baru minimal harus 8 karakter.');
+      return;
+    }
+    if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      setResetModalError('Kata sandi baru harus mengandung kombinasi huruf dan angka.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setResetModalError('Konfirmasi kata sandi tidak cocok.');
       return;
     }
 
-    const res = registerDispatchAccount({
-      name: dispName,
-      username: dispUsername,
-      phone: dispPhone,
-      email: dispEmail
-    });
-
-    if (res.success) {
-      toast.success(`Akun Dispatch ${dispName} berhasil didaftarkan!`, 'Pendaftaran Sukses');
-      triggerNotice('success', `Akun Dispatch ${dispName} berhasil didaftarkan! Password default: 12345678`);
-      setDispName('');
-      setDispUsername('');
-      setDispPhone('');
-      setDispEmail('');
-      setActiveTab('users_list');
-    } else {
-      toast.error(res.error || 'Gagal mendaftarkan akun Dispatch.', 'Pendaftaran Gagal');
-      triggerNotice('error', res.error || 'Gagal mendaftarkan akun Dispatch.');
+    setIsResetting(true);
+    try {
+      const res = await adminResetPassword(resetModalUser.id, newPassword, confirmPassword);
+      if (res.ok && res.data?.success) {
+        toast.success(`Kata sandi akun ${resetModalUser.name} berhasil diatur ulang. Seluruh sesi aktif dibatalkan.`, 'Reset Berhasil');
+        triggerNotice('success', `Kata sandi untuk ${resetModalUser.name} (@${resetModalUser.username}) berhasil diatur ulang dengan aman.`);
+        setResetModalUser(null);
+        setNewPassword('');
+        setConfirmPassword('');
+        await refreshFirestoreData?.();
+      } else {
+        const msg = res.data?.error || 'Gagal mengatur ulang kata sandi.';
+        setResetModalError(msg);
+        toast.error(msg, 'Reset Gagal');
+      }
+    } catch (err: any) {
+      setResetModalError(err.message || 'Terjadi kesalahan sistem.');
+    } finally {
+      setIsResetting(false);
     }
   };
 
-  const handleCreateLeader = (e: React.FormEvent) => {
+  // Revoke All Sessions for User
+  const handleRevokeSessions = async (user: UserType) => {
+    if (!confirm(`Batalkan dan akhiri seluruh sesi aktif untuk pengguna "${user.name}" (@${user.username})? Pengguna harus login ulang di semua perangkat.`)) {
+      return;
+    }
+    try {
+      const res = await adminRevokeSessions(user.id);
+      if (res.ok && res.data?.success) {
+        toast.success(`Seluruh sesi aktif untuk ${user.name} berhasil diakhiri.`, 'Sesi Dicabut');
+        triggerNotice('success', `Seluruh sesi aktif untuk pengguna ${user.name} (@${user.username}) telah dibatalkan.`);
+        await refreshFirestoreData?.();
+      } else {
+        toast.error(res.data?.error || 'Gagal mengakhiri sesi pengguna.', 'Gagal');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Kesalahan jaringan.', 'Gagal');
+    }
+  };
+
+  // Status Toggle (Active / Inactive / Unlocked)
+  const handleToggleStatus = async (user: UserType, targetStatus?: 'active' | 'inactive' | 'unlocked') => {
+    const nextStatus = targetStatus || (user.active ? 'inactive' : 'active');
+    try {
+      const res = await adminUpdateUserStatus(user.id, nextStatus, 'Diubah oleh Superadmin di Management User');
+      if (res.ok && res.data?.success) {
+        toast.success(`Status akun ${user.name} diubah menjadi "${nextStatus}".`, 'Status Diperbarui');
+        triggerNotice('success', `Status akun ${user.name} berhasil diperbarui ke: ${nextStatus}`);
+        await refreshFirestoreData?.();
+      } else {
+        toast.error(res.data?.error || 'Gagal memperbarui status akun.', 'Gagal');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Kesalahan jaringan.', 'Gagal');
+    }
+  };
+
+  // Create User Submit (All 6 Roles)
+  const handleCreateUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!leadName.trim() || !leadUsername.trim() || !leadContractor.trim()) {
-      triggerNotice('error', 'Nama lengkap, Username, dan Kontraktor wajib diisi.');
+    setCreateError(null);
+
+    const cleanName = createName.trim();
+    const cleanUsername = createUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const cleanEmail = createEmail.trim().toLowerCase();
+
+    if (!cleanName || !cleanUsername || !cleanEmail) {
+      setCreateError('Nama lengkap, username, dan email wajib diisi.');
+      return;
+    }
+    if (createPassword.length < 8) {
+      setCreateError('Kata sandi awal minimal harus 8 karakter.');
+      return;
+    }
+    if (!/[a-zA-Z]/.test(createPassword) || !/[0-9]/.test(createPassword)) {
+      setCreateError('Kata sandi harus memuat kombinasi huruf dan angka.');
+      return;
+    }
+    if (createPassword !== createConfirmPassword) {
+      setCreateError('Konfirmasi kata sandi tidak cocok.');
       return;
     }
 
-    if (!leadArea) {
-      triggerNotice('error', 'Silakan pilih coverage area utama untuk Leader.');
+    if ((createRole === 'leader' || createRole === 'installer') && !createContractor.trim()) {
+      setCreateError('Nama Kontraktor wajib diisi untuk role Leader atau Installer.');
       return;
     }
 
-    const res = registerLeaderAccount({
-      name: leadName,
-      username: leadUsername,
-      phone: leadPhone,
-      contractor: leadContractor,
-      area: leadArea,
-      email: leadEmail
-    });
+    setIsCreatingUser(true);
+    try {
+      const res = await adminCreateUser({
+        name: cleanName,
+        username: cleanUsername,
+        email: cleanEmail,
+        altEmail: createAltEmail.trim() || undefined,
+        phone: createPhone.trim() || undefined,
+        role: createRole,
+        contractor: (createRole === 'leader' || createRole === 'installer') ? createContractor.trim() : undefined,
+        area: (createRole === 'leader' || createRole === 'installer') ? createArea.trim() : undefined,
+        password: createPassword
+      });
 
-    if (res.success) {
-      toast.success(`Akun Leader ${leadName} berhasil didaftarkan!`, 'Pendaftaran Sukses');
-      triggerNotice('success', `Akun Leader ${leadName} berhasil didaftarkan untuk ${leadContractor}! Password default: 12345678`);
-      setLeadName('');
-      setLeadUsername('');
-      setLeadContractor('');
-      setLeadPhone('');
-      setLeadEmail('');
-      setActiveTab('users_list');
-    } else {
-      toast.error(res.error || 'Gagal mendaftarkan akun Leader.', 'Pendaftaran Gagal');
-      triggerNotice('error', res.error || 'Gagal mendaftarkan akun Leader.');
+      if (res.ok && res.data?.success) {
+        toast.success(`Akun ${cleanName} (${createRole}) berhasil dibuat di Supabase PostgreSQL!`, 'Pendaftaran Sukses');
+        triggerNotice('success', `Akun baru ${cleanName} (@${cleanUsername}) berhasil didaftarkan ke Supabase PostgreSQL.`);
+        setCreateName('');
+        setCreateUsername('');
+        setCreateEmail('');
+        setCreateAltEmail('');
+        setCreatePhone('');
+        setCreateContractor('');
+        setCreatePassword('');
+        setCreateConfirmPassword('');
+        setActiveTab('users_list');
+        await refreshFirestoreData?.();
+      } else {
+        const msg = res.data?.error || 'Gagal membuat akun pengguna.';
+        setCreateError(msg);
+        toast.error(msg, 'Pendaftaran Gagal');
+      }
+    } catch (err: any) {
+      setCreateError(err.message || 'Terjadi kesalahan sistem.');
+    } finally {
+      setIsCreatingUser(false);
     }
   };
 
@@ -351,10 +488,21 @@ export const UserManagementView: React.FC = () => {
     });
   };
 
-  const filteredUsers = users.filter(u => {
-    if (roleFilter === 'ALL') return true;
-    return u.role === roleFilter;
-  });
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      if (roleFilter !== 'ALL' && u.role !== roleFilter) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesName = String(u.name || '').toLowerCase().includes(q);
+        const matchesUser = String(u.username || '').toLowerCase().includes(q);
+        const matchesEmail = String(u.email || '').toLowerCase().includes(q);
+        const matchesContractor = String(u.contractor || '').toLowerCase().includes(q);
+        const matchesArea = String(u.area || '').toLowerCase().includes(q);
+        return matchesName || matchesUser || matchesEmail || matchesContractor || matchesArea;
+      }
+      return true;
+    });
+  }, [users, roleFilter, searchQuery]);
 
   const sortedUsers = useMemo(() => {
     return sortDataArray(filteredUsers, sortState, (u: UserType, col: string) => {
@@ -364,6 +512,7 @@ export const UserManagementView: React.FC = () => {
       if (col === 'contractor') return `${u.contractor || ''} ${u.area || ''}`;
       if (col === 'phone') return u.phone || '';
       if (col === 'active') return u.active ? 1 : 0;
+      if (col === 'lastLogin') return u.lastLoginAt || '';
       return (u as any)[col];
     });
   }, [filteredUsers, sortState]);
@@ -371,16 +520,23 @@ export const UserManagementView: React.FC = () => {
   const getRoleBadge = (role: UserRole) => {
     switch (role) {
       case 'super_admin':
-        return <span className="px-2 py-0.5 rounded font-semibold text-[10px] bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">Super Admin</span>;
+        return <span className="px-2 py-0.5 rounded font-semibold text-[10px] bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">Superadmin</span>;
       case 'dispatch':
         return <span className="px-2 py-0.5 rounded font-semibold text-[10px] bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">Dispatch</span>;
       case 'leader':
-        return <span className="px-2 py-0.5 rounded font-semibold text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Leader / Korlap</span>;
+        return <span className="px-2 py-0.5 rounded font-semibold text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Leader</span>;
       case 'installer':
-        return <span className="px-2 py-0.5 rounded font-semibold text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Installer / Teknisi</span>;
+        return <span className="px-2 py-0.5 rounded font-semibold text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Installer</span>;
+      case 'management_data':
+        return <span className="px-2 py-0.5 rounded font-semibold text-[10px] bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300">Management Data</span>;
+      case 'it_support':
+        return <span className="px-2 py-0.5 rounded font-semibold text-[10px] bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">IT Support App</span>;
+      default:
+        return <span className="px-2 py-0.5 rounded font-semibold text-[10px] bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300">{role}</span>;
     }
   };
 
+  // Restrict entire view to Superadmin
   if (currentUser.role !== 'super_admin') {
     return (
       <div className="bg-white dark:bg-slate-900 rounded-xl p-8 border border-slate-200 dark:border-slate-800 text-center max-w-lg mx-auto space-y-4 shadow-sm my-8">
@@ -388,10 +544,10 @@ export const UserManagementView: React.FC = () => {
           <ShieldAlert className="w-6 h-6" />
         </div>
         <h3 className="font-bold text-slate-900 dark:text-white text-base">
-          Akses Ditolak: Manajemen Akun Staf Dibatasi
+          Akses Ditolak: Khusus Superadmin
         </h3>
         <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-          Leader tidak dapat membuat atau mengelola akun staf lain selain <strong>Installer (Teknisi)</strong>. Pembuatan akun staf umum (Dispatch, Leader, Super Admin) hanya dapat dilakukan oleh <strong>Super Admin</strong>.
+          Menu Manajemen User dan Reset Password hanya dapat diakses oleh akun dengan peran <strong>Superadmin</strong>.
         </p>
         <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg text-xs text-slate-600 dark:text-slate-300 font-medium">
           Akun Anda: <span className="font-bold capitalize">{currentUser.name} ({currentUser.role})</span>
@@ -405,49 +561,40 @@ export const UserManagementView: React.FC = () => {
       {/* Top Banner */}
       <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-md bg-purple-600 text-white flex items-center justify-center shrink-0">
-            <Users className="w-4 h-4" />
+          <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-purple-600/30">
+            <Users className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              Manajemen Akun & Role RBAC (MoraJaws)
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span>Management User &amp; Custom Authentication</span>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                Supabase PostgreSQL
+              </span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Super Admin berwenang mengelola, mengedit, dan menghapus akun pengguna dari Firestore dengan validasi nama dan username unik.
+              Superadmin berwenang mendaftarkan akun internal, reset password dengan bcrypt, rotasi sesi, serta aktivasi/deaktivasi akun staf.
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setActiveTab('create_dispatch')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-              activeTab === 'create_dispatch'
-                ? 'bg-indigo-600 text-white'
-                : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 hover:bg-indigo-100'
+            onClick={() => setActiveTab('create_user')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
+              activeTab === 'create_user'
+                ? 'bg-purple-600 text-white shadow-purple-600/30 ring-2 ring-purple-600/20'
+                : 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 hover:bg-purple-100 border border-purple-200 dark:border-purple-800'
             }`}
           >
             <UserPlus className="w-3.5 h-3.5" />
-            <span>+ Akun Dispatch</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('create_leader')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-              activeTab === 'create_leader'
-                ? 'bg-amber-600 text-white'
-                : 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 hover:bg-amber-100'
-            }`}
-          >
-            <Building2 className="w-3.5 h-3.5" />
-            <span>+ Akun Leader (Korlap)</span>
+            <span>+ Buat Akun Pengguna Baru</span>
           </button>
         </div>
       </div>
 
       {notice && (
         <div
-          className={`p-3 rounded-lg border flex items-center gap-2 text-xs ${
+          className={`p-3.5 rounded-xl border flex items-center gap-2 text-xs animate-in fade-in duration-200 ${
             notice.type === 'success'
               ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
               : 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
@@ -462,38 +609,26 @@ export const UserManagementView: React.FC = () => {
       <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 text-xs font-medium pb-1">
         <button
           onClick={() => setActiveTab('users_list')}
-          className={`px-3 py-1.5 border-b-2 flex items-center gap-1.5 cursor-pointer ${
+          className={`px-3 py-1.5 border-b-2 flex items-center gap-1.5 cursor-pointer transition-colors ${
             activeTab === 'users_list'
               ? 'border-purple-600 text-purple-600 dark:text-purple-400 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
           }`}
         >
           <Users className="w-3.5 h-3.5" />
-          <span>Daftar Seluruh Pengguna ({users.length})</span>
+          <span>Daftar Pengguna ({users.length})</span>
         </button>
 
         <button
-          onClick={() => setActiveTab('create_dispatch')}
-          className={`px-3 py-1.5 border-b-2 flex items-center gap-1.5 cursor-pointer ${
-            activeTab === 'create_dispatch'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+          onClick={() => setActiveTab('create_user')}
+          className={`px-3 py-1.5 border-b-2 flex items-center gap-1.5 cursor-pointer transition-colors ${
+            activeTab === 'create_user'
+              ? 'border-purple-600 text-purple-600 dark:text-purple-400 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
           }`}
         >
-          <Shield className="w-3.5 h-3.5" />
-          <span>Form Pendaftaran Dispatch</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('create_leader')}
-          className={`px-3 py-1.5 border-b-2 flex items-center gap-1.5 cursor-pointer ${
-            activeTab === 'create_leader'
-              ? 'border-amber-600 text-amber-600 dark:text-amber-400 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Building2 className="w-3.5 h-3.5" />
-          <span>Form Pendaftaran Leader / Korlap</span>
+          <UserPlus className="w-3.5 h-3.5" />
+          <span>Pendaftaran Akun Internal (6 Role)</span>
         </button>
       </div>
 
@@ -501,33 +636,50 @@ export const UserManagementView: React.FC = () => {
       {activeTab === 'users_list' && (
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h4 className="font-bold text-slate-900 dark:text-white text-xs">
-              Daftar Akun Pengguna Aktif & Akses Role
-            </h4>
+            <div className="flex items-center gap-2">
+              <h4 className="font-bold text-slate-900 dark:text-white text-xs">
+                Direktori Pengguna &amp; Hak Akses Role
+              </h4>
+              <span className="text-[11px] text-slate-400">({filteredUsers.length} akun ditampilkan)</span>
+            </div>
 
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-500">Filter Role:</span>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Cari nama, user, email..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="pl-8 pr-3 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+
+              {/* Role Filter */}
               <select
                 value={roleFilter}
                 onChange={e => setRoleFilter(e.target.value)}
-                className="px-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-800 dark:text-slate-200 font-medium"
+                className="px-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 font-medium"
               >
                 <option value="ALL">Semua Role ({users.length})</option>
-                <option value="super_admin">Super Admin</option>
-                <option value="dispatch">Dispatch</option>
-                <option value="leader">Leader / Korlap</option>
-                <option value="installer">Installer / Teknisi</option>
+                <option value="super_admin">1. Superadmin</option>
+                <option value="dispatch">2. Dispatch</option>
+                <option value="leader">3. Leader</option>
+                <option value="installer">4. Installer</option>
+                <option value="management_data">5. Management Data</option>
+                <option value="it_support">6. IT Support Application</option>
               </select>
             </div>
           </div>
 
-          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-lg">
+          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-50 dark:bg-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase">
+              <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase">
                 <tr>
                   <th className="py-2.5 px-3">
                     <SortableColumnHeader
-                      label="Nama Pengguna"
+                      label="Nama & Email"
                       columnKey="name"
                       currentSortColumn={sortState.column}
                       currentDirection={sortState.direction}
@@ -567,16 +719,6 @@ export const UserManagementView: React.FC = () => {
                   </th>
                   <th className="py-2.5 px-3">
                     <SortableColumnHeader
-                      label="Kontak"
-                      columnKey="phone"
-                      currentSortColumn={sortState.column}
-                      currentDirection={sortState.direction}
-                      dataType="text"
-                      onSort={handleSort}
-                    />
-                  </th>
-                  <th className="py-2.5 px-3">
-                    <SortableColumnHeader
                       label="Status"
                       columnKey="active"
                       currentSortColumn={sortState.column}
@@ -585,133 +727,193 @@ export const UserManagementView: React.FC = () => {
                       onSort={handleSort}
                     />
                   </th>
+                  <th className="py-2.5 px-3">Aktivitas Login</th>
                   <th className="py-2.5 px-3 text-center">Aksi Manajemen</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {sortedUsers.map(u => (
-                  <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="py-2.5 px-3">
-                      <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
-                        <span>{u.name}</span>
-                        {u.id === currentUser.id && (
-                          <span className="text-[10px] px-1.5 py-0.2 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 rounded font-normal">
-                            Anda
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-slate-400">{u.email || '-'}</div>
-                    </td>
-                    <td className="py-2.5 px-3 font-mono font-medium text-slate-700 dark:text-slate-300">
-                      @{u.username}
-                    </td>
-                    <td className="py-2.5 px-3">{getRoleBadge(u.role)}</td>
-                    <td className="py-2.5 px-3">
-                      <div className="font-medium text-slate-800 dark:text-slate-200">{u.contractor || '-'}</div>
-                      <div className="text-[11px] text-slate-400">{u.area || '-'}</div>
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600 dark:text-slate-400">
-                      {u.phone || '-'}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                          u.active
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                            : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                        }`}
-                      >
-                        {u.active ? 'Aktif' : 'Nonaktif'}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        {/* Edit User Button */}
-                        <button
-                          onClick={() => handleOpenEdit(u)}
-                          className="px-2 py-1 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 rounded border border-indigo-200 dark:border-indigo-800 text-[11px] flex items-center gap-1 cursor-pointer font-medium"
-                          title="Edit Data Pengguna di Firestore"
-                        >
-                          <Edit2 className="w-3 h-3 text-indigo-600" />
-                          <span>Edit</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            const res = resetUserPassword(u.id);
-                            triggerNotice('success', `Password untuk ${u.name} berhasil direset ke: ${res.newPassword}`);
-                          }}
-                          className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700 text-[11px] flex items-center gap-1 cursor-pointer"
-                          title="Reset Password ke default 12345678"
-                        >
-                          <KeyRound className="w-3 h-3 text-amber-500" />
-                          <span>Reset</span>
-                        </button>
-
-                        {u.id !== currentUser.id && (
-                          <>
-                            <button
-                              onClick={() => toggleUserStatus(u.id)}
-                              className={`px-2 py-1 rounded text-[11px] font-medium border cursor-pointer ${
-                                u.active
-                                  ? 'border-rose-200 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50'
-                                  : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50'
-                              }`}
-                            >
-                              {u.active ? 'Nonaktifkan' : 'Aktifkan'}
-                            </button>
-
-                            {currentUser.role === 'super_admin' && (
-                              <button
-                                onClick={() => setUserToDelete(u)}
-                                className="px-2 py-1 rounded text-[11px] font-medium border border-rose-300 dark:border-rose-900 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 flex items-center gap-1 cursor-pointer"
-                                title="Hapus Akun Pengguna dari Firestore (Super Admin Only)"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                <span>Hapus</span>
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
+                {sortedUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-slate-400">
+                      Tidak ada pengguna yang sesuai dengan filter.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  sortedUsers.map(u => {
+                    const isLocked = u.accountStatus === 'locked' || (u.lockedUntil && new Date(u.lockedUntil) > new Date());
+                    return (
+                      <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                        <td className="py-2.5 px-3">
+                          <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <span>{u.name}</span>
+                            {u.id === currentUser.id && (
+                              <span className="text-[10px] px-1.5 py-0.2 bg-purple-100 text-purple-700 dark:bg-purple-900/60 dark:text-purple-300 rounded font-normal">
+                                Anda
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400">{u.email || '-'}</div>
+                          {u.passwordChangedAt && (
+                            <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                              <KeyRound className="w-2.5 h-2.5 text-amber-500" />
+                              <span>Reset: {new Date(u.passwordChangedAt).toLocaleDateString('id-ID')}</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-medium text-slate-700 dark:text-slate-300">
+                          @{u.username}
+                        </td>
+                        <td className="py-2.5 px-3">{getRoleBadge(u.role)}</td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-medium text-slate-800 dark:text-slate-200">{u.contractor || '-'}</div>
+                          <div className="text-[11px] text-slate-400">{u.area || '-'}</div>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex flex-col gap-1 items-start">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                isLocked
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                  : u.active
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                              }`}
+                            >
+                              {isLocked ? 'Terkunci' : u.active ? 'Aktif' : 'Nonaktif'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-[11px]">
+                          {u.lastLoginAt ? (
+                            <div>
+                              <div className="text-slate-700 dark:text-slate-300 font-mono">
+                                {new Date(u.lastLoginAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}
+                              </div>
+                              {u.lastLoginIp && (
+                                <div className="text-[10px] text-slate-400 font-mono">IP: {u.lastLoginIp}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">Belum login</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            {/* Edit Button */}
+                            <button
+                              onClick={() => handleOpenEdit(u)}
+                              className="px-2 py-1 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-200 dark:border-indigo-800 text-[11px] flex items-center gap-1 cursor-pointer font-medium"
+                              title="Edit Profil Pengguna"
+                            >
+                              <Edit2 className="w-3 h-3 text-indigo-600" />
+                              <span>Edit</span>
+                            </button>
+
+                            {/* Reset Password Button */}
+                            <button
+                              onClick={() => handleOpenResetModal(u)}
+                              className="px-2 py-1 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-700 dark:text-amber-300 rounded-md border border-amber-200 dark:border-amber-800 text-[11px] flex items-center gap-1 cursor-pointer font-medium"
+                              title="Reset Password Akun (Superadmin Exclusive)"
+                            >
+                              <KeyRound className="w-3 h-3 text-amber-500" />
+                              <span>Reset Password</span>
+                            </button>
+
+                            {/* Status Toggle / Unlock Button */}
+                            {u.id !== currentUser.id && (
+                              <>
+                                {isLocked ? (
+                                  <button
+                                    onClick={() => handleToggleStatus(u, 'unlocked')}
+                                    className="px-2 py-1 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 hover:bg-amber-100 rounded-md border border-amber-300 text-[11px] font-medium flex items-center gap-1 cursor-pointer"
+                                    title="Buka Kunci Akun"
+                                  >
+                                    <Unlock className="w-3 h-3" />
+                                    <span>Buka Kunci</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleToggleStatus(u)}
+                                    className={`px-2 py-1 rounded-md text-[11px] font-medium border cursor-pointer ${
+                                      u.active
+                                        ? 'border-rose-200 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50'
+                                        : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50'
+                                    }`}
+                                    title={u.active ? 'Nonaktifkan Akun' : 'Aktifkan Akun'}
+                                  >
+                                    {u.active ? 'Nonaktifkan' : 'Aktifkan'}
+                                  </button>
+                                )}
+
+                                {/* Revoke Sessions Button */}
+                                <button
+                                  onClick={() => handleRevokeSessions(u)}
+                                  className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md border border-slate-200 dark:border-slate-700 text-[11px] flex items-center gap-1 cursor-pointer"
+                                  title="Akhiri Seluruh Sesi Aktif Pengguna"
+                                >
+                                  <LogOut className="w-3 h-3 text-rose-500" />
+                                  <span>Akhiri Sesi</span>
+                                </button>
+
+                                {/* Delete User Button */}
+                                <button
+                                  onClick={() => setUserToDelete(u)}
+                                  className="px-2 py-1 rounded-md text-[11px] font-medium border border-rose-300 dark:border-rose-900 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 flex items-center gap-1 cursor-pointer"
+                                  title="Hapus Akun Pengguna"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Hapus</span>
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* TAB 2: CREATE DISPATCH */}
-      {activeTab === 'create_dispatch' && (
-        <form onSubmit={handleCreateDispatch} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-2xs space-y-4 text-xs max-w-2xl">
-          <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 flex items-center justify-center">
-              <Shield className="w-4 h-4" />
+      {/* TAB 2: UNIVERSAL CREATE USER FORM (ALL 6 ROLES) */}
+      {activeTab === 'create_user' && (
+        <form onSubmit={handleCreateUserSubmit} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-2xs space-y-5 text-xs max-w-3xl">
+          <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
+              <UserPlus className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="font-bold text-slate-900 dark:text-white text-xs">
-                Pendaftaran Akun Baru: Dispatch Officer
+              <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                Pendaftaran Akun Internal MoraJaws
               </h4>
               <p className="text-[11px] text-slate-500">
-                Dispatch bertanggung jawab memonitor tiket, live chat dengan installer, dan menutup (close) tiket.
+                Pendaftaran akun internal hanya dapat dilakukan oleh Superadmin. Seluruh akun disimpan langsung ke Supabase PostgreSQL dengan hashing bcrypt.
               </p>
             </div>
           </div>
 
+          {createError && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 rounded-xl flex items-center gap-2 text-rose-800 dark:text-rose-200 text-xs">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{createError}</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                Nama Lengkap Petugas <span className="text-rose-500">*</span>
+                Nama Lengkap <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 required
-                placeholder="Contoh: Rina Kartika"
-                value={dispName}
-                onChange={e => setDispName(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200"
+                placeholder="Contoh: Budi Santoso"
+                value={createName}
+                onChange={e => setCreateName(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
               />
             </div>
 
@@ -722,10 +924,37 @@ export const UserManagementView: React.FC = () => {
               <input
                 type="text"
                 required
-                placeholder="Contoh: dispatch_rina"
-                value={dispUsername}
-                onChange={e => setDispUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 font-mono"
+                placeholder="Contoh: budi_s"
+                value={createUsername}
+                onChange={e => setCreateUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 font-mono focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                Email Pengguna <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="email"
+                required
+                placeholder="budi@morajaws.net"
+                value={createEmail}
+                onChange={e => setCreateEmail(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                Email Pemulihan / Alt (Opsional)
+              </label>
+              <input
+                type="email"
+                placeholder="budi.personal@gmail.com"
+                value={createAltEmail}
+                onChange={e => setCreateAltEmail(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
               />
             </div>
 
@@ -736,203 +965,324 @@ export const UserManagementView: React.FC = () => {
               <input
                 type="text"
                 placeholder="0812xxxxxxxx"
-                value={dispPhone}
-                onChange={e => setDispPhone(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 font-mono"
+                value={createPhone}
+                onChange={e => setCreatePhone(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 font-mono focus:outline-hidden focus:ring-2 focus:ring-purple-500"
               />
             </div>
 
             <div>
               <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                Email Petugas (Opsional)
+                Role Akses MoraJaws <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="email"
-                placeholder="rina@company.com"
-                value={dispEmail}
-                onChange={e => setDispEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200"
-              />
+              <select
+                value={createRole}
+                onChange={e => setCreateRole(e.target.value as UserRole)}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 font-semibold focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="super_admin">1. Superadmin (Akses Penuh Sistem)</option>
+                <option value="dispatch">2. Dispatch (Distribusi &amp; Monitoring WO)</option>
+                <option value="leader">3. Leader / Korlap (Supervisor Mitra Kontraktor)</option>
+                <option value="installer">4. Installer / Teknisi (Pelaksana Lapangan)</option>
+                <option value="management_data">5. Management Data (Import &amp; Master Data)</option>
+                <option value="it_support">6. IT Support Application (Audit Log &amp; Monitoring)</option>
+              </select>
+            </div>
+
+            {/* Contractor & Area fields for leader / installer */}
+            {(createRole === 'leader' || createRole === 'installer') && (
+              <>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                    Mitra Kontraktor <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: PT Fiber Utama Mandiri"
+                    value={createContractor}
+                    onChange={e => setCreateContractor(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                    Coverage Area Kerja
+                  </label>
+                  <SearchableAreaDropdown
+                    value={createArea}
+                    onChange={setCreateArea}
+                    areas={coverageAreas}
+                    placeholder="Pilih atau cari area..."
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Initial Password */}
+            <div>
+              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                Kata Sandi Awal <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showCreatePassword ? 'text' : 'password'}
+                  required
+                  placeholder="Minimal 8 karakter (huruf + angka)"
+                  value={createPassword}
+                  onChange={e => setCreatePassword(e.target.value)}
+                  className="w-full pl-3 pr-10 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCreatePassword(!showCreatePassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                  tabIndex={-1}
+                >
+                  {showCreatePassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm Initial Password */}
+            <div>
+              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                Konfirmasi Kata Sandi Awal <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showCreateConfirmPassword ? 'text' : 'password'}
+                  required
+                  placeholder="Ketik ulang kata sandi"
+                  value={createConfirmPassword}
+                  onChange={e => setCreateConfirmPassword(e.target.value)}
+                  className="w-full pl-3 pr-10 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCreateConfirmPassword(!showCreateConfirmPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                  tabIndex={-1}
+                >
+                  {showCreateConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="pt-2 flex items-center justify-end gap-2">
+          {/* Password Validation Indicator */}
+          {createPassword && (
+            <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1.5 text-[11px]">
+              <span className="font-semibold text-slate-700 dark:text-slate-300 block">Kekuatan Kata Sandi:</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className={`flex items-center gap-1.5 ${createPassword.length >= 8 ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                  {createPassword.length >= 8 ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                  <span>Minimal 8 karakter</span>
+                </div>
+                <div className={`flex items-center gap-1.5 ${/[a-zA-Z]/.test(createPassword) && /[0-9]/.test(createPassword) ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                  {/[a-zA-Z]/.test(createPassword) && /[0-9]/.test(createPassword) ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                  <span>Huruf dan angka</span>
+                </div>
+                <div className={`flex items-center gap-1.5 ${createPassword === createConfirmPassword && createConfirmPassword ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                  {createPassword === createConfirmPassword && createConfirmPassword ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                  <span>Konfirmasi cocok</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
               onClick={() => setActiveTab('users_list')}
-              className="px-4 py-2 border rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 cursor-pointer"
+              className="px-4 py-2 border rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer"
+              disabled={isCreatingUser}
+              className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl font-bold flex items-center gap-2 shadow-sm shadow-purple-600/30 cursor-pointer transition-all active:scale-95"
             >
-              <Check className="w-4 h-4" />
-              <span>Daftarkan Akun Dispatch</span>
+              <UserPlus className="w-4 h-4" />
+              <span>{isCreatingUser ? 'Mendaftarkan Akun...' : 'Daftarkan Akun Internal'}</span>
             </button>
           </div>
         </form>
       )}
 
-      {/* TAB 3: CREATE LEADER (WITH SEARCHABLE AREA DROPDOWN) */}
-      {activeTab === 'create_leader' && (
-        <form onSubmit={handleCreateLeader} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-2xs space-y-4 text-xs max-w-2xl">
-          <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 flex items-center justify-center">
-              <Building2 className="w-4 h-4" />
-            </div>
-            <div>
-              <h4 className="font-bold text-slate-900 dark:text-white text-xs">
-                Pendaftaran Akun Baru: Leader / Korlap Mitra
-              </h4>
-              <p className="text-[11px] text-slate-500">
-                Leader wajib dihubungkan ke Kontraktor dan Coverage Area resmi. Gunakan pencarian area untuk mempermudah pemilihan.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                Nama Lengkap Korlap <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="Contoh: Hendra Gunawan"
-                value={leadName}
-                onChange={e => setLeadName(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                Username Unik <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="Contoh: leader_hendra"
-                value={leadUsername}
-                onChange={e => setLeadUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                Nama Kontraktor <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                list="contractor-suggestions"
-                placeholder="Ketik nama kontraktor (misal: PT Mitra Jaringan Solusi)"
-                value={leadContractor}
-                onChange={e => setLeadContractor(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200"
-              />
-              <datalist id="contractor-suggestions">
-                {contractors.map((c, cIdx) => (
-                  <option key={`suggestion-${c.id || c.name}-${cIdx}`} value={c.name}>{c.name} ({c.code})</option>
-                ))}
-              </datalist>
-            </div>
-
-            {/* SEARCHABLE AREA DROPDOWN */}
-            <div>
-              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                Coverage Area Utama <span className="text-rose-500">*</span>
-              </label>
-              <SearchableAreaDropdown
-                value={leadArea}
-                onChange={setLeadArea}
-                areas={coverageAreas}
-                placeholder="Ketik nama area untuk mencari..."
-                required
-              />
-              <p className="text-[10px] text-slate-400 mt-1">
-                Cari dan pilih area resmi yang terdaftar di sistem.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                Nomor Telepon / WhatsApp
-              </label>
-              <input
-                type="text"
-                placeholder="0812xxxxxxxx"
-                value={leadPhone}
-                onChange={e => setLeadPhone(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                Email Korlap (Opsional)
-              </label>
-              <input
-                type="email"
-                placeholder="hendra@mitra.com"
-                value={leadEmail}
-                onChange={e => setLeadEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab('users_list')}
-              className="px-4 py-2 border rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 cursor-pointer"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer"
-            >
-              <Check className="w-4 h-4" />
-              <span>Daftarkan Akun Leader (Korlap)</span>
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* EDIT USER MODAL (FOR SUPER ADMIN) */}
-      {editingUser && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+      {/* RESET PASSWORD MODAL (Superadmin Exclusive) */}
+      {resetModalUser && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-xl">
-                  <Edit2 className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                  <KeyRound className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                    Edit Akun Pengguna (Firestore)
+                  <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                    Reset Password Pengguna
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    ID: <span className="font-mono">{editingUser.id}</span>
+                    {resetModalUser.name} (@{resetModalUser.username})
                   </p>
                 </div>
               </div>
               <button
-                type="button"
-                onClick={() => setEditingUser(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                onClick={() => setResetModalUser(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditUser} className="p-4 sm:p-5 space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {/* User Meta Information */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Peran Akun:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{resetModalUser.role}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Email Akun:</span>
+                <span className="font-mono text-slate-700 dark:text-slate-300">{resetModalUser.email || '-'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Terakhir Password Direset:</span>
+                <span className="font-mono text-slate-700 dark:text-slate-300">
+                  {resetModalUser.passwordChangedAt ? new Date(resetModalUser.passwordChangedAt).toLocaleString('id-ID') : 'Belum pernah diubah'}
+                </span>
+              </div>
+            </div>
+
+            {/* Security Warning Notice */}
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-amber-800 dark:text-amber-300 text-[11px] leading-relaxed flex items-start gap-2">
+              <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                Reset password akan langsung <strong>mencabut seluruh sesi aktif</strong> pengguna di semua perangkat. Password lama tidak dapat digunakan kembali.
+              </span>
+            </div>
+
+            {resetModalError && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 rounded-xl text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{resetModalError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                  Kata Sandi Baru <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    required
+                    placeholder="Minimal 8 karakter kombinasi huruf & angka"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    className="w-full pl-3 pr-10 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                    tabIndex={-1}
+                  >
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                  Konfirmasi Kata Sandi Baru <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    placeholder="Ketik ulang kata sandi baru"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    className="w-full pl-3 pr-10 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                    tabIndex={-1}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Password Strength Checklist */}
+              {newPassword && (
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1 text-[11px]">
+                  <div className={`flex items-center gap-1.5 ${newPassword.length >= 8 ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                    {newPassword.length >= 8 ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                    <span>Minimal 8 karakter</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 ${/[a-zA-Z]/.test(newPassword) && /[0-9]/.test(newPassword) ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                    {/[a-zA-Z]/.test(newPassword) && /[0-9]/.test(newPassword) ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                    <span>Memuat kombinasi huruf dan angka</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 ${newPassword === confirmPassword && confirmPassword ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                    {newPassword === confirmPassword && confirmPassword ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                    <span>Konfirmasi cocok</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setResetModalUser(null)}
+                  className="px-4 py-2 border rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-50 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResetting}
+                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-sm cursor-pointer transition-all active:scale-95"
+                >
+                  <KeyRound className="w-4 h-4" />
+                  <span>{isResetting ? 'Mereset...' : 'Simpan Kata Sandi Baru'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT USER MODAL */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                  Edit Profil Pengguna
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Ubah data staf dan peran hak akses di Supabase PostgreSQL.
+                </p>
+              </div>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditUser} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
                     Nama Lengkap <span className="text-rose-500">*</span>
@@ -942,7 +1292,7 @@ export const UserManagementView: React.FC = () => {
                     required
                     value={editName}
                     onChange={e => setEditName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 font-medium"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200"
                   />
                 </div>
 
@@ -961,42 +1311,37 @@ export const UserManagementView: React.FC = () => {
 
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                    Role Pengguna <span className="text-rose-500">*</span>
+                    Peran / Role Pengguna
                   </label>
                   <select
                     value={editRole}
                     onChange={e => setEditRole(e.target.value as UserRole)}
                     disabled={editingUser.id === currentUser.id}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-50"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 font-semibold"
                   >
-                    <option value="super_admin">Super Admin</option>
-                    <option value="dispatch">Dispatch</option>
-                    <option value="leader">Leader / Korlap</option>
-                    <option value="installer">Installer / Teknisi</option>
+                    <option value="super_admin">1. Superadmin</option>
+                    <option value="dispatch">2. Dispatch</option>
+                    <option value="leader">3. Leader</option>
+                    <option value="installer">4. Installer</option>
+                    <option value="management_data">5. Management Data</option>
+                    <option value="it_support">6. IT Support Application</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                    Kontraktor / Vendor
+                    Mitra Kontraktor
                   </label>
                   <input
                     type="text"
-                    list="edit-contractor-list"
                     value={editContractor}
                     onChange={e => setEditContractor(e.target.value)}
-                    placeholder="Nama kontraktor..."
+                    placeholder="Nama vendor kontraktor"
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200"
                   />
-                  <datalist id="edit-contractor-list">
-                    {contractors.map((c, i) => (
-                      <option key={`c-${c.name}-${i}`} value={c.name} />
-                    ))}
-                  </datalist>
                 </div>
 
-                {/* SEARCHABLE AREA IN EDIT MODAL */}
-                <div className="sm:col-span-2">
+                <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
                     Coverage Area
                   </label>
@@ -1021,7 +1366,7 @@ export const UserManagementView: React.FC = () => {
                   />
                 </div>
 
-                <div>
+                <div className="sm:col-span-2">
                   <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
                     Email Pengguna
                   </label>
@@ -1038,7 +1383,7 @@ export const UserManagementView: React.FC = () => {
                   <div>
                     <span className="font-bold text-slate-800 dark:text-slate-200">Status Akun Aktif</span>
                     <p className="text-[10.5px] text-slate-500">
-                      Jika dinonaktifkan, sesi login pengguna akan langsung dicabut dan tidak dapat login.
+                      Jika dinonaktifkan, seluruh sesi login akan dibatalkan dan pengguna tidak dapat login kembali.
                     </p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">

@@ -67,15 +67,18 @@ export const classifyInstallerStatus = (ticket: Ticket): 'done' | 'pending' | 'r
   if (isCancel) return 'cancel';
 
   // 2. Reschedule check
+  const remarksInst = String(ticket.remarksWOInstaller ?? '').toLowerCase();
+  const remarksAg = String(ticket.remarksAgent ?? '').toLowerCase();
+  const appType = String(ticket.appointmentType ?? '').toLowerCase();
+  const ticketCat = String(ticket.ticketCategory ?? '').toLowerCase();
   const isReschedule =
     ticket.statusWhatsApp === 'reschedule_requested' ||
     (ticket.statusWOInstaller === 'Pending Technical' &&
-      (ticket.remarksWOInstaller?.toLowerCase().includes('reschedule') ||
-        ticket.remarksAgent?.toLowerCase().includes('reschedule'))) ||
-    ticket.remarksAgent?.toLowerCase().includes('reschedule') ||
-    ticket.remarksWOInstaller?.toLowerCase().includes('reschedule') ||
-    ticket.appointmentType?.toLowerCase().includes('reschedule') ||
-    ticket.ticketCategory?.toLowerCase().includes('reschedule') ||
+      (remarksInst.includes('reschedule') || remarksAg.includes('reschedule'))) ||
+    remarksAg.includes('reschedule') ||
+    remarksInst.includes('reschedule') ||
+    appType.includes('reschedule') ||
+    ticketCat.includes('reschedule') ||
     (ticket as any).statusWOInstaller === 'Reschedule';
 
   if (isReschedule) return 'reschedule';
@@ -220,13 +223,13 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({
       // Search query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
-        const matchWO = t.woNumber?.toLowerCase().includes(query);
-        const matchCust = t.customerName?.toLowerCase().includes(query);
-        const matchCustId = (t.idCustomer || t.customerId || '').toLowerCase().includes(query);
-        const matchPhone = (t.customerPhone || '').includes(query);
-        const matchAddr = (t.streetName || '').toLowerCase().includes(query);
-        const matchCluster = (t.clusterName || '').toLowerCase().includes(query);
-        const matchArea = (t.area || '').toLowerCase().includes(query);
+        const matchWO = String(t.woNumber ?? '').toLowerCase().includes(query);
+        const matchCust = String(t.customerName ?? '').toLowerCase().includes(query);
+        const matchCustId = String(t.idCustomer || t.customerId || '').toLowerCase().includes(query);
+        const matchPhone = String(t.customerPhone ?? '').includes(query);
+        const matchAddr = String(t.streetName ?? '').toLowerCase().includes(query);
+        const matchCluster = String(t.clusterName ?? '').toLowerCase().includes(query);
+        const matchArea = String(t.area ?? '').toLowerCase().includes(query);
         return matchWO || matchCust || matchCustId || matchPhone || matchAddr || matchCluster || matchArea;
       }
 

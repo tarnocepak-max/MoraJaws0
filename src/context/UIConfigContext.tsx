@@ -370,7 +370,6 @@ export const UIConfigProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         'Content-Type': 'application/json',
         ...getAuthHeaders()
       },
-      credentials: 'include',
       body: JSON.stringify({ config })
     }).catch(() => {});
 
@@ -422,14 +421,23 @@ export const UIConfigProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return true;
       })
       .map(item => {
+        const safeRoles = Array.isArray(item.roles) ? item.roles : [];
         if (item.id === 'setup') {
-          return { ...item, label: 'PUSAT SETUP' };
+          return { ...item, label: 'PUSAT SETUP', roles: safeRoles };
         }
         if (item.id === 'droplist_management') {
-          return { ...item, label: 'Kategori Report' };
+          return { ...item, label: 'Kategori Report', roles: safeRoles };
         }
-        return item;
+        return { ...item, roles: safeRoles };
       });
+  };
+
+  const sanitizeStandaloneMenus = (items: StandaloneMenuItem[]): StandaloneMenuItem[] => {
+    if (!Array.isArray(items)) return DEFAULT_STANDALONE_MENUS;
+    return items.map(item => ({
+      ...item,
+      roles: Array.isArray(item.roles) ? item.roles : ['super_admin']
+    }));
   };
 
   // 1. Exactly 3 Categories: Contractor & Area, Installer, Menu Tambahan
@@ -452,12 +460,12 @@ export const UIConfigProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const saved = localStorage.getItem(NAV_STANDALONE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return sanitizeStandaloneMenus(parsed);
       }
     } catch (e) {
       console.warn('Failed to parse saved standaloneMenus', e);
     }
-    return DEFAULT_STANDALONE_MENUS;
+    return sanitizeStandaloneMenus(DEFAULT_STANDALONE_MENUS);
   });
 
   // 3. Submenu Items grouped under categories (Sanitized)

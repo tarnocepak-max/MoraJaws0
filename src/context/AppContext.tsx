@@ -344,13 +344,32 @@ try {
   legacyKeys.forEach(k => localStorage.removeItem(k));
 } catch (e) {}
 
+export const normalizeContractor = (c: any): Contractor => {
+  if (!c) return { id: '', name: '', code: '', coverageAreas: [] };
+  const rawAreas = c.coverageAreas ?? c.coverage_areas ?? [];
+  const coverageAreas = Array.isArray(rawAreas) ? rawAreas.filter(Boolean).map(String) : [];
+  return {
+    ...c,
+    id: String(c.id ?? ''),
+    name: String(c.name ?? ''),
+    code: String(c.code ?? ''),
+    coverageAreas,
+    leaderName: c.leaderName ?? c.leader_name ?? '',
+    leaderPhone: c.leaderPhone ?? c.leader_phone ?? '',
+    leaderEmail: c.leaderEmail ?? c.leader_email ?? ''
+  };
+};
+
 export const deduplicateContractors = (list: Contractor[]): Contractor[] => {
+  if (!Array.isArray(list)) return [];
   const seenIds = new Set<string>();
   const seenNames = new Set<string>();
   const result: Contractor[] = [];
 
-  for (const c of list) {
-    if (!c || !c.name) continue;
+  for (const raw of list) {
+    if (!raw) continue;
+    const c = normalizeContractor(raw);
+    if (!c.name) continue;
     const cleanId = (c.id || '').trim();
     const cleanName = c.name.trim().toLowerCase();
 
@@ -385,10 +404,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
 
   const getAuthHeaders = (): Record<string, string> => {
-    return {
-      'Content-Type': 'application/json',
-      'X-Morajaws-Client': 'browser'
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
     };
+    try {
+      const sessionStr = localStorage.getItem('morajaws_auth_session');
+      if (sessionStr) {
+        const sess = JSON.parse(sessionStr);
+        if (sess.token) headers['Authorization'] = `Bearer ${sess.token}`;
+        if (sess.userId) headers['x-user-id'] = sess.userId;
+        if (sess.username) headers['x-username'] = sess.username;
+      }
+    } catch (e) {}
+    return headers;
   };
 
   // Cloud Firestore Real-time Sync & Connectivity Status
@@ -420,22 +448,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<User>(() => {
     try {
       const stored = localStorage.getItem('morajaws_logged_in');
-      const displayStr = localStorage.getItem('morajaws_user_display');
-      if (stored === 'true' && displayStr) {
-        const display = JSON.parse(displayStr);
-        if (display && display.id && display.role) {
+      const sessionStr = localStorage.getItem('morajaws_auth_session');
+      if (stored === 'true' && sessionStr) {
+        const session = JSON.parse(sessionStr);
+        const match = users.find(u => u.id === session.userId || u.username === session.username);
+        if (match) return match;
+        if (session && session.userId && session.role) {
           return {
-            id: display.id,
-            name: display.name || display.username,
-            username: display.username,
-            role: display.role,
-            contractor: display.contractor,
-            contractorId: display.contractorId,
-            area: display.area,
-            email: display.email || `${display.username}@morajaws.net`,
-            phone: display.phone,
-            active: display.active !== false,
-            createdAt: display.loginAt || new Date().toISOString()
+            id: session.userId,
+            name: session.name || session.username,
+            username: session.username,
+            role: session.role,
+            contractor: session.contractor,
+            contractorId: session.contractorId,
+            area: session.area,
+            email: session.email || `${session.username}@morajaws.net`,
+            phone: session.phone,
+            active: session.active !== false,
+            createdAt: session.loginAt || new Date().toISOString()
           };
         }
       }
@@ -779,16 +809,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (isCancelled) return;
             if (liveUsers && liveUsers.length > 0) {
               setUsers(liveUsers);
-              if (currentUser && currentUser.id) {
-                const matchingLive = liveUsers.find(u => u.id === currentUser.id || u.username.toLowerCase() === (currentUser.username || '').toLowerCase());
-                if (matchingLive) {
-                  if (matchingLive.active === false || (matchingLive as any).isDeleted) {
-                    logout();
-                    toast.error('Akun Anda telah dinonaktifkan oleh Administrator.', 'Akses Ditutup');
-                  } else {
-                    setCurrentUser(prev => ({ ...prev, ...matchingLive }));
+              const sessionStr = localStorage.getItem('morajaws_auth_session');
+              if (sessionStr) {
+                try {
+                  const s = JSON.parse(sessionStr);
+                  const matchingLive = liveUsers.find(u => u.id === s.userId || u.username.toLowerCase() === (s.username || '').toLowerCase());
+                  if (matchingLive) {
+                    if (matchingLive.active === false || (matchingLive as any).isDeleted) {
+                      logout();
+                      toast.error('Akun Anda telah dinonaktifkan oleh Administrator.', 'Akses Ditutup');
+                    } else {
+                      setCurrentUser(matchingLive);
+                    }
                   }
-                }
+                } catch (e) {}
               }
             }
           },
@@ -935,7 +969,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDataLoadError(null);
     try {
       const headers = getAuthHeaders();
-      const res = await fetch('/api/bootstrap', { headers, credentials: 'include' });
+      const res = await fetch('/api/bootstrap', { headers });
       if (res.ok) {
         const data = await res.json();
         if (data && data.success) {
@@ -944,8 +978,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           if (data.currentUser && data.isAuthenticated) {
             setCurrentUser(prev => ({ ...prev, ...data.currentUser }));
-            setIsLoggedIn(true);
-          } else if (data.isAuthenticated === false) {
+          } else if (data.isAuthenticated === false && headers['Authorization']) {
             setIsLoggedIn(false);
             setCurrentUser(UNAUTHENTICATED_USER);
             try {
@@ -957,7 +990,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setTickets(data.tickets);
           }
           if (Array.isArray(data.contractors) && data.contractors.length > 0) {
-            setContractors(data.contractors);
+            setContractors(deduplicateContractors(data.contractors));
           }
           if (Array.isArray(data.coverageAreas) && data.coverageAreas.length > 0) {
             setCoverageAreas(data.coverageAreas);
@@ -974,9 +1007,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentUser.active &&
         (currentUser.role === 'super_admin' || currentUser.role === 'it_support')
       );
-      if (canViewAudit && isLoggedIn) {
+      if (canViewAudit && headers['Authorization']) {
         try {
-          const auditRes = await fetch('/api/supabase/audit-logs?limit=100', { headers, credentials: 'include' });
+          const auditRes = await fetch('/api/supabase/audit-logs?limit=100', { headers });
           if (auditRes.ok) {
             const auditData = await auditRes.json();
             if (auditData && auditData.success && Array.isArray(auditData.data)) {
@@ -1148,7 +1181,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem('morajaws_logged_in');
-      return stored === 'true';
+      const session = localStorage.getItem('morajaws_auth_session');
+      if (stored === 'true' && session) {
+        return true;
+      }
     } catch (e) {}
     return false;
   });
@@ -1176,13 +1212,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'Content-Type': 'application/json',
         ...getAuthHeaders()
       },
-      credentials: 'include',
       body: JSON.stringify({ operationalDate: date })
     }).catch(() => {});
   };
 
   useEffect(() => {
-    fetch('/api/system/operational-date', { credentials: 'include' })
+    fetch('/api/system/operational-date')
       .then(res => res.json())
       .then(data => {
         if (data && data.success && data.operationalDate) {
@@ -1191,62 +1226,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       })
       .catch(() => {});
-
-    // Phase 15A.7.6: Authoritative session validation on page load/refresh
-    fetch('/api/auth/session', {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Morajaws-Client': 'browser'
-      },
-      credentials: 'include'
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.authenticated === true && data.user) {
-          const authUser = data.user;
-          setIsLoggedIn(true);
-          setCurrentUser(prev => ({
-            ...prev,
-            ...authUser,
-            id: authUser.id,
-            name: authUser.name || authUser.username,
-            username: authUser.username,
-            role: authUser.role,
-            contractor: authUser.contractor,
-            contractorId: authUser.contractorId,
-            area: authUser.area,
-            active: authUser.active !== false
-          }));
-          try {
-            localStorage.setItem('morajaws_logged_in', 'true');
-            localStorage.setItem('morajaws_user_display', JSON.stringify({
-              id: authUser.id,
-              name: authUser.name,
-              username: authUser.username,
-              role: authUser.role,
-              contractor: authUser.contractor,
-              contractorId: authUser.contractorId,
-              area: authUser.area,
-              email: authUser.email
-            }));
-            localStorage.removeItem('morajaws_auth_session');
-          } catch {}
-        } else if (data && data.authenticated === false) {
-          // Stale local session without valid server backend cookie/token
-          setIsLoggedIn(false);
-          setCurrentUser(UNAUTHENTICATED_USER);
-          try {
-            localStorage.setItem('morajaws_logged_in', 'false');
-            localStorage.removeItem('morajaws_auth_session');
-            localStorage.removeItem('morajaws_user_display');
-          } catch {}
-        }
-      })
-      .catch(() => {
-        setIsLoggedIn(false);
-        setCurrentUser(UNAUTHENTICATED_USER);
-      });
   }, []);
 
   // Authentication & Session (Phase 13E: Supabase Auth as Sole Production Mechanism)
@@ -1268,14 +1247,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      // Primary Production Authentication Gateway: /api/auth/supabase-login
-      const serverRes = await fetch('/api/auth/supabase-login', {
+      // Primary Production Authentication Gateway: /api/auth/login (MoraJaws Custom Auth)
+      const serverRes = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Morajaws-Client': 'browser'
-        },
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           identifier: cleanUser,
           password
@@ -1285,49 +1260,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const data = await serverRes.json().catch(() => ({}));
 
       if (!serverRes.ok || !data.success) {
-        // Safe classification: derive appropriate fallback code from HTTP status instead of defaulting everything to MJ-AUTH-001
-        let errCode = data.code;
-        if (!errCode) {
-          if (serverRes.status === 404) errCode = 'STAFF_NOT_FOUND';
-          else if (serverRes.status === 403) errCode = 'ACCOUNT_DISABLED';
-          else if (serverRes.status === 409) errCode = 'STAFF_AUTH_EMAIL_MISSING';
-          else if (serverRes.status === 503) errCode = 'SUPABASE_NOT_CONFIGURED';
-          else if (serverRes.status === 500) errCode = 'SESSION_STORE_ERROR';
-          else errCode = 'AUTH_INVALID_CREDENTIALS';
-        }
+        const errCode = data.code || 'MJ-AUTH-001';
+        let errorMsg = data.error || 'Autentikasi gagal. Kredensial tidak cocok.';
 
-        let errorMsg = data.error;
-
-        if (errCode === 'SUPABASE_NOT_CONFIGURED') {
-          errorMsg = errorMsg || 'Layanan Supabase backend belum dikonfigurasi pada environment variables server.';
-        } else if (errCode === 'CONFIGURATION_MISMATCH' || errCode === 'ENVIRONMENT_INVALID') {
-          errorMsg = errorMsg || 'Konfigurasi proyek Supabase tidak sesuai atau terjadi ketidakcocokan environment.';
-        } else if (errCode === 'AUTH_PROVIDER_UNAVAILABLE') {
-          errorMsg = errorMsg || 'Layanan Supabase Auth sedang tidak dapat dijangkau. Coba beberapa saat lagi.';
-        } else if (errCode === 'SCHEMA_NOT_INITIALIZED') {
-          errorMsg = errorMsg || 'Skema database Supabase belum diinisialisasi (tabel public belum dibuat). Silakan terapkan migrasi skema database terlebih dahulu.';
-        } else if (errCode === 'DATABASE_UNAVAILABLE' || (serverRes.status === 503 && errCode !== 'SUPABASE_NOT_CONFIGURED' && errCode !== 'CONFIGURATION_MISMATCH' && errCode !== 'SCHEMA_NOT_INITIALIZED')) {
-          errorMsg = errorMsg || 'Database authoritative Supabase tidak dapat diakses saat login.';
-        } else if (serverRes.status === 404 || errCode === 'auth/user-not-found' || errCode === 'ACCOUNT_NOT_FOUND' || errCode === 'STAFF_NOT_FOUND' || errCode === 'PROFILE_NOT_FOUND') {
-          errorMsg = errorMsg || 'Identitas staf tidak terdaftar dalam direktori MoraJaws.';
+        if (errCode === 'DATABASE_UNAVAILABLE' || serverRes.status === 503) {
+          errorMsg = 'Database authoritative Supabase PostgreSQL tidak dapat diakses saat login.';
+        } else if (serverRes.status === 404 || errCode === 'auth/user-not-found' || errCode === 'ACCOUNT_NOT_FOUND') {
+          errorMsg = `Nama pengguna atau email "${cleanUser}" tidak ditemukan. Hubungi Superadmin untuk mendapatkan akses MoraJaws.`;
         } else if (serverRes.status === 403 || errCode === 'auth/user-disabled' || errCode === 'ACCOUNT_DISABLED' || errCode === 'ACCOUNT_DELETED') {
           errorMsg = data.error || 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.';
-        } else if (serverRes.status === 429 || errCode === 'auth/too-many-requests') {
+        } else if (serverRes.status === 429 || errCode === 'auth/too-many-requests' || errCode === 'ACCOUNT_LOCKED') {
           errorMsg = data.error || 'Terlalu banyak percobaan login yang gagal. Akses akun ditangguhkan sementara demi keamanan.';
-        } else if (errCode === 'NEEDS_MAPPING') {
-          errorMsg = data.error || 'Kata sandi berhasil diverifikasi, tetapi profil staf belum memiliki pemetaan Supabase Auth UID yang disetujui. Minta Super Admin menyetujui mapping Auth UID.';
-        } else if (errCode === 'AUTH_UID_MISMATCH') {
-          errorMsg = data.error || 'Identitas Supabase Auth tidak cocok dengan profil staf. Login ditolak demi keamanan; hubungi Super Admin.';
-        } else if (errCode === 'STAFF_AUTH_EMAIL_MISSING') {
-          errorMsg = data.error || 'Profil staf belum memiliki email autentikasi yang valid. Hubungi Super Admin untuk melengkapi email.';
-        } else if (errCode === 'AUTH_EMAIL_NOT_CONFIRMED') {
-          errorMsg = data.error || 'Email Supabase belum dikonfirmasi. Hubungi Super Admin.';
-        } else if (errCode === 'SESSION_STORE_ERROR' || serverRes.status === 500) {
-          errorMsg = errorMsg || 'Gagal membuat sesi penyimpanan server setelah verifikasi kredensial.';
-        } else if (errCode === 'AUTH_INVALID_CREDENTIALS' || errCode === 'INVALID_CREDENTIALS' || errCode === 'auth/wrong-password' || errCode === 'MJ-AUTH-001') {
-          errorMsg = data.error || 'Email atau kata sandi Supabase tidak cocok. Pastikan email akun dan kata sandi yang digunakan benar.';
-        } else {
-          errorMsg = errorMsg || 'Autentikasi gagal. Silakan coba kembali.';
+        } else if (errCode === 'AUTH_INVALID_CREDENTIALS' || errCode === 'INVALID_CREDENTIALS' || errCode === 'auth/wrong-password') {
+          errorMsg = data.error || 'Autentikasi gagal. Kredensial tidak cocok.';
         }
 
         addAuditLog('Login Attempt Failed', 'auth', cleanUser, errorMsg);
@@ -1354,24 +1299,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentUser(authedUser);
       setIsLoggedIn(true);
 
-      // Audit Remediation (Phase 15A.7.6): Tokens are stored strictly in server HttpOnly cookies.
-      // ZERO tokens (accessToken / refreshToken) are placed in browser localStorage.
+      const accessToken = data.tokens?.accessToken || data.token;
+      const refreshToken = data.tokens?.refreshToken;
+      const expiresIn = data.tokens?.expiresIn;
+      const expiresAt = data.tokens?.expiresAt || (expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : undefined);
+
       try {
         localStorage.setItem('morajaws_logged_in', 'true');
-        localStorage.setItem('morajaws_user_display', JSON.stringify({
-          id: authedUser.id,
-          name: authedUser.name,
+        localStorage.setItem('morajaws_auth_session', JSON.stringify({
+          userId: authedUser.id,
           username: authedUser.username,
           role: authedUser.role,
+          name: authedUser.name,
           contractor: authedUser.contractor,
-          contractorId: authedUser.contractorId,
           area: authedUser.area,
-          email: authedUser.email
+          loginAt: authedUser.lastLoginAt,
+          token: accessToken,
+          accessToken,
+          refreshToken,
+          sessionId: data.sessionId,
+          sessionVersion: data.sessionVersion || (authedUser as any).sessionVersion || 1,
+          expiresAt
         }));
-        localStorage.removeItem('morajaws_auth_session');
       } catch (e) {}
 
-      addAuditLog('Login Success', 'auth', authedUser.id, `Pengguna ${authedUser.name} (${authedUser.role}) berhasil login ke sistem via Supabase Auth`);
+      addAuditLog('Login Success', 'auth', authedUser.id, `Pengguna ${authedUser.name} (${authedUser.role}) berhasil login ke sistem via MoraJaws Custom Auth`);
       await loadCentralData();
       return { success: true, user: authedUser };
 
@@ -1387,18 +1339,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshAuthSession = async (): Promise<boolean> => {
     try {
-      const res = await fetch('/api/auth/supabase-refresh', {
+      const sessionStr = localStorage.getItem('morajaws_auth_session');
+      if (!sessionStr) return false;
+      const sess = JSON.parse(sessionStr);
+      if (!sess?.refreshToken) return false;
+
+      const res = await fetch('/api/auth/refresh', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Morajaws-Client': 'browser'
-        },
-        credentials: 'include',
-        body: JSON.stringify({})
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: sess.refreshToken })
       });
       if (!res.ok) return false;
-      const data = await res.json().catch(() => ({}));
-      return data.success === true;
+      const data = await res.json();
+      if (data.success && data.tokens) {
+        const updatedSess = {
+          ...sess,
+          token: data.tokens.accessToken,
+          accessToken: data.tokens.accessToken,
+          refreshToken: data.tokens.refreshToken || sess.refreshToken,
+          expiresAt: data.tokens.expiresAt
+        };
+        localStorage.setItem('morajaws_auth_session', JSON.stringify(updatedSess));
+        return true;
+      }
+      return false;
     } catch {
       return false;
     }
@@ -1407,28 +1371,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loginWithFirebase = async (_firebaseData: { email: string; uid: string; displayName?: string; idToken?: string }): Promise<{ success: boolean; error?: string; user?: User }> => {
     return {
       success: false,
-      error: 'Firebase Authentication telah dinonaktifkan pada lingkungan produksi MoraJaws. Gunakan login resmi dengan Supabase Auth.'
+      error: 'Firebase Authentication tidak digunakan. Gunakan login internal MoraJaws.'
     };
   };
 
   const logout = () => {
     addAuditLog('User Logout', 'auth', currentUser.id, `Pengguna ${currentUser.name} (${currentUser.role}) logout dari sistem`);
+    const authHeaders = getAuthHeaders();
     setIsLoggedIn(false);
     setCurrentUser(UNAUTHENTICATED_USER);
     try {
       localStorage.setItem('morajaws_logged_in', 'false');
       localStorage.removeItem('morajaws_auth_session');
-      localStorage.removeItem('morajaws_user_display');
     } catch (e) {}
 
-    // Invoke single authoritative logout endpoint on Express backend
+    // Invoke MoraJaws Custom Auth logout on Express backend
     fetch('/api/auth/logout', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Morajaws-Client': 'browser'
-      },
-      credentials: 'include'
+        ...authHeaders
+      }
     }).catch(() => {});
 
     // Reload public bootstrap after logout
@@ -1449,46 +1412,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // 1. Super Admin, Dispatch, and Management Data have system-wide visibility
       if (currentUser.role === 'super_admin' || currentUser.role === 'dispatch' || currentUser.role === 'management_data') return true;
 
-      const ticketContractor = (t.contactorName || t.contractorName || '').toLowerCase().trim();
-      const ticketArea = (t.area || '').toLowerCase().trim();
+      const ticketContractor = String(t.contactorName || t.contractorName || '').toLowerCase().trim();
+      const ticketArea = String(t.area || '').toLowerCase().trim();
 
       // 2. Leader / Korlap: Strictly limited to their contractor and area
       if (currentUser.role === 'leader') {
-        const leaderContractor = (currentUser.contractor || '').toLowerCase().trim();
-        const leaderArea = (currentUser.area || '').toLowerCase().trim();
+        const leaderContractor = String(currentUser.contractor || '').toLowerCase().trim();
+        const leaderArea = String(currentUser.area || '').toLowerCase().trim();
 
         if (!leaderContractor) return false;
         const matchContractor = Boolean(
           ticketContractor === leaderContractor ||
-          ticketContractor.includes(leaderContractor) ||
-          leaderContractor.includes(ticketContractor)
+          (ticketContractor && leaderContractor && (ticketContractor.includes(leaderContractor) || leaderContractor.includes(ticketContractor)))
         );
         const matchArea = !leaderArea || Boolean(
           ticketArea === leaderArea ||
-          ticketArea.includes(leaderArea) ||
-          leaderArea.includes(ticketArea)
+          (ticketArea && leaderArea && (ticketArea.includes(leaderArea) || leaderArea.includes(ticketArea)))
         );
         return matchContractor && matchArea;
       }
 
       // 3. Installer / Teknisi: STRICTLY LIMITED to tickets explicitly assigned to this technician!
       if (currentUser.role === 'installer') {
-        const myName = (currentUser.name || '').toLowerCase().trim();
+        const myName = String(currentUser.name || '').toLowerCase().trim();
         const cleanMyName = myName.replace(/\(.*?\)/g, '').trim();
-        const ticketInst = (t.installerName || '').toLowerCase().trim();
+        const ticketInst = String(t.installerName || '').toLowerCase().trim();
         if (!ticketInst) return false; // not assigned to anyone
 
         const nameMatch = Boolean(
           ticketInst === myName ||
-          ticketInst === cleanMyName ||
-          ticketInst.includes(cleanMyName) ||
-          cleanMyName.includes(ticketInst)
+          (cleanMyName && ticketInst === cleanMyName) ||
+          (cleanMyName && ticketInst && (ticketInst.includes(cleanMyName) || cleanMyName.includes(ticketInst)))
         );
 
         const phoneMatch = Boolean(
           currentUser.phone &&
           t.installerContact &&
-          t.installerContact.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, '')
+          String(t.installerContact).replace(/\D/g, '') === String(currentUser.phone).replace(/\D/g, '')
         );
 
         return nameMatch || phoneMatch;
@@ -1547,7 +1507,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/users/${userId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify({ reason, permanent })
     }).catch(e => console.error('Error syncing user deletion to server:', e));
 
@@ -1617,7 +1576,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await fetch(`/api/users/${userId}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
-      credentials: 'include',
         body: JSON.stringify(updates)
       });
 
@@ -1786,7 +1744,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/users', {
       method: 'POST',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify(newUser)
     }).catch(e => console.error('Error syncing dispatch account to server:', e));
 
@@ -1888,7 +1845,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/users', {
       method: 'POST',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify(newUser)
     }).catch(e => console.error('Error syncing leader user to server:', e));
 
@@ -1896,7 +1852,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       fetch('/api/contractors', {
         method: 'POST',
         headers: getAuthHeaders(),
-      credentials: 'include',
         body: JSON.stringify({ contractor: matchedContractor })
       }).catch(e => console.error('Error syncing contractor to server:', e));
     }
@@ -1959,7 +1914,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/users', {
       method: 'POST',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify(newUser)
     }).catch(e => console.error('Error syncing installer account to server:', e));
 
@@ -1988,8 +1942,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     fetch(`/api/users/${userId}/toggle`, {
       method: 'PUT',
-      headers: getAuthHeaders(),
-      credentials: 'include'
+      headers: getAuthHeaders()
     }).catch(e => console.error('Error syncing user status toggle to server:', e));
 
     return { success: true };
@@ -2015,8 +1968,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     fetch(`/api/users/${userId}/reset-password`, {
       method: 'POST',
-      headers: getAuthHeaders(),
-      credentials: 'include'
+      headers: getAuthHeaders()
     }).catch(e => console.error('Error syncing password reset to server:', e));
 
     return { success: true, newPassword: '12345678' };
@@ -2036,7 +1988,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/contractors', {
       method: 'POST',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify({ contractor: newContractor })
     }).catch(e => console.error('Error syncing new contractor to server:', e));
   };
@@ -2057,7 +2008,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/contractors/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify(updates)
     }).catch(e => console.error('Error syncing contractor update to server:', e));
   };
@@ -2348,7 +2298,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/${ticketId}/report`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify({ report })
     }).catch(e => console.error('Error saving technical report to server:', e));
 
@@ -2357,8 +2306,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const isInstallerMatch = (ticketInstaller: string | undefined, installerName: string): boolean => {
     if (!ticketInstaller || !installerName) return false;
-    const tInst = ticketInstaller.toLowerCase().trim();
-    const effInst = installerName.toLowerCase().trim();
+    const tInst = String(ticketInstaller).toLowerCase().trim();
+    const effInst = String(installerName).toLowerCase().trim();
+    if (!tInst || !effInst) return false;
     if (tInst === effInst) return true;
     if (tInst.includes(effInst) || effInst.includes(tInst)) return true;
     const cleanEff = effInst.replace(/\(.*?\)/g, '').trim();
@@ -2734,7 +2684,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/${ticketId}/progress-report`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify({
         entry,
         status: nextInstallerStatus,
@@ -3176,7 +3125,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/${ticketId}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify({
         statusWOAgent: 'Closed',
         closedAt: now,
@@ -3408,7 +3356,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/${ticketId}/messages`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify({ text: text.trim(), attachments })
     }).catch(e => console.error('Error syncing chat message to server:', e));
 
@@ -3430,7 +3377,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let changed = false;
       const next = prev.map(m => {
         if (m.ticketId !== ticketId) return m;
-        const currentReaders = m.readBy || [];
+        const currentReaders = Array.isArray(m.readBy) ? m.readBy : [];
         if (currentReaders.includes(currentUser.id)) return m;
         changed = true;
         return { ...m, readBy: [...currentReaders, currentUser.id] };
@@ -3443,7 +3390,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return ticketMessages.filter(
       m => m.ticketId === ticketId &&
            m.senderId !== currentUser.id &&
-           !(m.readBy || []).includes(currentUser.id)
+           !(Array.isArray(m.readBy) ? m.readBy : []).includes(currentUser.id)
     ).length;
   };
 
@@ -3584,7 +3531,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify(updates)
     }).catch(e => console.error('Error syncing ticket update to server:', e));
 
@@ -3661,7 +3607,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/tickets/assign', {
       method: 'POST',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify({
         ticketId,
         leaderName,
@@ -3747,7 +3692,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/tickets/assign', {
       method: 'POST',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify({
         ticketIds,
         leaderName,
@@ -3836,7 +3780,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/tickets/reassign', {
       method: 'POST',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify({
         ticketId,
         woNumber: ticket.woNumber,
@@ -4012,7 +3955,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/${ticketId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify({ reason, permanent })
     }).catch(e => console.error('Error syncing ticket delete to server:', e));
 
@@ -4305,7 +4247,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       fetch('/api/tickets/bulk-import', {
         method: 'POST',
         headers: getAuthHeaders(),
-      credentials: 'include',
         body: JSON.stringify({
           tickets: newItems,
           options: { duplicatePolicy: policy }
@@ -4364,9 +4305,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const matchingTickets = tickets.filter(t => {
       const tImportDate =
         t.importDate ||
-        (t.importedAt ? (t.importedAt.includes('T') ? t.importedAt.split('T')[0] : t.importedAt.slice(0, 10)) : '') ||
-        (t.createdAt ? (t.createdAt.includes('T') ? t.createdAt.split('T')[0] : t.createdAt.slice(0, 10)) : '') ||
-        (t.date ? (t.date.includes('T') ? t.date.split('T')[0] : t.date.slice(0, 10)) : '');
+        (t.importedAt ? (String(t.importedAt).includes('T') ? String(t.importedAt).split('T')[0] : String(t.importedAt).slice(0, 10)) : '') ||
+        (t.createdAt ? (String(t.createdAt).includes('T') ? String(t.createdAt).split('T')[0] : String(t.createdAt).slice(0, 10)) : '') ||
+        (t.date ? (String(t.date).includes('T') ? String(t.date).split('T')[0] : String(t.date).slice(0, 10)) : '');
       return (tImportDate === importDate || t.date === importDate) && !t.isDeleted;
     });
 
@@ -4393,7 +4334,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`/api/tickets/batch/${importDate}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify({ reason })
     }).catch(e => console.error('Error syncing batch tickets delete to server:', e));
 
@@ -4461,7 +4401,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch('/api/tickets/bulk-delete', {
       method: 'POST',
       headers: getAuthHeaders(),
-      credentials: 'include',
       body: JSON.stringify({ ticketIds, reason })
     }).catch(e => console.error('Error syncing bulk delete tickets to server:', e));
 
