@@ -443,7 +443,7 @@ export const UserManagementView: React.FC = () => {
       return;
     }
 
-    if ((createRole === 'leader' || createRole === 'installer') && !createContractor.trim()) {
+    if ((createRole === 'leader' || (createRole as string) === 'installer') && !createContractor.trim()) {
       setCreateError('Nama Kontraktor wajib diisi untuk role Leader atau Installer.');
       return;
     }
@@ -457,8 +457,8 @@ export const UserManagementView: React.FC = () => {
         altEmail: createAltEmail.trim() || undefined,
         phone: createPhone.trim() || undefined,
         role: createRole,
-        contractor: (createRole === 'leader' || createRole === 'installer') ? createContractor.trim() : undefined,
-        area: (createRole === 'leader' || createRole === 'installer') ? createArea.trim() : undefined,
+        contractor: (createRole === 'leader' || (createRole as string) === 'installer') ? createContractor.trim() : undefined,
+        area: (createRole === 'leader' || (createRole as string) === 'installer') ? createArea.trim() : undefined,
         password: createPassword
       });
 

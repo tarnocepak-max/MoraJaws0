@@ -1,0 +1,12 @@
+[
+  {
+    "file": "src/services/firestoreDb.ts",
+    "diagnostics": 0,
+    "items": []
+  },
+  {
+    "file": "src/context/AppContext.tsx",
+    "diagnostics": 0,
+    "items": []
+  }
+]

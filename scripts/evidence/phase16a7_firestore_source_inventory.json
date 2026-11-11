@@ -1,0 +1,21 @@
+{
+  "sourceFilesWithFirebaseOrFirestoreReferences": 44,
+  "examples": [
+    "src/context/AppContext.tsx",
+    "src/context/UIConfigContext.tsx",
+    "src/context/AnimationContext.tsx",
+    "src/context/NavigationContext.tsx",
+    "src/services/woFieldMappingEngine.ts",
+    "src/services/navigationFirestore.ts",
+    "src/services/storageCompatibility.ts",
+    "src/services/backupDownloadService.ts",
+    "src/services/appointmentDateParser.ts",
+    "src/services/errorSystem.ts",
+    "src/services/firestoreDb.ts",
+    "src/services/googleSheetsService.ts",
+    "src/services/woDeduplicationService.ts",
+    "src/lib/firebase.ts",
+    "src/types/index.ts"
+  ],
+  "note": "Reference inventory includes active imports, compatibility functions, type names, comments, and archived integration helpers; it is not a runtime call count."
+}

@@ -1,0 +1,80 @@
+{
+  "suite": "PHASE16A4_SUPABASE_FAIL_CLOSED",
+  "total": 18,
+  "passed": 18,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "GET work-orders fails closed when Supabase read fails",
+      "passed": true
+    },
+    {
+      "name": "GET work-orders reads JSON only when Supabase mode is not active",
+      "passed": true
+    },
+    {
+      "name": "GET single work order never falls back to JSON in Supabase mode",
+      "passed": true
+    },
+    {
+      "name": "GET single work order returns 503 on Supabase failure",
+      "passed": true
+    },
+    {
+      "name": "PUT/PATCH update returns Supabase result directly",
+      "passed": true
+    },
+    {
+      "name": "PUT/PATCH local persistence is explicitly non-Supabase only",
+      "passed": true
+    },
+    {
+      "name": "PUT/PATCH cannot fallback to local ticket after Supabase lookup",
+      "passed": true
+    },
+    {
+      "name": "Bulk assignment returns Supabase outcome even if local mode flag is enabled",
+      "passed": true
+    },
+    {
+      "name": "Bulk assignment local write is non-Supabase only",
+      "passed": true
+    },
+    {
+      "name": "Reassignment local write is non-Supabase only",
+      "passed": true
+    },
+    {
+      "name": "Single assignment returns immediately after Supabase success",
+      "passed": true
+    },
+    {
+      "name": "Single reassignment returns immediately after Supabase success",
+      "passed": true
+    },
+    {
+      "name": "Reports endpoint fails closed on Supabase error",
+      "passed": true
+    },
+    {
+      "name": "Reports endpoint local data source is non-Supabase only",
+      "passed": true
+    },
+    {
+      "name": "Chat endpoint returns 503 on Supabase lookup/query failure",
+      "passed": true
+    },
+    {
+      "name": "Chat endpoint local read is guarded by local-only mode",
+      "passed": true
+    },
+    {
+      "name": "Delete endpoint returns after Supabase deletion success",
+      "passed": true
+    },
+    {
+      "name": "Delete endpoint cannot mutate local JSON in Supabase mode",
+      "passed": true
+    }
+  ]
+}

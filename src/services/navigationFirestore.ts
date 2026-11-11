@@ -1,36 +1,6 @@
-import { doc, getDoc, setDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { COLLECTIONS, isFirestoreActiveForEnvironment } from './firestoreDb';
 import { getAuthHeaders } from './authService';
 import { NavigationConfig, NavigationCategory, NavigationStandaloneMenu, NavigationSubmenuItem } from '../types/navigation';
 import { DEFAULT_NAVIGATION_CONFIG } from '../constants/defaultNavigationConfig';
-
-const NAV_DOC_ID = 'navigation';
-
-function sanitizeForFirestore(obj: any): any {
-  if (obj === null || obj === undefined) return null;
-  if (typeof obj !== 'object') return obj;
-  if (obj instanceof Date) return obj.toISOString();
-
-  if (Array.isArray(obj)) {
-    return obj
-      .filter(item => item !== undefined)
-      .map(item => sanitizeForFirestore(item));
-  }
-
-  const result: Record<string, any> = {};
-  for (const [key, val] of Object.entries(obj)) {
-    if (val === undefined) continue;
-    if (val instanceof Date) {
-      result[key] = val.toISOString();
-    } else if (val !== null && typeof val === 'object') {
-      result[key] = sanitizeForFirestore(val);
-    } else {
-      result[key] = val;
-    }
-  }
-  return result;
-}
 
 /**
  * Normalizes navigation data from Firestore or LocalStorage to ensure full compatibility
@@ -131,133 +101,34 @@ export function normalizeNavigationConfig(raw: any): NavigationConfig {
   };
 }
 
-/**
- * Save Navigation Configuration to Cloud Firestore (appSettings/navigation)
- */
-export async function saveNavigationConfigToFirestore(
-  config: NavigationConfig,
-  operatorName: string = 'Super Admin'
-): Promise<{ success: boolean; updatedAt: string }> {
+/** Persist canonical navigation through the authenticated Express API. */
+export async function saveNavigationConfigToFirestore(config: NavigationConfig, operatorName: string = 'Super Admin'): Promise<{ success: boolean; updatedAt: string }> {
   const normalized = normalizeNavigationConfig(config);
   const updatedAt = new Date().toISOString();
-
   const payloadToSave = {
-    categories: normalized.categories.map(c => ({
-      ...c,
-      title: c.name,
-      active: c.visible,
-      isAccordion: c.mode === 'accordion'
-    })),
-    standaloneMenus: normalized.standaloneMenus.map(m => ({
-      ...m,
-      label: m.name,
-      active: m.visible
-    })),
-    submenuItems: normalized.submenuItems.map(s => ({
-      ...s,
-      label: s.name,
-      active: s.visible,
-      parentCategoryId: s.categoryId
-    })),
-    accordionSettings: {
-      ...normalized.accordionSettings,
-      allowMultipleOpenGroups: normalized.accordionSettings.allowMultipleOpen
-    },
-    navigationVersion: (config.navigationVersion || 1) + 1,
-    updatedAt,
-    updatedBy: operatorName
+    categories: normalized.categories.map(c => ({ ...c, title: c.name, active: c.visible, isAccordion: c.mode === 'accordion' })),
+    standaloneMenus: normalized.standaloneMenus.map(m => ({ ...m, label: m.name, active: m.visible })),
+    submenuItems: normalized.submenuItems.map(s => ({ ...s, label: s.name, active: s.visible, parentCategoryId: s.categoryId })),
+    accordionSettings: { ...normalized.accordionSettings, allowMultipleOpenGroups: normalized.accordionSettings.allowMultipleOpen },
+    navigationVersion: (config.navigationVersion || 1) + 1, updatedAt, updatedBy: operatorName
   };
-
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      const res = await fetch('/api/supabase/settings/navigation_config', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          value: payloadToSave,
-          description: 'MoraJaws Canonical Navigation Configuration'
-        })
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error?.message || 'Gagal menyimpan konfigurasi navigasi ke database utama Supabase.');
-      }
-      return { success: true, updatedAt };
-    } catch (err: any) {
-      console.warn('[Navigation Sync] Express/Supabase error, saving locally:', err);
-      return { success: true, updatedAt };
-    }
-  }
-
-  const path = `${COLLECTIONS.APP_SETTINGS}/${NAV_DOC_ID}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, NAV_DOC_ID);
-    await setDoc(docRef, sanitizeForFirestore(payloadToSave), { merge: true });
-    return { success: true, updatedAt };
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-    throw error;
-  }
+  const response = await fetch('/api/supabase/settings/navigation_config', { method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ value: payloadToSave, description: 'MoraJaws Canonical Navigation Configuration' }) });
+  const result = await response.json().catch(() => null);
+  if (!response.ok || !result?.success) throw new Error(result?.error?.message || 'Gagal menyimpan konfigurasi navigasi ke Supabase.');
+  return { success: true, updatedAt };
 }
 
-/**
- * Load Navigation Configuration from Cloud Firestore
- */
 export async function loadNavigationConfigFromFirestore(): Promise<NavigationConfig | null> {
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      const res = await fetch('/api/supabase/settings/navigation_config', {
-        headers: getAuthHeaders()
-      });
-      const data = await res.json();
-      if (res.ok && data.success && data.data) {
-        const payload = data.data.value || data.data;
-        return normalizeNavigationConfig(payload);
-      }
-    } catch (err) {
-      console.warn('[Navigation Sync] Error reading from Supabase proxy:', err);
-    }
-    return null;
-  }
-
-  const path = `${COLLECTIONS.APP_SETTINGS}/${NAV_DOC_ID}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, NAV_DOC_ID);
-    const snap = await getDoc(docRef);
-
-    if (snap.exists()) {
-      const data = snap.data();
-      return normalizeNavigationConfig(data);
-    }
-    return null;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, path);
-    return null;
-  }
+  const response = await fetch('/api/supabase/settings/navigation_config', { headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' }, credentials: 'include' });
+  const result = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(result?.error?.message || 'Gagal memuat konfigurasi navigasi dari Supabase.');
+  if (!result?.success || !result.data) return null;
+  return normalizeNavigationConfig(result.data.value ?? result.data);
 }
 
-/**
- * Real-time listener for navigation configuration changes
- */
-export function subscribeToNavigationConfig(
-  callback: (config: NavigationConfig) => void,
-  onError?: (err: Error) => void
-): Unsubscribe {
-  if (!isFirestoreActiveForEnvironment()) {
-    return () => {};
-  }
-  const docRef = doc(db, COLLECTIONS.APP_SETTINGS, NAV_DOC_ID);
-  return onSnapshot(
-    docRef,
-    (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        callback(normalizeNavigationConfig(data));
-      }
-    },
-    (err) => {
-      console.warn('[Firestore] Navigation config real-time subscription error:', err);
-      if (onError) onError(err);
-    }
-  );
+/** One-shot initial snapshot; Express settings currently has no realtime stream. */
+export function subscribeToNavigationConfig(callback: (config: NavigationConfig) => void, onError?: (err: Error) => void): () => void {
+  let active = true;
+  loadNavigationConfigFromFirestore().then(config => { if (active && config) callback(config); }).catch(err => { if (active) onError?.(err instanceof Error ? err : new Error(String(err))); });
+  return () => { active = false; };
 }

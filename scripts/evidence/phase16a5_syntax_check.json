@@ -1,0 +1,18 @@
+{
+  "suite": "PHASE16A5_TYPESCRIPT_SYNTAX",
+  "total": 2,
+  "passed": 2,
+  "failed": 0,
+  "results": [
+    {
+      "file": "src/services/firestoreDb.ts",
+      "passed": true,
+      "diagnostics": []
+    },
+    {
+      "file": "src/services/navigationFirestore.ts",
+      "passed": true,
+      "diagnostics": []
+    }
+  ]
+}

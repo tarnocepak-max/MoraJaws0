@@ -33,7 +33,10 @@
     "test:phase2.4.5": "node scripts/execute_phase2_4_5_rbac_test.mjs",
     "audit:phase2.4.6": "node scripts/execute_phase2_4_6_pre_cutover_audit.mjs && node scripts/verify_phase2_4_6_audit.mjs",
     "test:phase2.4.6": "node scripts/verify_phase2_4_6_audit.mjs",
-    "test:phase16a4": "node scripts/execute_phase16a4_supabase_fail_closed_test.mjs"
+    "test:phase16a4": "node scripts/execute_phase16a4_supabase_fail_closed_test.mjs",
+    "test:phase16a5": "node scripts/execute_phase16a5_firestore_settings_replacement_test.mjs",
+    "test:phase16a6": "node scripts/execute_phase16a6_security_hardening_test.mjs",
+    "test:phase16a7": "node scripts/execute_phase16a7_contractor_coverage_api_test.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.16",

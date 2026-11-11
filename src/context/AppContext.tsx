@@ -66,7 +66,7 @@ import {
 import { useToast } from './ToastContext';
 import { saveTicketsOffline, cacheMasterData, getOfflineTickets, removeSyncQueueItem } from '../services/offlineDb';
 import { useOfflineSync } from './OfflineSyncContext';
-import { auth, testFirestoreConnection, pingFirestore, isQuotaExceededError } from '../lib/firebase';
+import { auth, testFirestoreConnection, isQuotaExceededError } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
 import {
   isFirestoreActiveForEnvironment,
@@ -714,10 +714,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // In production, Firestore is fully deactivated as an inactive transition archive.
       // All production real-time updates and persistence route via Express + Supabase.
       if (!isFirestoreActiveForEnvironment()) {
-        setFirestoreStatus('offline');
-        setFirestoreLoading(false);
+        setFirestoreStatus('connecting');
+        setFirestoreLoading(true);
         setIsFirestoreReady(false);
-        setSyncStatus('SAVED');
+        setSyncStatus('LOADING');
+        const unsubApiSnapshots = subscribeToMoraJawsFirestore({
+          onTicketsChange: (items) => {
+            if (isCancelled) return;
+            setTickets(items || []);
+            setFirestoreStatus('connected');
+            setFirestoreLoading(false);
+            setIsFirestoreReady(true);
+            setSyncStatus('SAVED');
+            setLastSyncTime(new Date().toISOString());
+            setSyncError(null);
+          },
+          onContractorsChange: (items) => {
+            if (!isCancelled) setContractors(deduplicateContractors(items || []));
+          },
+          onCoverageAreasChange: (items) => {
+            if (!isCancelled) setCoverageAreas(items || []);
+          },
+          onUsersChange: (items) => {
+            if (isCancelled || !items) return;
+            setUsers(items);
+            const sessionStr = localStorage.getItem('morajaws_auth_session');
+            if (sessionStr) {
+              try {
+                const session = JSON.parse(sessionStr);
+                const matchingUser = items.find((item: User) =>
+                  item.id === session.userId ||
+                  item.username.toLowerCase() === (session.username || '').toLowerCase()
+                );
+                if (matchingUser) {
+                  if (matchingUser.active === false || (matchingUser as any).isDeleted) {
+                    logout();
+                    toast.error('Akun Anda telah dinonaktifkan oleh Administrator.', 'Akses Ditutup');
+                  } else {
+                    setCurrentUser(matchingUser);
+                  }
+                }
+              } catch (error) {
+                console.warn('[Auth] Gagal merekonsiliasi sesi dengan data user:', error);
+              }
+            }
+          },
+          onError: (error) => {
+            if (isCancelled) return;
+            setFirestoreStatus('error');
+            setFirestoreLoading(false);
+            setSyncStatus('ERROR');
+            setSyncError(error.message || 'Gagal memuat data dari Express API.');
+          }
+        });
         try {
           const unsubSSE = SupabaseRepository.getInstance().subscribeToChanges({
             table: 'work_orders',
@@ -736,9 +785,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             }
           });
-          unsubscribeFirestore = unsubSSE;
+          unsubscribeFirestore = () => {
+            unsubApiSnapshots();
+            unsubSSE();
+          };
         } catch (sseErr) {
           console.warn('[Realtime SSE] Non-fatal notice attaching Supabase SSE:', sseErr);
+          unsubscribeFirestore = unsubApiSnapshots;
         }
         return;
       }
@@ -766,8 +819,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           templates: DEFAULT_WHATSAPP_TEMPLATES,
           users: DEFAULT_USERS
         });
-
-        await pingFirestore();
 
         // Subscribe to real-time collections using onSnapshot
         unsubscribeFirestore = subscribeToMoraJawsFirestore({

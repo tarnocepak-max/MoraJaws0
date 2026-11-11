@@ -25,5 +25,5 @@
     "noImplicitAny": false,
     "noEmit": true
   },
-  "exclude": ["dist"]
+  "exclude": ["dist", "mj_next"]
 }

@@ -1,0 +1,92 @@
+{
+  "phase": "16A.6",
+  "total": 21,
+  "passed": 21,
+  "failed": 0,
+  "results": [
+    {
+      "name": "scripts/audit_supabase_db_schema.ts: uses explicit dotenv loading",
+      "status": "PASS"
+    },
+    {
+      "name": "scripts/audit_supabase_db_schema.ts: does not inspect another process environment",
+      "status": "PASS"
+    },
+    {
+      "name": "scripts/execute_phase3_real_sandbox_test.ts: uses explicit dotenv loading",
+      "status": "PASS"
+    },
+    {
+      "name": "scripts/execute_phase3_real_sandbox_test.ts: does not inspect another process environment",
+      "status": "PASS"
+    },
+    {
+      "name": "scripts/execute_phase4_adapter_integration_test.ts: uses explicit dotenv loading",
+      "status": "PASS"
+    },
+    {
+      "name": "scripts/execute_phase4_adapter_integration_test.ts: does not inspect another process environment",
+      "status": "PASS"
+    },
+    {
+      "name": "scripts/execute_phase5_feature_integration_test.ts: uses explicit dotenv loading",
+      "status": "PASS"
+    },
+    {
+      "name": "scripts/execute_phase5_feature_integration_test.ts: does not inspect another process environment",
+      "status": "PASS"
+    },
+    {
+      "name": "scripts/execute_phase6_database_integration_test.ts: uses explicit dotenv loading",
+      "status": "PASS"
+    },
+    {
+      "name": "scripts/execute_phase6_database_integration_test.ts: does not inspect another process environment",
+      "status": "PASS"
+    },
+    {
+      "name": "scripts/test_phase6_rls_security.ts: uses explicit dotenv loading",
+      "status": "PASS"
+    },
+    {
+      "name": "scripts/test_phase6_rls_security.ts: does not inspect another process environment",
+      "status": "PASS"
+    },
+    {
+      "name": "scripts/test_realtime_sandbox.ts: uses explicit dotenv loading",
+      "status": "PASS"
+    },
+    {
+      "name": "scripts/test_realtime_sandbox.ts: does not inspect another process environment",
+      "status": "PASS"
+    },
+    {
+      "name": "all scripts/server source: no direct proc environ scraping",
+      "status": "PASS"
+    },
+    {
+      "name": "GET work-order detail: Supabase-first and local-only fallback guard",
+      "status": "PASS"
+    },
+    {
+      "name": "POST work-order assign: Supabase-first and local-only fallback guard",
+      "status": "PASS"
+    },
+    {
+      "name": "POST work-order reassign: Supabase-first and local-only fallback guard",
+      "status": "PASS"
+    },
+    {
+      "name": "GET reports: Supabase-first and local-only fallback guard",
+      "status": "PASS"
+    },
+    {
+      "name": "GET ticket messages: Supabase-first and local-only fallback guard",
+      "status": "PASS"
+    },
+    {
+      "name": "DELETE ticket: Supabase-first and local-only fallback guard",
+      "status": "PASS"
+    }
+  ]
+}

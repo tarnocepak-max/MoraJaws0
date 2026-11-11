@@ -60,12 +60,7 @@ export const COLLECTIONS = {
  * - Development: Inactive by default; only active if explicitly enabled via VITE_ENABLE_FIRESTORE_DEV === 'true'.
  */
 export function isFirestoreActiveForEnvironment(): boolean {
-  if (typeof window !== 'undefined') {
-    if (import.meta.env.PROD || process.env.NODE_ENV === 'production') {
-      return false;
-    }
-    return import.meta.env.VITE_ENABLE_FIRESTORE_DEV === 'true';
-  }
+  // Phase 16A.5: Firestore is archive-only in every runtime environment.
   return false;
 }
 
@@ -115,6 +110,42 @@ function sanitizeForFirestore(obj: any): any {
   return result;
 }
 
+async function readSupabaseAppSetting<T = any>(key: string): Promise<T | null> {
+  const response = await fetch(`/api/supabase/settings/${encodeURIComponent(key)}`, {
+    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' }, credentials: 'include'
+  });
+  const result = await response.json().catch(() => null);
+  if (!response.ok || !result?.success) throw new Error(result?.error?.message || `Gagal membaca setting ${key} dari Supabase.`);
+  return (result.data ?? null) as T | null;
+}
+
+async function writeSupabaseAppSetting(key: string, value: any, description: string): Promise<void> {
+  const response = await fetch(`/api/supabase/settings/${encodeURIComponent(key)}`, {
+    method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' }, credentials: 'include',
+    body: JSON.stringify({ value: sanitizeForFirestore(value), description })
+  });
+  const result = await response.json().catch(() => null);
+  if (!response.ok || !result?.success) throw new Error(result?.error?.message || `Gagal menyimpan setting ${key} ke Supabase.`);
+}
+
+async function requestAuthenticatedApi<T = any>(url: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(url, {
+    ...init,
+    credentials: 'include',
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json',
+      ...(init.headers || {})
+    }
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || payload?.success === false) {
+    const message = payload?.error?.message || payload?.error || `API request gagal (${response.status}).`;
+    throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
+  }
+  return payload as T;
+}
+
 // -------------------------------------------------------------
 // Real-time Subscriptions (onSnapshot)
 // -------------------------------------------------------------
@@ -136,8 +167,22 @@ export interface FirestoreSubscriptionCallbacks {
 export function subscribeToMoraJawsFirestore(callbacks: FirestoreSubscriptionCallbacks): () => void {
   // Phase 13E: Hentikan seluruh listener Firestore aktif pada mode production
   if (!isFirestoreActiveForEnvironment()) {
-    console.info('[MoraJaws Phase 13E] Listener Firestore dinonaktifkan di lingkungan produksi. Seluruh data dipasok oleh Express API & Supabase PostgreSQL.');
-    return () => {};
+    let active = true;
+    console.info('[MoraJaws Phase 16A.7] Firestore listeners are archive-only; loading initial snapshots through authenticated Express APIs.');
+    const loadSnapshot = async <T,>(url: string, pick: (payload: any) => T, callback?: (value: T) => void) => {
+      if (!callback) return;
+      try {
+        const payload = await requestAuthenticatedApi<any>(url);
+        if (active) callback(pick(payload));
+      } catch (error) {
+        if (active) callbacks.onError?.(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+    void loadSnapshot('/api/work-orders', payload => payload.workOrders || [], callbacks.onTicketsChange);
+    void loadSnapshot('/api/contractors', payload => payload.contractors || [], callbacks.onContractorsChange);
+    void loadSnapshot('/api/coverage-areas', payload => payload.coverageAreas || [], callbacks.onCoverageAreasChange);
+    void loadSnapshot('/api/users', payload => payload.users || [], callbacks.onUsersChange);
+    return () => { active = false; };
   }
 
   const unsubs: Unsubscribe[] = [];
@@ -602,64 +647,28 @@ export async function batchDeleteTicketsFromFirestore(ticketIds: string[]): Prom
 // Global App Configuration & User Preferences (Permanent Storage)
 // -------------------------------------------------------------
 export async function saveGlobalAppSettingsToFirestore(settings: Record<string, any>): Promise<void> {
-  const path = `${COLLECTIONS.APP_SETTINGS}/global`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'global');
-    await setDoc(docRef, {
-      ...sanitizeForFirestore(settings),
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  const current = await readSupabaseAppSetting<Record<string, any>>('global');
+  await writeSupabaseAppSetting('global', { ...(current || {}), ...settings, updatedAt: new Date().toISOString() }, 'MoraJaws Global Application Settings');
 }
+
 
 export async function loadGlobalAppSettingsFromFirestore(): Promise<Record<string, any> | null> {
-  const path = `${COLLECTIONS.APP_SETTINGS}/global`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'global');
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      return snap.data();
-    }
-    return null;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, path);
-    return null;
-  }
+  return await readSupabaseAppSetting<Record<string, any>>('global');
 }
+
 
 export async function saveUserPreferencesToFirestore(userId: string, preferences: Record<string, any>): Promise<void> {
-  const path = `users/${userId}/preferences/settings`;
-  try {
-    const docRef = doc(db, 'users', userId, 'preferences', 'settings');
-    await setDoc(docRef, {
-      ...sanitizeForFirestore(preferences),
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  if (!userId) throw new Error('User ID wajib diisi.');
+  await writeSupabaseAppSetting(`user_preferences.${userId}`, { ...preferences, updatedAt: new Date().toISOString() }, 'MoraJaws User Preferences');
 }
+
 
 export async function loadUserPreferencesFromFirestore(userId: string): Promise<Record<string, any> | null> {
-  const path = `users/${userId}/preferences/settings`;
-  try {
-    const docRef = doc(db, 'users', userId, 'preferences', 'settings');
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      return snap.data();
-    }
-    return null;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, path);
-    return null;
-  }
+  if (!userId) return null;
+  return await readSupabaseAppSetting<Record<string, any>>(`user_preferences.${userId}`);
 }
 
-// -------------------------------------------------------------
-// UI Builder & Database Application Configuration (Firestore)
-// -------------------------------------------------------------
+
 export interface CloudUIConfigurationPayload {
   id?: string;
   config: UIConfiguration;
@@ -672,385 +681,66 @@ export interface CloudUIConfigurationPayload {
   version?: number;
 }
 
-export async function saveUIConfigurationToFirestore(payload: {
-  config: UIConfiguration;
-  navigationItems: any[];
-  menuCategories: string[];
-  updatedBy?: string;
-}): Promise<{ success: boolean; updatedAt: string }> {
-  const path = `${COLLECTIONS.APP_SETTINGS}/ui_configuration`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'ui_configuration');
-    const updatedAt = new Date().toISOString();
-    const dataToSave = sanitizeForFirestore({
-      id: 'ui_configuration',
-      config: payload.config,
-      navigationItems: payload.navigationItems,
-      menuCategories: payload.menuCategories,
-      updatedAt,
-      updatedBy: payload.updatedBy || 'Super Admin',
-      app: 'MoraJaws',
-      type: 'database_configuration_app',
-      version: Date.now()
-    });
-    await setDoc(docRef, dataToSave, { merge: true });
-
-    // Build normalized categories mapping according to specification
-    const rawCategories = payload.config?.navigationSettings?.categories || {};
-    const normalizedCategories: Record<string, { accordionEnabled: boolean }> = {
-      dashboard: { accordionEnabled: false },
-      operasional: { accordionEnabled: true },
-      woContractor: { accordionEnabled: false },
-      taskInstaller: { accordionEnabled: false },
-      pelanggan: { accordionEnabled: true },
-      laporan: { accordionEnabled: true },
-      setup: { accordionEnabled: false }
-    };
-
-    // Populate normalizedCategories with actual values using permanent IDs
-    Object.entries(rawCategories).forEach(([key, val]) => {
-      const permId = getCategoryPermanentId(key);
-      if (permId && val) {
-        normalizedCategories[permId] = { accordionEnabled: Boolean(val.accordionEnabled) };
-      }
-    });
-
-    const finalNavigationSettings = {
-      categories: normalizedCategories,
-      allowMultipleOpenGroups: payload.config?.navigationSettings?.allowMultipleOpenGroups !== false
-    };
-
-    try {
-      const navigationPayload = {
-        categories: finalNavigationSettings.categories,
-        allowMultipleOpenGroups: finalNavigationSettings.allowMultipleOpenGroups,
-        menuCategories: payload.menuCategories,
-        items: payload.navigationItems,
-        sidebarConfig: {
-          style: 'dribbble-enterprise',
-          theme: 'dark-navy',
-          activeIndicator: 'triple'
-        },
-        bottomNavConfig: {
-          maxItems: 5,
-          enabled: true
-        },
-        updatedAt,
-        updatedBy: payload.updatedBy || 'Super Admin'
-      };
-
-      const globalDoc = doc(db, COLLECTIONS.APP_SETTINGS, 'global');
-      await setDoc(globalDoc, {
-        navigationSettings: finalNavigationSettings,
-        navigation: navigationPayload,
-        uiConfig: {
-          ...payload.config,
-          navigationSettings: finalNavigationSettings
-        },
-        navigationItems: payload.navigationItems,
-        menuCategories: payload.menuCategories,
-        updatedAt,
-        updatedBy: payload.updatedBy || 'Super Admin'
-      }, { merge: true });
-    } catch (gErr) {
-      console.warn('[Firestore] Failed to mirror to appSettings/global:', gErr);
-    }
-
-    return { success: true, updatedAt };
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-    throw error;
+export async function saveUIConfigurationToFirestore(payload: { config: UIConfiguration; navigationItems: any[]; menuCategories: string[]; updatedBy?: string; }): Promise<{ success: boolean; updatedAt: string }> {
+  const updatedAt = new Date().toISOString();
+  const dataToSave: CloudUIConfigurationPayload = { id: 'ui_configuration', config: payload.config, navigationItems: payload.navigationItems, menuCategories: payload.menuCategories, updatedAt, updatedBy: payload.updatedBy || 'Super Admin', app: 'MoraJaws', type: 'database_configuration_app', version: Date.now() };
+  await writeSupabaseAppSetting('ui_configuration', dataToSave, 'MoraJaws UI Configuration');
+  const navSettings = payload.config?.navigationSettings;
+  if (navSettings) {
+    const currentGlobal = await readSupabaseAppSetting<Record<string, any>>('global');
+    await writeSupabaseAppSetting('global', { ...(currentGlobal || {}), navigationSettings: navSettings, uiConfig: payload.config, navigationItems: payload.navigationItems, menuCategories: payload.menuCategories, updatedAt, updatedBy: dataToSave.updatedBy }, 'MoraJaws Global UI Configuration');
   }
+  return { success: true, updatedAt };
 }
 
-export async function saveNavigationSettingsToFirestore(
-  navSettings: any,
-  updatedBy: string = 'Superadmin'
-): Promise<{ success: boolean; updatedAt: string }> {
-  const path = `${COLLECTIONS.APP_SETTINGS}/global`;
-  try {
-    const updatedAt = new Date().toISOString();
-    const rawCategories = navSettings?.categories || {};
-    const normalizedCategories: Record<string, { accordionEnabled: boolean }> = {
-      dashboard: { accordionEnabled: false },
-      operasional: { accordionEnabled: true },
-      woContractor: { accordionEnabled: false },
-      taskInstaller: { accordionEnabled: false },
-      pelanggan: { accordionEnabled: true },
-      laporan: { accordionEnabled: true },
-      setup: { accordionEnabled: false }
-    };
 
-    Object.entries(rawCategories).forEach(([key, val]: [string, any]) => {
-      const permId = getCategoryPermanentId(key);
-      if (permId && val) {
-        normalizedCategories[permId] = { accordionEnabled: Boolean(val.accordionEnabled) };
-      }
-    });
-
-    const finalNavigationSettings = {
-      categories: normalizedCategories,
-      allowMultipleOpenGroups: navSettings?.allowMultipleOpenGroups !== false
-    };
-
-    const payload = {
-      navigationSettings: finalNavigationSettings,
-      navigation: {
-        categories: normalizedCategories,
-        allowMultipleOpenGroups: navSettings?.allowMultipleOpenGroups !== false,
-        sidebarConfig: {
-          style: 'dribbble-enterprise',
-          theme: 'dark-navy',
-          activeIndicator: 'triple'
-        },
-        bottomNavConfig: {
-          maxItems: 5,
-          enabled: true
-        },
-        updatedAt,
-        updatedBy
-      },
-      updatedAt,
-      updatedBy
-    };
-
-    // 1. Write to appSettings/global
-    const globalRef = doc(db, COLLECTIONS.APP_SETTINGS, 'global');
-    await setDoc(globalRef, payload, { merge: true });
-
-    // 2. Also sync to appSettings/ui_configuration
-    try {
-      const uiRef = doc(db, COLLECTIONS.APP_SETTINGS, 'ui_configuration');
-      await setDoc(uiRef, {
-        'config.navigationSettings': payload.navigationSettings,
-        navigation: payload.navigation,
-        updatedAt,
-        updatedBy
-      }, { merge: true });
-    } catch {}
-
-    return { success: true, updatedAt };
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-    throw error;
-  }
+export async function saveNavigationSettingsToFirestore(navSettings: any, updatedBy: string = 'Superadmin'): Promise<{ success: boolean; updatedAt: string }> {
+  const updatedAt = new Date().toISOString();
+  const rawCategories = navSettings?.categories || {};
+  const normalizedCategories: Record<string, { accordionEnabled: boolean }> = { dashboard: { accordionEnabled: false }, operasional: { accordionEnabled: true }, woContractor: { accordionEnabled: false }, taskInstaller: { accordionEnabled: false }, pelanggan: { accordionEnabled: true }, laporan: { accordionEnabled: true }, setup: { accordionEnabled: false } };
+  Object.entries(rawCategories).forEach(([key, val]: [string, any]) => { const permId = getCategoryPermanentId(key); if (permId && val) normalizedCategories[permId] = { accordionEnabled: Boolean(val.accordionEnabled) }; });
+  const finalNavigationSettings = { categories: normalizedCategories, allowMultipleOpenGroups: navSettings?.allowMultipleOpenGroups !== false };
+  const currentGlobal = await readSupabaseAppSetting<Record<string, any>>('global');
+  await writeSupabaseAppSetting('global', { ...(currentGlobal || {}), navigationSettings: finalNavigationSettings, navigation: { ...finalNavigationSettings, updatedAt, updatedBy }, updatedAt, updatedBy }, 'MoraJaws Navigation Settings');
+  return { success: true, updatedAt };
 }
 
-// -------------------------------------------------------------
-// Canonical Navigation Configuration Document (appSettings/navigation)
-// -------------------------------------------------------------
-export async function saveNavigationDocToFirestore(
-  data: NavigationFirestoreDoc
-): Promise<{ success: boolean; updatedAt: string }> {
-  const path = `${COLLECTIONS.APP_SETTINGS}/navigation`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'navigation');
-    const updatedAt = new Date().toISOString();
-    const payloadToSave = sanitizeForFirestore({
-      ...data,
-      navigationVersion: (data.navigationVersion || 1) + 1,
-      updatedAt
-    });
-    await setDoc(docRef, payloadToSave, { merge: true });
 
-    // Also mirror to appSettings/global and appSettings/ui_configuration for backward compatibility
-    try {
-      const globalDoc = doc(db, COLLECTIONS.APP_SETTINGS, 'global');
-      await setDoc(globalDoc, {
-        navigationDoc: payloadToSave,
-        updatedAt,
-        updatedBy: data.updatedBy || 'Superadmin'
-      }, { merge: true });
-    } catch {}
-
-    return { success: true, updatedAt };
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-    throw error;
-  }
+export async function saveNavigationDocToFirestore(data: NavigationFirestoreDoc): Promise<{ success: boolean; updatedAt: string }> {
+  const updatedAt = new Date().toISOString();
+  const payload = { ...sanitizeForFirestore(data), navigationVersion: (data.navigationVersion || 1) + 1, updatedAt };
+  await writeSupabaseAppSetting('navigation', payload, 'MoraJaws Canonical Navigation Document');
+  return { success: true, updatedAt };
 }
+
 
 export async function loadNavigationDocFromFirestore(): Promise<NavigationFirestoreDoc | null> {
-  const path = `${COLLECTIONS.APP_SETTINGS}/navigation`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'navigation');
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      return snap.data() as NavigationFirestoreDoc;
-    }
-    return null;
-  } catch (error) {
-    if (isPermissionError(error)) {
-      try {
-        handleFirestoreError(error, OperationType.GET, path);
-      } catch (e) {
-        console.warn('[Firestore] Navigation permission notice:', e);
-      }
-    } else {
-      console.warn('[Firestore] Navigation load notice:', (error as any)?.message || error);
-    }
-    return null;
-  }
+  return await readSupabaseAppSetting<NavigationFirestoreDoc>('navigation');
 }
 
-export function subscribeToNavigationDoc(
-  callback: (data: NavigationFirestoreDoc) => void,
-  onError?: (error: Error) => void
-): Unsubscribe {
-  const path = `${COLLECTIONS.APP_SETTINGS}/navigation`;
-  const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'navigation');
-  return onSnapshot(
-    docRef,
-    (snap) => {
-      if (snap.exists()) {
-        callback(snap.data() as NavigationFirestoreDoc);
-      }
-    },
-    (error) => {
-      if (isPermissionError(error)) {
-        try {
-          handleFirestoreError(error, OperationType.GET, path);
-        } catch (e: any) {
-          onError?.(e);
-        }
-      } else {
-        console.warn('[Firestore] Navigation subscription notice:', error?.message || error);
-        onError?.(error instanceof Error ? error : new Error(String(error)));
-      }
-    }
-  );
+
+export function subscribeToNavigationDoc(callback: (data: NavigationFirestoreDoc) => void, onError?: (error: Error) => void): Unsubscribe {
+  let active = true;
+  loadNavigationDocFromFirestore().then(data => { if (active && data) callback(data); }).catch(err => { if (active) onError?.(err instanceof Error ? err : new Error(String(err))); });
+  return () => { active = false; };
 }
+
 
 export async function loadUIConfigurationFromFirestore(): Promise<CloudUIConfigurationPayload | null> {
-  const path = `${COLLECTIONS.APP_SETTINGS}/ui_configuration`;
-  try {
-    let loadedData: CloudUIConfigurationPayload | null = null;
-    let globalNavSettings: any = null;
-
-    // Check global document first for canonical navigationSettings
-    try {
-      const globalRef = doc(db, COLLECTIONS.APP_SETTINGS, 'global');
-      const gSnap = await getDoc(globalRef);
-      if (gSnap.exists()) {
-        const gData = gSnap.data();
-        if (gData.navigationSettings) {
-          globalNavSettings = gData.navigationSettings;
-        }
-        if (gData.uiConfig || gData.navigationItems) {
-          loadedData = {
-            config: {
-              id: 'default_ui_config',
-              ...(gData.uiConfig || {})
-            } as UIConfiguration,
-            navigationItems: gData.navigationItems || [],
-            menuCategories: gData.menuCategories || [],
-            updatedAt: gData.updatedAt || new Date().toISOString(),
-            updatedBy: gData.updatedBy || 'System'
-          };
-        }
-      }
-    } catch {}
-
-    // Check ui_configuration document
-    try {
-      const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'ui_configuration');
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        const uData = snap.data() as CloudUIConfigurationPayload;
-        if (!loadedData) {
-          loadedData = uData;
-        } else {
-          // Merge with priority on newest data
-          loadedData = {
-            ...loadedData,
-            ...uData,
-            config: {
-              ...(loadedData.config || {}),
-              ...(uData.config || {}),
-              id: uData.config?.id || loadedData.config?.id || 'default_ui_config'
-            } as UIConfiguration
-          };
-        }
-      }
-    } catch {}
-
-    if (loadedData) {
-      if (globalNavSettings) {
-        if (!loadedData.config) loadedData.config = {} as any;
-        loadedData.config.navigationSettings = {
-          ...(loadedData.config.navigationSettings || {}),
-          ...globalNavSettings,
-          categories: {
-            ...((loadedData.config.navigationSettings as any)?.categories || {}),
-            ...(globalNavSettings.categories || {})
-          }
-        };
-      }
-      return loadedData;
-    }
-
-    return null;
-  } catch (error) {
-    if (isPermissionError(error)) {
-      try {
-        handleFirestoreError(error, OperationType.GET, path);
-      } catch (e) {
-        console.warn('[Firestore] UI config permission notice:', e);
-      }
-    } else {
-      console.warn('[Firestore] UI config load notice:', (error as any)?.message || error);
-    }
-    return null;
-  }
+  const [ui, global] = await Promise.all([readSupabaseAppSetting<any>('ui_configuration'), readSupabaseAppSetting<any>('global')]);
+  const loaded = ui || (global?.uiConfig ? { config: global.uiConfig, navigationItems: global.navigationItems || [], menuCategories: global.menuCategories || [], updatedAt: global.updatedAt || new Date().toISOString(), updatedBy: global.updatedBy || 'System' } : null);
+  if (!loaded) return null;
+  if (global?.navigationSettings) loaded.config = { ...(loaded.config || {}), navigationSettings: { ...(loaded.config?.navigationSettings || {}), ...global.navigationSettings, categories: { ...(loaded.config?.navigationSettings?.categories || {}), ...(global.navigationSettings.categories || {}) } } };
+  return loaded as CloudUIConfigurationPayload;
 }
+
 
 export function subscribeToUIConfiguration(callback: (data: CloudUIConfigurationPayload) => void): Unsubscribe {
-  const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'ui_configuration');
-  const globalRef = doc(db, COLLECTIONS.APP_SETTINGS, 'global');
-
-  let lastKnownConfig: CloudUIConfigurationPayload | null = null;
-
-  const unsubUI = onSnapshot(docRef, (snap) => {
-    if (snap.exists()) {
-      const data = snap.data() as CloudUIConfigurationPayload;
-      lastKnownConfig = data;
-      callback(data);
-    }
-  }, (err) => {
-    console.warn('[Firestore] UI Configuration subscription warning:', err);
-  });
-
-  const unsubGlobal = onSnapshot(globalRef, (snap) => {
-    if (snap.exists()) {
-      const gData = snap.data();
-      if (gData.navigationSettings && lastKnownConfig) {
-        const merged: CloudUIConfigurationPayload = {
-          ...lastKnownConfig,
-          config: {
-            ...lastKnownConfig.config,
-            navigationSettings: {
-              ...lastKnownConfig.config?.navigationSettings,
-              ...gData.navigationSettings,
-              categories: {
-                ...(lastKnownConfig.config?.navigationSettings?.categories || {}),
-                ...(gData.navigationSettings.categories || {})
-              }
-            }
-          },
-          updatedAt: gData.updatedAt || lastKnownConfig.updatedAt
-        };
-        callback(merged);
-      }
-    }
-  }, (err) => {
-    console.warn('[Firestore] Global AppSettings subscription warning:', err);
-  });
-
-  return () => {
-    unsubUI();
-    unsubGlobal();
-  };
+  let active = true;
+  loadUIConfigurationFromFirestore().then(data => { if (active && data) callback(data); }).catch(err => console.error('[Supabase] UI configuration load failed:', err));
+  return () => { active = false; };
 }
+
 
 export async function deleteTicketFromFirestore(ticketId: string, woNumber?: string): Promise<void> {
   if (!isFirestoreActiveForEnvironment()) {
@@ -1175,43 +865,43 @@ export async function restoreTicketInFirestore(ticketId: string, restoredBy: str
 // Contractor & Coverage Area Mutations
 // -------------------------------------------------------------
 export async function saveContractorToFirestore(contractor: Contractor): Promise<void> {
-  const path = `${COLLECTIONS.CONTRACTORS}/${contractor.id}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.CONTRACTORS, contractor.id);
-    await setDoc(docRef, sanitizeForFirestore(contractor), { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+  const listResult = await requestAuthenticatedApi<{ contractors?: Contractor[] }>('/api/contractors');
+  const existing = (listResult.contractors || []).find(item => item.id === contractor.id || item.code === contractor.code);
+  if (existing) {
+    await requestAuthenticatedApi(`/api/contractors/${encodeURIComponent(existing.id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(sanitizeForFirestore(contractor))
+    });
+    return;
   }
+  await requestAuthenticatedApi('/api/contractors', {
+    method: 'POST',
+    body: JSON.stringify({ contractor: sanitizeForFirestore(contractor) })
+  });
 }
 
 export async function deleteContractorFromFirestore(contractorId: string): Promise<void> {
-  const path = `${COLLECTIONS.CONTRACTORS}/${contractorId}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.CONTRACTORS, contractorId);
-    await deleteDoc(docRef);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
-  }
+  await requestAuthenticatedApi(`/api/contractors/${encodeURIComponent(contractorId)}`, { method: 'DELETE' });
 }
 
 export async function saveCoverageAreaToFirestore(area: CoverageArea): Promise<void> {
-  const path = `${COLLECTIONS.COVERAGE_AREAS}/${area.id}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.COVERAGE_AREAS, area.id);
-    await setDoc(docRef, sanitizeForFirestore(area), { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+  const listResult = await requestAuthenticatedApi<{ coverageAreas?: CoverageArea[] }>('/api/coverage-areas');
+  const existing = (listResult.coverageAreas || []).find(item => item.id === area.id || item.name === area.name);
+  if (existing) {
+    await requestAuthenticatedApi(`/api/coverage-areas/${encodeURIComponent(existing.id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(sanitizeForFirestore(area))
+    });
+    return;
   }
+  await requestAuthenticatedApi('/api/coverage-areas', {
+    method: 'POST',
+    body: JSON.stringify({ area: sanitizeForFirestore(area) })
+  });
 }
 
 export async function deleteCoverageAreaFromFirestore(areaId: string): Promise<void> {
-  const path = `${COLLECTIONS.COVERAGE_AREAS}/${areaId}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.COVERAGE_AREAS, areaId);
-    await deleteDoc(docRef);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
-  }
+  await requestAuthenticatedApi(`/api/coverage-areas/${encodeURIComponent(areaId)}`, { method: 'DELETE' });
 }
 
 // -------------------------------------------------------------
@@ -1378,88 +1068,25 @@ export async function softDeleteUserInFirestore(userId: string, deletedBy: strin
 // General Droplists Mutations (Status Agent, Status Installer, Slot Time, Ticket Category)
 // -------------------------------------------------------------
 export async function saveGeneralDroplistsToFirestore(items: DroplistItem[]): Promise<void> {
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      await fetch('/api/supabase/settings/general_droplists', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ value: items, description: 'General Droplists Configuration' })
-      });
-    } catch (err) {
-      console.warn('[Supabase Sync] saveGeneralDroplists error:', err);
-    }
-    return;
-  }
-  const path = `${COLLECTIONS.APP_SETTINGS}/general_droplists`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'general_droplists');
-    await setDoc(docRef, {
-      id: 'general_droplists',
-      items: sanitizeForFirestore(items),
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  await writeSupabaseAppSetting('general_droplists', items, 'General Droplists Configuration');
 }
+
 
 export async function loadGeneralDroplistsFromFirestore(): Promise<DroplistItem[] | null> {
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      const res = await fetch('/api/supabase/settings/general_droplists', {
-        headers: getAuthHeaders()
-      });
-      const json = await res.json();
-      if (json.success && json.data) {
-        return (json.data.value || json.data) as DroplistItem[];
-      }
-    } catch {}
-    return null;
-  }
-  const path = `${COLLECTIONS.APP_SETTINGS}/general_droplists`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'general_droplists');
-    const snap = await getDoc(docRef);
-    if (snap.exists() && Array.isArray(snap.data()?.items)) {
-      return snap.data().items as DroplistItem[];
-    }
-    return null;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, path);
-    return null;
-  }
+  const value = await readSupabaseAppSetting<any>('general_droplists');
+  if (Array.isArray(value)) return value as DroplistItem[];
+  if (Array.isArray(value?.items)) return value.items as DroplistItem[];
+  return null;
 }
 
-export function subscribeToGeneralDroplists(
-  callback: (items: DroplistItem[]) => void,
-  onError?: (err: Error) => void
-): Unsubscribe {
-  if (!isFirestoreActiveForEnvironment()) {
-    return () => {};
-  }
-  const path = `${COLLECTIONS.APP_SETTINGS}/general_droplists`;
-  const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'general_droplists');
-  return onSnapshot(
-    docRef,
-    (snap) => {
-      if (snap.exists() && Array.isArray(snap.data()?.items)) {
-        callback(snap.data().items as DroplistItem[]);
-      }
-    },
-    (error) => {
-      console.warn('[Firestore] General droplists subscription warning:', error);
-      try {
-        handleFirestoreError(error, OperationType.GET, path);
-      } catch (e: any) {
-        onError?.(e);
-      }
-    }
-  );
+
+export function subscribeToGeneralDroplists(callback: (items: DroplistItem[]) => void, onError?: (err: Error) => void): Unsubscribe {
+  let active = true;
+  loadGeneralDroplistsFromFirestore().then(items => { if (active && items) callback(items); }).catch(err => { if (active) onError?.(err instanceof Error ? err : new Error(String(err))); });
+  return () => { active = false; };
 }
 
-// -------------------------------------------------------------
-// Report Dropdown Category Mutations (Report Status, Reason Report, Rootcause)
-// -------------------------------------------------------------
+
 export const INITIAL_REPORT_DROPDOWN_CATEGORIES: ReportDropdownCategory[] = [
   // 1. Report Status
   { id: 'rdc-st-1', categoryType: 'report_status', name: 'En Route', description: 'Teknisi dalam perjalanan menuju lokasi pelanggan', isActive: true, sortOrder: 1, createdAt: '2026-01-01T00:00:00Z' },
@@ -1498,120 +1125,43 @@ export const INITIAL_REPORT_DROPDOWN_CATEGORIES: ReportDropdownCategory[] = [
 ];
 
 export async function saveAllReportDropdownCategoriesToFirestore(categories: ReportDropdownCategory[]): Promise<void> {
-  const path = `${COLLECTIONS.APP_SETTINGS}/report_dropdown_categories`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'report_dropdown_categories');
-    await setDoc(docRef, {
-      id: 'report_dropdown_categories',
-      categories: sanitizeForFirestore(categories),
-      updatedAt: new Date().toISOString(),
-      updatedBy: 'System'
-    }, { merge: true });
-  } catch (error) {
-    console.warn('[Firestore] Error saving report dropdown categories to appSettings:', error);
-  }
+  await writeSupabaseAppSetting('report_dropdown_categories', { categories: sanitizeForFirestore(categories), updatedAt: new Date().toISOString(), updatedBy: 'System' }, 'MoraJaws Report Dropdown Categories');
 }
+
 
 export async function saveReportDropdownCategoryToFirestore(category: ReportDropdownCategory): Promise<void> {
-  const path = `${COLLECTIONS.APP_SETTINGS}/report_dropdown_categories`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'report_dropdown_categories');
-    const snap = await getDoc(docRef);
-    let categories: ReportDropdownCategory[] = [];
-    if (snap.exists() && Array.isArray(snap.data()?.categories)) {
-      categories = [...snap.data().categories];
-    } else {
-      categories = [...INITIAL_REPORT_DROPDOWN_CATEGORIES];
-    }
-    const idx = categories.findIndex(c => c.id === category.id);
-    if (idx >= 0) {
-      categories[idx] = category;
-    } else {
-      categories.push(category);
-    }
-    await setDoc(docRef, {
-      id: 'report_dropdown_categories',
-      categories: sanitizeForFirestore(categories),
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-  } catch (error) {
-    console.warn('[Firestore] Error saving single report category:', error);
-  }
+  const stored = await readSupabaseAppSetting<any>('report_dropdown_categories');
+  const categories: ReportDropdownCategory[] = Array.isArray(stored) ? [...stored] : Array.isArray(stored?.categories) ? [...stored.categories] : [...INITIAL_REPORT_DROPDOWN_CATEGORIES];
+  const index = categories.findIndex(item => item.id === category.id);
+  if (index >= 0) categories[index] = category; else categories.push(category);
+  await writeSupabaseAppSetting('report_dropdown_categories', { categories: sanitizeForFirestore(categories), updatedAt: new Date().toISOString() }, 'MoraJaws Report Dropdown Categories');
 }
+
 
 export async function deleteReportDropdownCategoryFromFirestore(categoryId: string): Promise<void> {
-  const path = `${COLLECTIONS.APP_SETTINGS}/report_dropdown_categories`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'report_dropdown_categories');
-    const snap = await getDoc(docRef);
-    if (snap.exists() && Array.isArray(snap.data()?.categories)) {
-      const categories = snap.data().categories.filter((c: any) => c.id !== categoryId);
-      await setDoc(docRef, {
-        categories: sanitizeForFirestore(categories),
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-    }
-  } catch (error) {
-    console.warn('[Firestore] Error deleting report category:', error);
-  }
+  const stored = await readSupabaseAppSetting<any>('report_dropdown_categories');
+  const categories: ReportDropdownCategory[] = Array.isArray(stored) ? stored : Array.isArray(stored?.categories) ? stored.categories : [];
+  await writeSupabaseAppSetting('report_dropdown_categories', { categories: categories.filter(item => item.id !== categoryId), updatedAt: new Date().toISOString() }, 'MoraJaws Report Dropdown Categories');
 }
+
 
 export async function softDeleteReportDropdownCategoryInFirestore(categoryId: string, updatedBy?: string): Promise<void> {
-  const path = `${COLLECTIONS.APP_SETTINGS}/report_dropdown_categories`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'report_dropdown_categories');
-    const snap = await getDoc(docRef);
-    if (snap.exists() && Array.isArray(snap.data()?.categories)) {
-      const categories = snap.data().categories.map((c: any) => {
-        if (c.id === categoryId) {
-          return {
-            ...c,
-            isActive: false,
-            isDeleted: true,
-            updatedAt: new Date().toISOString(),
-            updatedBy: updatedBy || 'System'
-          };
-        }
-        return c;
-      });
-      await setDoc(docRef, {
-        categories: sanitizeForFirestore(categories),
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-    }
-  } catch (error) {
-    console.warn('[Firestore] Error soft-deleting report category:', error);
-  }
+  const stored = await readSupabaseAppSetting<any>('report_dropdown_categories');
+  const categories: ReportDropdownCategory[] = Array.isArray(stored) ? stored : Array.isArray(stored?.categories) ? stored.categories : [];
+  const updated = categories.map(item => item.id === categoryId ? { ...item, isActive: false, isDeleted: true, updatedAt: new Date().toISOString(), updatedBy: updatedBy || 'System' } : item);
+  await writeSupabaseAppSetting('report_dropdown_categories', { categories: updated, updatedAt: new Date().toISOString(), updatedBy: updatedBy || 'System' }, 'MoraJaws Report Dropdown Categories');
 }
+
 
 export async function seedReportDropdownCategoriesIfEmpty(): Promise<number> {
-  if (!isFirestoreActiveForEnvironment()) {
-    return 0;
-  }
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'report_dropdown_categories');
-    const snap = await getDoc(docRef);
-    if (!snap.exists() || !snap.data()?.categories || snap.data()?.categories.length === 0) {
-      console.log(`[Firestore] Seeding ${INITIAL_REPORT_DROPDOWN_CATEGORIES.length} report dropdown categories to appSettings...`);
-      await setDoc(docRef, {
-        id: 'report_dropdown_categories',
-        categories: sanitizeForFirestore(INITIAL_REPORT_DROPDOWN_CATEGORIES),
-        updatedAt: new Date().toISOString(),
-        updatedBy: 'System'
-      }, { merge: true });
-      return INITIAL_REPORT_DROPDOWN_CATEGORIES.length;
-    }
-    return snap.data()?.categories?.length || 0;
-  } catch (err) {
-    console.warn('[Firestore] Seed report categories error:', err);
-    return 0;
-  }
+  const stored = await readSupabaseAppSetting<any>('report_dropdown_categories');
+  const categories = Array.isArray(stored) ? stored : Array.isArray(stored?.categories) ? stored.categories : [];
+  if (categories.length) return categories.length;
+  await writeSupabaseAppSetting('report_dropdown_categories', { categories: INITIAL_REPORT_DROPDOWN_CATEGORIES, updatedAt: new Date().toISOString(), updatedBy: 'System' }, 'MoraJaws Initial Report Dropdown Categories');
+  return INITIAL_REPORT_DROPDOWN_CATEGORIES.length;
 }
 
 
-// -------------------------------------------------------------
-// Seed and Migration Helper
-// -------------------------------------------------------------
 export async function seedFirestoreIfEmpty(initialData: {
   tickets: Ticket[];
   contractors: Contractor[];
@@ -1781,66 +1331,23 @@ export const INITIAL_CHAT_CATEGORIES: ChatCategoryConfig[] = [
 ];
 
 export async function saveChatCategoriesToFirestore(categories: ChatCategoryConfig[]): Promise<void> {
-  const path = `${COLLECTIONS.APP_SETTINGS}/chat_categories`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'chat_categories');
-    await setDoc(docRef, {
-      id: 'chat_categories',
-      categories: sanitizeForFirestore(categories),
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  await writeSupabaseAppSetting('chat_categories', categories, 'MoraJaws Chat Categories');
 }
+
 
 export async function loadChatCategoriesFromFirestore(): Promise<ChatCategoryConfig[] | null> {
-  const path = `${COLLECTIONS.APP_SETTINGS}/chat_categories`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'chat_categories');
-    const snap = await getDoc(docRef);
-    if (snap.exists() && Array.isArray(snap.data()?.categories)) {
-      return snap.data().categories as ChatCategoryConfig[];
-    }
-    return null;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, path);
-    return null;
-  }
+  const value = await readSupabaseAppSetting<any>('chat_categories');
+  return Array.isArray(value) ? value as ChatCategoryConfig[] : (Array.isArray(value?.categories) ? value.categories as ChatCategoryConfig[] : null);
 }
 
-export function subscribeToChatCategories(
-  callback: (categories: ChatCategoryConfig[]) => void,
-  onError?: (err: Error) => void
-): Unsubscribe {
-  const path = `${COLLECTIONS.APP_SETTINGS}/chat_categories`;
-  const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'chat_categories');
-  return onSnapshot(
-    docRef,
-    (snap) => {
-      if (snap.exists() && Array.isArray(snap.data()?.categories)) {
-        callback(snap.data().categories as ChatCategoryConfig[]);
-      } else {
-        callback(INITIAL_CHAT_CATEGORIES);
-      }
-    },
-    (error) => {
-      console.warn('[Firestore] Chat categories subscription error:', error);
-      try {
-        handleFirestoreError(error, OperationType.GET, path);
-      } catch (e: any) {
-        onError?.(e);
-      }
-    }
-  );
+
+export function subscribeToChatCategories(callback: (categories: ChatCategoryConfig[]) => void, onError?: (err: Error) => void): Unsubscribe {
+  let active = true;
+  loadChatCategoriesFromFirestore().then(items => { if (active && items) callback(items); }).catch(err => { if (active) onError?.(err instanceof Error ? err : new Error(String(err))); });
+  return () => { active = false; };
 }
 
-// -------------------------------------------------------------
-// Hierarchical Droplist Mutations (appSettings/hierarchical_droplists)
-// LEVEL 1: STATUS WO (PARENT)
-// LEVEL 2: REASON WO (CHILD)
-// LEVEL 3: REMARKS (SUB-CHILD)
-// -------------------------------------------------------------
+
 export const INITIAL_HIERARCHICAL_DROPLISTS: HierarchicalStatus[] = [
   {
     id: 'hs-complete',
@@ -2254,130 +1761,30 @@ export function reconcileDroplistData(
 }
 
 export async function saveHierarchicalDroplistsToFirestore(statuses: HierarchicalStatus[]): Promise<void> {
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      await fetch('/api/supabase/settings/hierarchical_droplists', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ value: statuses, description: 'Hierarchical Droplists Configuration' })
-      });
-    } catch (err) {
-      console.warn('[Supabase Sync] saveHierarchicalDroplists error:', err);
-    }
-    return;
-  }
-  const path = `${COLLECTIONS.APP_SETTINGS}/hierarchical_droplists`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'hierarchical_droplists');
-    await setDoc(docRef, {
-      id: 'hierarchical_droplists',
-      statuses: sanitizeForFirestore(statuses),
-      updatedAt: new Date().toISOString(),
-      updatedBy: 'Droplist Management'
-    }, { merge: true });
-
-    // Backwards-compatible mirror to report_dropdown_categories to keep legacy views working
-    try {
-      const flattenedCategories: ReportDropdownCategory[] = [];
-      statuses.forEach((s, sIdx) => {
-        flattenedCategories.push({
-          id: s.id,
-          categoryType: 'report_status',
-          name: s.name,
-          isActive: s.active !== false && (s as any).isActive !== false,
-          sortOrder: sIdx + 1,
-          createdAt: new Date().toISOString()
-        });
-        (s.reasons || []).forEach((r, rIdx) => {
-          flattenedCategories.push({
-            id: r.id,
-            categoryType: 'reason_report',
-            name: r.name,
-            isActive: r.active !== false && (r as any).isActive !== false,
-            sortOrder: rIdx + 1,
-            createdAt: new Date().toISOString()
-          });
-          (r.remarks || []).forEach((rm, rmIdx) => {
-            flattenedCategories.push({
-              id: rm.id,
-              categoryType: 'rootcause',
-              name: rm.text || rm.name,
-              isActive: rm.active !== false && (rm as any).isActive !== false,
-              sortOrder: rmIdx + 1,
-              createdAt: new Date().toISOString()
-            });
-          });
-        });
-      });
-      const dropRef = doc(db, COLLECTIONS.APP_SETTINGS, 'report_dropdown_categories');
-      await setDoc(dropRef, {
-        id: 'report_dropdown_categories',
-        categories: sanitizeForFirestore(flattenedCategories),
-        updatedAt: new Date().toISOString(),
-        updatedBy: 'Droplist Management Sync'
-      }, { merge: true });
-    } catch (e) {
-      console.warn('[Firestore] Notice mirroring flattened categories:', e);
-    }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  await writeSupabaseAppSetting('hierarchical_droplists', statuses, 'Hierarchical Droplists Configuration');
+  const flattenedCategories: ReportDropdownCategory[] = [];
+  statuses.forEach((status, statusIndex) => {
+    flattenedCategories.push({ id: status.id, categoryType: 'report_status', name: status.name, isActive: status.active !== false, sortOrder: statusIndex + 1, createdAt: new Date().toISOString() });
+    (status.reasons || []).forEach((reason, reasonIndex) => {
+      flattenedCategories.push({ id: reason.id, categoryType: 'reason_report', name: reason.name, isActive: reason.active !== false, sortOrder: reasonIndex + 1, createdAt: new Date().toISOString() });
+      (reason.remarks || []).forEach((remark, remarkIndex) => flattenedCategories.push({ id: remark.id, categoryType: 'rootcause', name: remark.text || remark.name, isActive: remark.active !== false, sortOrder: remarkIndex + 1, createdAt: new Date().toISOString() }));
+    });
+  });
+  await writeSupabaseAppSetting('report_dropdown_categories', flattenedCategories, 'MoraJaws Report Dropdown Compatibility Data');
 }
+
 
 export async function loadHierarchicalDroplistsFromFirestore(): Promise<HierarchicalStatus[] | null> {
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      const res = await fetch('/api/supabase/settings/hierarchical_droplists', {
-        headers: getAuthHeaders()
-      });
-      const json = await res.json();
-      if (json.success && json.data) {
-        return (json.data.value || json.data) as HierarchicalStatus[];
-      }
-    } catch {}
-    return null;
-  }
-  const path = `${COLLECTIONS.APP_SETTINGS}/hierarchical_droplists`;
-  try {
-    const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'hierarchical_droplists');
-    const snap = await getDoc(docRef);
-    if (snap.exists() && Array.isArray(snap.data()?.statuses)) {
-      return snap.data().statuses as HierarchicalStatus[];
-    }
-    return null;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, path);
-    return null;
-  }
+  const value = await readSupabaseAppSetting<any>('hierarchical_droplists');
+  if (Array.isArray(value)) return value as HierarchicalStatus[];
+  if (Array.isArray(value?.statuses)) return value.statuses as HierarchicalStatus[];
+  return null;
 }
 
-export function subscribeToHierarchicalDroplists(
-  callback: (statuses: HierarchicalStatus[]) => void,
-  onError?: (err: Error) => void
-): Unsubscribe {
-  if (!isFirestoreActiveForEnvironment()) {
-    return () => {};
-  }
-  const path = `${COLLECTIONS.APP_SETTINGS}/hierarchical_droplists`;
-  const docRef = doc(db, COLLECTIONS.APP_SETTINGS, 'hierarchical_droplists');
-  return onSnapshot(
-    docRef,
-    (snap) => {
-      if (snap.exists() && Array.isArray(snap.data()?.statuses)) {
-        callback(snap.data().statuses as HierarchicalStatus[]);
-      } else {
-        callback(INITIAL_HIERARCHICAL_DROPLISTS);
-      }
-    },
-    (error) => {
-      console.warn('[Firestore] Hierarchical droplists subscription error:', error);
-      try {
-        handleFirestoreError(error, OperationType.GET, path);
-      } catch (e: any) {
-        onError?.(e);
-      }
-    }
-  );
-}
 
+export function subscribeToHierarchicalDroplists(callback: (statuses: HierarchicalStatus[]) => void, onError?: (err: Error) => void): Unsubscribe {
+  let active = true;
+  loadHierarchicalDroplistsFromFirestore().then(items => { if (active) callback(items || INITIAL_HIERARCHICAL_DROPLISTS); }).catch(err => { if (active) onError?.(err instanceof Error ? err : new Error(String(err))); });
+  return () => { active = false; };
+}
 
