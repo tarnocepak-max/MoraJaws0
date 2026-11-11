@@ -2211,21 +2211,28 @@ export async function bulkImportWorkOrdersToSupabase(
   };
 
   if (!Array.isArray(tickets) || tickets.length === 0) {
-    result.status = 'SUCCESS';
-    return { success: true, data: result };
+    result.status = 'FAILED';
+    return {
+      success: false,
+      error: { code: 'EMPTY_IMPORT', message: 'Import dibatalkan karena tidak ada baris WO yang dikirim.' },
+      data: result
+    };
   }
 
   // Idempotency check: return existing successful import if idempotencyKey matches
   if (idempotencyKey) {
     try {
-      const { data: existingImport } = await client
+      const { data: existingImport, error: lookupError } = await client
         .from('work_order_imports')
         .select('*')
         .eq('idempotency_key', idempotencyKey)
         .maybeSingle();
+      if (lookupError) {
+        return { success: false, error: classifySupabaseError(lookupError) };
+      }
       if (existingImport && (existingImport.status === 'SUCCESS' || existingImport.status === 'PARTIAL_SUCCESS')) {
         return {
-          success: true,
+          success: existingImport.status === 'SUCCESS',
           data: {
             importId: existingImport.import_id,
             status: existingImport.status,
@@ -2243,14 +2250,20 @@ export async function bulkImportWorkOrdersToSupabase(
           }
         };
       }
-    } catch {
-      // Non-fatal if table does not exist
+      if (existingImport?.status === 'PROCESSING' || existingImport?.status === 'VALIDATING') {
+        return {
+          success: false,
+          error: { code: 'IMPORT_IN_PROGRESS', message: 'Import dengan idempotency key yang sama sedang diproses. Jangan kirim ulang dengan key baru.' }
+        };
+      }
+    } catch (lookupException: any) {
+      return { success: false, error: classifySupabaseError(lookupException) };
     }
   }
 
-  // Record initial import tracking state
+  // Tracking is mandatory: do not mutate work_orders if the audit row cannot be created.
   try {
-    await client.from('work_order_imports').upsert({
+    const { error: trackingStartError } = await client.from('work_order_imports').upsert({
       import_id: importId,
       filename: fileName,
       sheet_name: sheetName,
@@ -2262,8 +2275,11 @@ export async function bulkImportWorkOrdersToSupabase(
       idempotency_key: idempotencyKey || null,
       metadata: { batchId }
     }, { onConflict: 'import_id' });
-  } catch {
-    // Non-fatal if table not initialized
+    if (trackingStartError) {
+      return { success: false, error: classifySupabaseError(trackingStartError) };
+    }
+  } catch (trackingStartException: any) {
+    return { success: false, error: classifySupabaseError(trackingStartException) };
   }
 
   try {
@@ -2322,8 +2338,24 @@ export async function bulkImportWorkOrdersToSupabase(
 
     const uniqueCandidates = Array.from(validBatchMap.values());
     if (uniqueCandidates.length === 0) {
-      result.status = result.failedCount === 0 && result.skippedDuplicates > 0 ? 'SUCCESS' : 'FAILED';
-      return { success: result.failedCount === 0, data: result };
+      result.status = 'FAILED';
+      const { error: emptyBatchAuditError } = await client.from('work_order_imports').update({
+        total_rows: result.totalSubmitted,
+        valid_rows: 0,
+        invalid_rows: result.invalidCount,
+        inserted_rows: 0,
+        updated_rows: 0,
+        duplicate_rows: result.skippedDuplicates,
+        failed_rows: result.failedCount,
+        status: 'FAILED',
+        error_summary: 'Tidak ada baris WO valid untuk diproses.',
+        error_details: result.errors || [],
+        updated_at: new Date().toISOString()
+      }).eq('import_id', importId);
+      if (emptyBatchAuditError) {
+        return { success: false, error: classifySupabaseError(emptyBatchAuditError), data: result };
+      }
+      return { success: false, data: result };
     }
 
     // 2. Query Supabase for existing WO numbers in chunks of 200 (Level 2 Duplicate Detection)
@@ -2434,7 +2466,8 @@ export async function bulkImportWorkOrdersToSupabase(
       }
     }
 
-    const hasFailed = result.failedCount > 0 || result.failedErrors.length > 0;
+    // Invalid input rows are failures for acceptance/status purposes, even when valid rows were saved.
+    const hasFailed = result.failedCount > 0 || result.failedErrors.length > 0 || result.invalidCount > 0;
     const hasSuccess = result.imported > 0 || (result.updatedCount || 0) > 0;
 
     let finalStatus: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED' = 'FAILED';
@@ -2442,16 +2475,16 @@ export async function bulkImportWorkOrdersToSupabase(
       finalStatus = 'SUCCESS';
     } else if (hasSuccess && hasFailed) {
       finalStatus = 'PARTIAL_SUCCESS';
-    } else if (result.skippedDuplicates > 0 && result.failedCount === 0) {
+    } else if (result.skippedDuplicates > 0 && result.failedCount === 0 && result.invalidCount === 0 && result.failedErrors.length === 0) {
       finalStatus = 'SUCCESS';
     } else {
       finalStatus = 'FAILED';
     }
     result.status = finalStatus;
 
-    // Update work_order_imports tracking table
+    // Final audit write is mandatory; a batch must not be reported as complete if its history is stale.
     try {
-      await client.from('work_order_imports').upsert({
+      const { error: trackingFinalError } = await client.from('work_order_imports').upsert({
         import_id: importId,
         filename: fileName,
         sheet_name: sheetName,
@@ -2471,8 +2504,27 @@ export async function bulkImportWorkOrdersToSupabase(
         idempotency_key: idempotencyKey || null,
         updated_at: new Date().toISOString()
       }, { onConflict: 'import_id' });
-    } catch {
-      // Non-fatal if table not initialized
+      if (trackingFinalError) {
+        result.status = (result.imported > 0 || (result.updatedCount || 0) > 0) ? 'PARTIAL_SUCCESS' : 'FAILED';
+        return {
+          success: false,
+          error: {
+            ...classifySupabaseError(trackingFinalError),
+            message: `Data import telah diproses (${result.imported} tersimpan), tetapi pencatatan riwayat import gagal: ${trackingFinalError.message}`
+          },
+          data: result
+        };
+      }
+    } catch (trackingFinalException: any) {
+      result.status = (result.imported > 0 || (result.updatedCount || 0) > 0) ? 'PARTIAL_SUCCESS' : 'FAILED';
+      return {
+        success: false,
+        error: {
+          ...classifySupabaseError(trackingFinalException),
+          message: `Data import telah diproses (${result.imported} tersimpan), tetapi pencatatan riwayat import gagal: ${trackingFinalException?.message || 'unknown error'}`
+        },
+        data: result
+      };
     }
 
     return {

@@ -7663,7 +7663,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
           const httpStatus = result.success ? 200 : (result.data?.imported ? 207 : 422);
           return res.status(httpStatus).json({
             success: result.success,
-            importId: effectiveImportId,
+            importId: result.data?.importId || effectiveImportId,
             status: result.data?.status || (result.success ? 'SUCCESS' : 'FAILED'),
             summary: {
               total: result.data?.totalSubmitted || tickets.length,

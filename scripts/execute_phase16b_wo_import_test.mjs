@@ -147,6 +147,45 @@ test('Service role secret key is never leaked to client bundle (.env.example & c
   }
 });
 
+// 11. Phase 16B.1: Invalid rows must affect final import status
+ test('Adapter marks invalid rows as a failed/partial outcome instead of a false success', () => {
+  const content = fs.readFileSync(path.resolve('server/supabaseAdapter.ts'), 'utf8');
+  assert(content.includes('result.failedErrors.length > 0 || result.invalidCount > 0'), 'invalidCount must participate in hasFailed');
+  assert(content.includes("result.invalidCount === 0 && result.failedErrors.length === 0"), 'duplicate-only success must require zero invalid and failed rows');
+  assert(content.includes("result.status = 'FAILED'"), 'empty or all-invalid imports must not be marked successful');
+});
+
+// 12. Phase 16B.1: Import history is mandatory, not best-effort
+ test('Adapter fails closed when import tracking cannot be written', () => {
+  const content = fs.readFileSync(path.resolve('server/supabaseAdapter.ts'), 'utf8');
+  assert(content.includes('trackingStartError'), 'Must check initial import history write result');
+  assert(content.includes('trackingFinalError'), 'Must check final import history write result');
+  assert(content.includes('emptyBatchAuditError'), 'Must persist all-invalid import outcome');
+});
+
+// 13. Phase 16B.1: Stable import identity protects retries
+ test('AppContext derives stable import ID and idempotency key from the logical payload', () => {
+  const content = fs.readFileSync(path.resolve('src/context/AppContext.tsx'), 'utf8');
+  assert(content.includes('createWorkOrderImportIdentity'), 'Must create stable import identity');
+  assert(content.includes('crypto.subtle.digest'), 'Must use SHA-256 fingerprint');
+  assert(content.includes('idempotencyKey: `MORAJAWS-WO-${fingerprint}`'), 'Must use a stable idempotency key');
+  assert(!content.includes('const idempotencyKey = `IDEM-${importId}`'), 'Must not generate a fresh key from a random import ID');
+});
+
+// 14. Phase 16B.1: Partial result counts must not be hidden from the UI
+ test('AppContext preserves partial insert/update counts when an import is rejected as incomplete', () => {
+  const content = fs.readFileSync(path.resolve('src/context/AppContext.tsx'), 'utf8');
+  assert(content.includes('const partialInserted = Number(partialSummary.inserted || 0)'), 'Must preserve inserted count');
+  assert(content.includes('const partialFailed = Number(partialSummary.failed || 0) + Number(partialSummary.invalid || 0)'), 'Must count invalid rows in failure summary');
+  assert(content.includes('importedCount: partialInserted'), 'Must return partial inserted count');
+});
+
+// 15. Phase 16B.1: Replay response must use the persisted import ID
+ test('Server returns the canonical persisted import ID for idempotent replay', () => {
+  const content = fs.readFileSync(path.resolve('server.ts'), 'utf8');
+  assert(content.includes('importId: result.data?.importId || effectiveImportId'), 'Must return import ID from persisted import history');
+});
+
 // Output summary
 console.log(JSON.stringify({
   phase: '16B',

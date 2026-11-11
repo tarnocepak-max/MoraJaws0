@@ -1,0 +1,345 @@
+--- a/server/supabaseAdapter.ts
++++ b/server/supabaseAdapter.ts
+@@ -2211,21 +2211,28 @@
+   };
+ 
+   if (!Array.isArray(tickets) || tickets.length === 0) {
+-    result.status = 'SUCCESS';
+-    return { success: true, data: result };
++    result.status = 'FAILED';
++    return {
++      success: false,
++      error: { code: 'EMPTY_IMPORT', message: 'Import dibatalkan karena tidak ada baris WO yang dikirim.' },
++      data: result
++    };
+   }
+ 
+   // Idempotency check: return existing successful import if idempotencyKey matches
+   if (idempotencyKey) {
+     try {
+-      const { data: existingImport } = await client
++      const { data: existingImport, error: lookupError } = await client
+         .from('work_order_imports')
+         .select('*')
+         .eq('idempotency_key', idempotencyKey)
+         .maybeSingle();
++      if (lookupError) {
++        return { success: false, error: classifySupabaseError(lookupError) };
++      }
+       if (existingImport && (existingImport.status === 'SUCCESS' || existingImport.status === 'PARTIAL_SUCCESS')) {
+         return {
+-          success: true,
++          success: existingImport.status === 'SUCCESS',
+           data: {
+             importId: existingImport.import_id,
+             status: existingImport.status,
+@@ -2243,14 +2250,20 @@
+           }
+         };
+       }
+-    } catch {
+-      // Non-fatal if table does not exist
+-    }
+-  }
+-
+-  // Record initial import tracking state
+-  try {
+-    await client.from('work_order_imports').upsert({
++      if (existingImport?.status === 'PROCESSING' || existingImport?.status === 'VALIDATING') {
++        return {
++          success: false,
++          error: { code: 'IMPORT_IN_PROGRESS', message: 'Import dengan idempotency key yang sama sedang diproses. Jangan kirim ulang dengan key baru.' }
++        };
++      }
++    } catch (lookupException: any) {
++      return { success: false, error: classifySupabaseError(lookupException) };
++    }
++  }
++
++  // Tracking is mandatory: do not mutate work_orders if the audit row cannot be created.
++  try {
++    const { error: trackingStartError } = await client.from('work_order_imports').upsert({
+       import_id: importId,
+       filename: fileName,
+       sheet_name: sheetName,
+@@ -2262,8 +2275,11 @@
+       idempotency_key: idempotencyKey || null,
+       metadata: { batchId }
+     }, { onConflict: 'import_id' });
+-  } catch {
+-    // Non-fatal if table not initialized
++    if (trackingStartError) {
++      return { success: false, error: classifySupabaseError(trackingStartError) };
++    }
++  } catch (trackingStartException: any) {
++    return { success: false, error: classifySupabaseError(trackingStartException) };
+   }
+ 
+   try {
+@@ -2322,8 +2338,24 @@
+ 
+     const uniqueCandidates = Array.from(validBatchMap.values());
+     if (uniqueCandidates.length === 0) {
+-      result.status = result.failedCount === 0 && result.skippedDuplicates > 0 ? 'SUCCESS' : 'FAILED';
+-      return { success: result.failedCount === 0, data: result };
++      result.status = 'FAILED';
++      const { error: emptyBatchAuditError } = await client.from('work_order_imports').update({
++        total_rows: result.totalSubmitted,
++        valid_rows: 0,
++        invalid_rows: result.invalidCount,
++        inserted_rows: 0,
++        updated_rows: 0,
++        duplicate_rows: result.skippedDuplicates,
++        failed_rows: result.failedCount,
++        status: 'FAILED',
++        error_summary: 'Tidak ada baris WO valid untuk diproses.',
++        error_details: result.errors || [],
++        updated_at: new Date().toISOString()
++      }).eq('import_id', importId);
++      if (emptyBatchAuditError) {
++        return { success: false, error: classifySupabaseError(emptyBatchAuditError), data: result };
++      }
++      return { success: false, data: result };
+     }
+ 
+     // 2. Query Supabase for existing WO numbers in chunks of 200 (Level 2 Duplicate Detection)
+@@ -2434,7 +2466,8 @@
+       }
+     }
+ 
+-    const hasFailed = result.failedCount > 0 || result.failedErrors.length > 0;
++    // Invalid input rows are failures for acceptance/status purposes, even when valid rows were saved.
++    const hasFailed = result.failedCount > 0 || result.failedErrors.length > 0 || result.invalidCount > 0;
+     const hasSuccess = result.imported > 0 || (result.updatedCount || 0) > 0;
+ 
+     let finalStatus: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED' = 'FAILED';
+@@ -2442,16 +2475,16 @@
+       finalStatus = 'SUCCESS';
+     } else if (hasSuccess && hasFailed) {
+       finalStatus = 'PARTIAL_SUCCESS';
+-    } else if (result.skippedDuplicates > 0 && result.failedCount === 0) {
++    } else if (result.skippedDuplicates > 0 && result.failedCount === 0 && result.invalidCount === 0 && result.failedErrors.length === 0) {
+       finalStatus = 'SUCCESS';
+     } else {
+       finalStatus = 'FAILED';
+     }
+     result.status = finalStatus;
+ 
+-    // Update work_order_imports tracking table
++    // Final audit write is mandatory; a batch must not be reported as complete if its history is stale.
+     try {
+-      await client.from('work_order_imports').upsert({
++      const { error: trackingFinalError } = await client.from('work_order_imports').upsert({
+         import_id: importId,
+         filename: fileName,
+         sheet_name: sheetName,
+@@ -2471,8 +2504,27 @@
+         idempotency_key: idempotencyKey || null,
+         updated_at: new Date().toISOString()
+       }, { onConflict: 'import_id' });
+-    } catch {
+-      // Non-fatal if table not initialized
++      if (trackingFinalError) {
++        result.status = (result.imported > 0 || (result.updatedCount || 0) > 0) ? 'PARTIAL_SUCCESS' : 'FAILED';
++        return {
++          success: false,
++          error: {
++            ...classifySupabaseError(trackingFinalError),
++            message: `Data import telah diproses (${result.imported} tersimpan), tetapi pencatatan riwayat import gagal: ${trackingFinalError.message}`
++          },
++          data: result
++        };
++      }
++    } catch (trackingFinalException: any) {
++      result.status = (result.imported > 0 || (result.updatedCount || 0) > 0) ? 'PARTIAL_SUCCESS' : 'FAILED';
++      return {
++        success: false,
++        error: {
++          ...classifySupabaseError(trackingFinalException),
++          message: `Data import telah diproses (${result.imported} tersimpan), tetapi pencatatan riwayat import gagal: ${trackingFinalException?.message || 'unknown error'}`
++        },
++        data: result
++      };
+     }
+ 
+     return {
+--- a/server.ts
++++ b/server.ts
+@@ -7663,7 +7663,7 @@
+           const httpStatus = result.success ? 200 : (result.data?.imported ? 207 : 422);
+           return res.status(httpStatus).json({
+             success: result.success,
+-            importId: effectiveImportId,
++            importId: result.data?.importId || effectiveImportId,
+             status: result.data?.status || (result.success ? 'SUCCESS' : 'FAILED'),
+             summary: {
+               total: result.data?.totalSubmitted || tickets.length,
+--- a/src/context/AppContext.tsx
++++ b/src/context/AppContext.tsx
+@@ -68,6 +68,29 @@
+ import { useOfflineSync } from './OfflineSyncContext';
+ import { auth, testFirestoreConnection, isQuotaExceededError } from '../lib/firebase';
+ import { signOut } from 'firebase/auth';
++
++/**
++ * Stable identity for a logical WO import operation.
++ * A retry of the exact same payload reuses the same import ID and idempotency key.
++ * This is an idempotency fingerprint, not an authentication or authorization token.
++ */
++async function createWorkOrderImportIdentity(
++  rows: Partial<Ticket>[],
++  fileName: string,
++  sheetName: string,
++  duplicatePolicy: 'skip' | 'update_allowed' | 'review'
++): Promise<{ importId: string; idempotencyKey: string }> {
++  if (!globalThis.crypto?.subtle) {
++    throw new Error('Browser tidak mendukung SHA-256 untuk membuat identitas import yang aman. Gunakan HTTPS atau browser yang diperbarui.');
++  }
++  const canonicalPayload = JSON.stringify({ fileName, sheetName, duplicatePolicy, rows });
++  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalPayload));
++  const fingerprint = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
++  return {
++    importId: `WOIMP-${fingerprint.slice(0, 32)}`,
++    idempotencyKey: `MORAJAWS-WO-${fingerprint}`
++  };
++}
+ import {
+   isFirestoreActiveForEnvironment,
+   subscribeToMoraJawsFirestore,
+@@ -3898,14 +3921,18 @@
+     }
+ 
+     const policy = options?.duplicatePolicy || 'skip';
+-    const importId = `WOIMP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+-    const idempotencyKey = `IDEM-${importId}`;
++    let importId = '';
++    let idempotencyKey = '';
+     const fileName = options?.fileName || 'Imported_Data.xlsx';
+     const sheetName = options?.sheetName || 'Data_WO';
+ 
+     setSyncStatus('SYNCING');
+ 
+     try {
++      const importIdentity = await createWorkOrderImportIdentity(imported, fileName, sheetName, policy);
++      importId = importIdentity.importId;
++      idempotencyKey = importIdentity.idempotencyKey;
++
+       // Send directly to the canonical backend import endpoint (Supabase Single Source of Truth)
+       const res = await fetch('/api/supabase/work-orders/import', {
+         method: 'POST',
+@@ -3930,8 +3957,16 @@
+ 
+       if (!res.ok || !payload || payload.success === false) {
+         setSyncStatus('ERROR');
+-        const errorMsg = payload?.error?.message || payload?.error || `Gagal melakukan import (HTTP ${res.status}). Data belum tersimpan.`;
+-        toast.error(`Import gagal: ${errorMsg} (Import ID: ${importId})`, 'Import Ditolak');
++        const partialSummary = payload?.summary || {};
++        const partialInserted = Number(partialSummary.inserted || 0);
++        const partialUpdated = Number(partialSummary.updated || 0);
++        const partialDuplicates = Number(partialSummary.duplicate || 0);
++        const partialFailed = Number(partialSummary.failed || 0) + Number(partialSummary.invalid || 0);
++        const errorMsg = payload?.error?.message || payload?.error || `Gagal melakukan import (HTTP ${res.status}). Periksa ringkasan hasil import sebelum mencoba ulang.`;
++        const partialNotice = partialInserted > 0 || partialUpdated > 0
++          ? `Sebagian data sudah tersimpan (${partialInserted} baru, ${partialUpdated} diperbarui). `
++          : 'Tidak ada data yang dikonfirmasi tersimpan. ';
++        toast.error(`${partialNotice}${errorMsg} (Import ID: ${payload?.importId || importId})`, 'Import Tidak Lengkap');
+         addAuditLog(
+           'WO_IMPORT_FAILED',
+           'import_batch',
+@@ -3940,20 +3975,21 @@
+         );
+         return {
+           success: false,
+-          importId,
+-          status: 'FAILED',
+-          importedCount: 0,
+-          updatedCount: 0,
+-          duplicatesIgnored: payload?.summary?.duplicate || 0,
+-          failedCount: payload?.summary?.failed || imported.length,
++          importId: payload?.importId || importId,
++          status: payload?.status || 'FAILED',
++          importedCount: partialInserted,
++          updatedCount: partialUpdated,
++          duplicatesIgnored: partialDuplicates,
++          failedCount: partialFailed || imported.length,
+           error: errorMsg,
+           summary: payload?.summary
+         };
+       }
+ 
+-      // Backend confirmed persistence in Supabase!
+-      // Immediately refresh authoritative tickets from the server
+-      await refreshTicketsFromServer();
++      // Backend confirmed persistence in Supabase. Refresh is a separate operation:
++      // a refresh failure must not be confused with a failed database import.
++      const refreshedTickets = await refreshTicketsFromServer();
++      const refreshWarning = !Array.isArray(refreshedTickets);
+ 
+       const summary = payload.summary || {};
+       const inserted = summary.inserted || 0;
+@@ -3965,7 +4001,7 @@
+       setLastSyncTime(new Date().toISOString());
+ 
+       toast.success(
+-        `Import selesai (ID: ${importId}): ${inserted} WO berhasil disimpan ke Supabase${updated > 0 ? `, ${updated} diperbarui` : ''}.${duplicates > 0 ? ` (${duplicates} duplikat diabaikan)` : ''}`,
++        `Import selesai (ID: ${payload.importId || importId}): ${inserted} WO berhasil disimpan ke Supabase${updated > 0 ? `, ${updated} diperbarui` : ''}.${duplicates > 0 ? ` (${duplicates} duplikat diabaikan)` : ''}${refreshWarning ? ' Data tersimpan, tetapi tampilan belum berhasil disegarkan; muat ulang data.' : ''}`,
+         'Import Berhasil'
+       );
+ 
+@@ -3978,7 +4014,7 @@
+ 
+       return {
+         success: true,
+-        importId,
++        importId: payload.importId || importId,
+         status: payload.status || 'SUCCESS',
+         importedCount: inserted,
+         updatedCount: updated,
+--- a/scripts/execute_phase16b_wo_import_test.mjs
++++ b/scripts/execute_phase16b_wo_import_test.mjs
+@@ -147,6 +147,45 @@
+   }
+ });
+ 
++// 11. Phase 16B.1: Invalid rows must affect final import status
++ test('Adapter marks invalid rows as a failed/partial outcome instead of a false success', () => {
++  const content = fs.readFileSync(path.resolve('server/supabaseAdapter.ts'), 'utf8');
++  assert(content.includes('result.failedErrors.length > 0 || result.invalidCount > 0'), 'invalidCount must participate in hasFailed');
++  assert(content.includes("result.invalidCount === 0 && result.failedErrors.length === 0"), 'duplicate-only success must require zero invalid and failed rows');
++  assert(content.includes("result.status = 'FAILED'"), 'empty or all-invalid imports must not be marked successful');
++});
++
++// 12. Phase 16B.1: Import history is mandatory, not best-effort
++ test('Adapter fails closed when import tracking cannot be written', () => {
++  const content = fs.readFileSync(path.resolve('server/supabaseAdapter.ts'), 'utf8');
++  assert(content.includes('trackingStartError'), 'Must check initial import history write result');
++  assert(content.includes('trackingFinalError'), 'Must check final import history write result');
++  assert(content.includes('emptyBatchAuditError'), 'Must persist all-invalid import outcome');
++});
++
++// 13. Phase 16B.1: Stable import identity protects retries
++ test('AppContext derives stable import ID and idempotency key from the logical payload', () => {
++  const content = fs.readFileSync(path.resolve('src/context/AppContext.tsx'), 'utf8');
++  assert(content.includes('createWorkOrderImportIdentity'), 'Must create stable import identity');
++  assert(content.includes('crypto.subtle.digest'), 'Must use SHA-256 fingerprint');
++  assert(content.includes('idempotencyKey: `MORAJAWS-WO-${fingerprint}`'), 'Must use a stable idempotency key');
++  assert(!content.includes('const idempotencyKey = `IDEM-${importId}`'), 'Must not generate a fresh key from a random import ID');
++});
++
++// 14. Phase 16B.1: Partial result counts must not be hidden from the UI
++ test('AppContext preserves partial insert/update counts when an import is rejected as incomplete', () => {
++  const content = fs.readFileSync(path.resolve('src/context/AppContext.tsx'), 'utf8');
++  assert(content.includes('const partialInserted = Number(partialSummary.inserted || 0)'), 'Must preserve inserted count');
++  assert(content.includes('const partialFailed = Number(partialSummary.failed || 0) + Number(partialSummary.invalid || 0)'), 'Must count invalid rows in failure summary');
++  assert(content.includes('importedCount: partialInserted'), 'Must return partial inserted count');
++});
++
++// 15. Phase 16B.1: Replay response must use the persisted import ID
++ test('Server returns the canonical persisted import ID for idempotent replay', () => {
++  const content = fs.readFileSync(path.resolve('server.ts'), 'utf8');
++  assert(content.includes('importId: result.data?.importId || effectiveImportId'), 'Must return import ID from persisted import history');
++});
++
+ // Output summary
+ console.log(JSON.stringify({
+   phase: '16B',

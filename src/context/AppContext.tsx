@@ -68,6 +68,29 @@ import { saveTicketsOffline, cacheMasterData, getOfflineTickets, removeSyncQueue
 import { useOfflineSync } from './OfflineSyncContext';
 import { auth, testFirestoreConnection, isQuotaExceededError } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
+
+/**
+ * Stable identity for a logical WO import operation.
+ * A retry of the exact same payload reuses the same import ID and idempotency key.
+ * This is an idempotency fingerprint, not an authentication or authorization token.
+ */
+async function createWorkOrderImportIdentity(
+  rows: Partial<Ticket>[],
+  fileName: string,
+  sheetName: string,
+  duplicatePolicy: 'skip' | 'update_allowed' | 'review'
+): Promise<{ importId: string; idempotencyKey: string }> {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error('Browser tidak mendukung SHA-256 untuk membuat identitas import yang aman. Gunakan HTTPS atau browser yang diperbarui.');
+  }
+  const canonicalPayload = JSON.stringify({ fileName, sheetName, duplicatePolicy, rows });
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalPayload));
+  const fingerprint = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
+  return {
+    importId: `WOIMP-${fingerprint.slice(0, 32)}`,
+    idempotencyKey: `MORAJAWS-WO-${fingerprint}`
+  };
+}
 import {
   isFirestoreActiveForEnvironment,
   subscribeToMoraJawsFirestore,
@@ -3898,14 +3921,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const policy = options?.duplicatePolicy || 'skip';
-    const importId = `WOIMP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-    const idempotencyKey = `IDEM-${importId}`;
+    let importId = '';
+    let idempotencyKey = '';
     const fileName = options?.fileName || 'Imported_Data.xlsx';
     const sheetName = options?.sheetName || 'Data_WO';
 
     setSyncStatus('SYNCING');
 
     try {
+      const importIdentity = await createWorkOrderImportIdentity(imported, fileName, sheetName, policy);
+      importId = importIdentity.importId;
+      idempotencyKey = importIdentity.idempotencyKey;
+
       // Send directly to the canonical backend import endpoint (Supabase Single Source of Truth)
       const res = await fetch('/api/supabase/work-orders/import', {
         method: 'POST',
@@ -3930,8 +3957,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (!res.ok || !payload || payload.success === false) {
         setSyncStatus('ERROR');
-        const errorMsg = payload?.error?.message || payload?.error || `Gagal melakukan import (HTTP ${res.status}). Data belum tersimpan.`;
-        toast.error(`Import gagal: ${errorMsg} (Import ID: ${importId})`, 'Import Ditolak');
+        const partialSummary = payload?.summary || {};
+        const partialInserted = Number(partialSummary.inserted || 0);
+        const partialUpdated = Number(partialSummary.updated || 0);
+        const partialDuplicates = Number(partialSummary.duplicate || 0);
+        const partialFailed = Number(partialSummary.failed || 0) + Number(partialSummary.invalid || 0);
+        const errorMsg = payload?.error?.message || payload?.error || `Gagal melakukan import (HTTP ${res.status}). Periksa ringkasan hasil import sebelum mencoba ulang.`;
+        const partialNotice = partialInserted > 0 || partialUpdated > 0
+          ? `Sebagian data sudah tersimpan (${partialInserted} baru, ${partialUpdated} diperbarui). `
+          : 'Tidak ada data yang dikonfirmasi tersimpan. ';
+        toast.error(`${partialNotice}${errorMsg} (Import ID: ${payload?.importId || importId})`, 'Import Tidak Lengkap');
         addAuditLog(
           'WO_IMPORT_FAILED',
           'import_batch',
@@ -3940,20 +3975,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
         return {
           success: false,
-          importId,
-          status: 'FAILED',
-          importedCount: 0,
-          updatedCount: 0,
-          duplicatesIgnored: payload?.summary?.duplicate || 0,
-          failedCount: payload?.summary?.failed || imported.length,
+          importId: payload?.importId || importId,
+          status: payload?.status || 'FAILED',
+          importedCount: partialInserted,
+          updatedCount: partialUpdated,
+          duplicatesIgnored: partialDuplicates,
+          failedCount: partialFailed || imported.length,
           error: errorMsg,
           summary: payload?.summary
         };
       }
 
-      // Backend confirmed persistence in Supabase!
-      // Immediately refresh authoritative tickets from the server
-      await refreshTicketsFromServer();
+      // Backend confirmed persistence in Supabase. Refresh is a separate operation:
+      // a refresh failure must not be confused with a failed database import.
+      const refreshedTickets = await refreshTicketsFromServer();
+      const refreshWarning = !Array.isArray(refreshedTickets);
 
       const summary = payload.summary || {};
       const inserted = summary.inserted || 0;
@@ -3965,7 +4001,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setLastSyncTime(new Date().toISOString());
 
       toast.success(
-        `Import selesai (ID: ${importId}): ${inserted} WO berhasil disimpan ke Supabase${updated > 0 ? `, ${updated} diperbarui` : ''}.${duplicates > 0 ? ` (${duplicates} duplikat diabaikan)` : ''}`,
+        `Import selesai (ID: ${payload.importId || importId}): ${inserted} WO berhasil disimpan ke Supabase${updated > 0 ? `, ${updated} diperbarui` : ''}.${duplicates > 0 ? ` (${duplicates} duplikat diabaikan)` : ''}${refreshWarning ? ' Data tersimpan, tetapi tampilan belum berhasil disegarkan; muat ulang data.' : ''}`,
         'Import Berhasil'
       );
 
@@ -3978,7 +4014,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       return {
         success: true,
-        importId,
+        importId: payload.importId || importId,
         status: payload.status || 'SUCCESS',
         importedCount: inserted,
         updatedCount: updated,
