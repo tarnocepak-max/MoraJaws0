@@ -101,32 +101,8 @@ export const ContactCentreView: React.FC = () => {
         return matchContr && matchArea;
       }
       if (currentUser?.role === 'installer') {
-        const myUid = currentUser?.id || '';
-        const myUsername = (currentUser?.username || '').toLowerCase().trim();
-        const myName = (currentUser?.name || '').toLowerCase().trim();
-        const cleanMyName = myName.replace(/\(.*?\)/g, '').trim();
-
-        // 1. Direct UID match
-        if (myUid && (t.assignedToUid === myUid || t.installerId === myUid || t.assignedTo === myUid)) {
-          return true;
-        }
-
-        // 2. Direct username match
-        if (myUsername && (
-          (t.assignedTo && t.assignedTo.toLowerCase().trim() === myUsername) ||
-          (t.installerId && t.installerId.toLowerCase().trim() === myUsername)
-        )) {
-          return true;
-        }
-
-        // 3. Technician name match
-        const ticketInst = (t.installerName || '').toLowerCase().trim();
-        return Boolean(
-          ticketInst === myName ||
-          ticketInst === cleanMyName ||
-          (cleanMyName && ticketInst.includes(cleanMyName)) ||
-          (cleanMyName && cleanMyName.includes(ticketInst))
-        );
+        const myUid = String(currentUser?.id || '').trim();
+        return Boolean(myUid && String(t.installerUserId || '').trim() === myUid);
       }
       return true;
     });

@@ -1444,26 +1444,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return matchContractor && matchArea;
       }
 
-      // 3. Installer / Teknisi: STRICTLY LIMITED to tickets explicitly assigned to this technician!
+      // 3. Installer / Teknisi: STRICTLY LIMITED to tickets explicitly assigned to this technician by immutable account ID!
       if (currentUser.role === 'installer') {
-        const myName = String(currentUser.name || '').toLowerCase().trim();
-        const cleanMyName = myName.replace(/\(.*?\)/g, '').trim();
-        const ticketInst = String(t.installerName || '').toLowerCase().trim();
-        if (!ticketInst) return false; // not assigned to anyone
-
-        const nameMatch = Boolean(
-          ticketInst === myName ||
-          (cleanMyName && ticketInst === cleanMyName) ||
-          (cleanMyName && ticketInst && (ticketInst.includes(cleanMyName) || cleanMyName.includes(ticketInst)))
-        );
-
-        const phoneMatch = Boolean(
-          currentUser.phone &&
-          t.installerContact &&
-          String(t.installerContact).replace(/\D/g, '') === String(currentUser.phone).replace(/\D/g, '')
-        );
-
-        return nameMatch || phoneMatch;
+        const myId = String(currentUser.id || '').trim();
+        if (!myId) return false;
+        return String(t.installerUserId || '').trim() === myId;
       }
 
       return false;
@@ -2339,17 +2324,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const isInstallerMatch = (ticketInstaller: string | undefined, installerName: string): boolean => {
-    if (!ticketInstaller || !installerName) return false;
-    const tInst = String(ticketInstaller).toLowerCase().trim();
-    const effInst = String(installerName).toLowerCase().trim();
-    if (!tInst || !effInst) return false;
-    if (tInst === effInst) return true;
-    if (tInst.includes(effInst) || effInst.includes(tInst)) return true;
-    const cleanEff = effInst.replace(/\(.*?\)/g, '').trim();
-    if (cleanEff && (tInst.includes(cleanEff) || cleanEff.includes(tInst))) return true;
-    return false;
-  };
 
   const startWorkOnTicket = async (
     ticketId: string
@@ -2359,15 +2333,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 1. Ownership validation for field technician
     if (currentUser.role === 'installer') {
-      const myId = currentUser.id || '';
-      const myUsername = (currentUser.username || '').toLowerCase().trim();
-      const myName = (currentUser.name || '').toLowerCase().trim();
-      const tInst = (ticket.installerName || '').toLowerCase().trim();
-
-      const isMine =
-        (myId && (ticket.assignedTo === myId || ticket.installerId === myId || ticket.assignedToUid === myId)) ||
-        (myUsername && ticket.assignedTo?.toLowerCase() === myUsername) ||
-        (myName && (tInst === myName || isInstallerMatch(ticket.installerName, myName)));
+      const myId = String(currentUser.id || '').trim();
+      const isMine = Boolean(myId && String(ticket.installerUserId || '').trim() === myId);
 
       if (!isMine) {
         return {
@@ -2455,15 +2422,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 1. Strict Installer Assignment Verification
     if (currentUser.role === 'installer') {
-      const myId = currentUser.id || '';
-      const myUsername = (currentUser.username || '').toLowerCase().trim();
-      const myName = (currentUser.name || '').toLowerCase().trim();
-      const tInst = (ticket.installerName || '').toLowerCase().trim();
-
-      const isMine =
-        (myId && (ticket.assignedTo === myId || ticket.installerId === myId || ticket.assignedToUid === myId)) ||
-        (myUsername && ticket.assignedTo?.toLowerCase() === myUsername) ||
-        (myName && (tInst === myName || isInstallerMatch(ticket.installerName, myName)));
+      const myId = String(currentUser.id || '').trim();
+      const isMine = Boolean(myId && String(ticket.installerUserId || '').trim() === myId);
 
       if (!isMine) {
         return {
@@ -3266,16 +3226,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Requirement 7: Validasi wajib bagi Installer untuk memilih kategori chat
     if (currentUser.role === 'installer') {
-      const myId = currentUser.id || '';
-      const myUsername = (currentUser.username || '').toLowerCase().trim();
-      const myName = (currentUser.name || '').toLowerCase().trim();
-      const tInst = (ticket.installerName || '').toLowerCase().trim();
-
-      const isMine =
-        (myId && (ticket.assignedTo === myId || ticket.installerId === myId || ticket.assignedToUid === myId)) ||
-        (myUsername && ticket.assignedTo?.toLowerCase() === myUsername) ||
-        (myName && (tInst === myName || isInstallerMatch(ticket.installerName, myName))) ||
-        (myUsername && (tInst === myUsername || isInstallerMatch(ticket.installerName, myUsername)));
+      const myId = String(currentUser.id || '').trim();
+      const isMine = Boolean(myId && String(ticket.installerUserId || '').trim() === myId);
 
       if (!isMine) {
         toast.error('Akses Ditolak: Anda hanya berwenang mengirim pesan pada tiket yang ditugaskan kepada Anda.');
@@ -3522,9 +3474,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Installer can only update technicalReport and remarks on assigned WO
     if (currentUser.role === 'installer') {
-      const assignedName = (existing.installerName || '').toLowerCase().trim();
-      const currentName = (currentUser.name || '').toLowerCase().trim();
-      if (assignedName !== currentName) {
+      const myId = String(currentUser.id || '').trim();
+      const assignedUserId = String(existing.installerUserId || '').trim();
+      if (!myId || !assignedUserId || assignedUserId !== myId) {
         return { success: false, error: 'Akses Ditolak: Anda hanya berwenang memperbarui tiket yang ditugaskan kepada akun Anda.' };
       }
       const coreFields: (keyof Ticket)[] = ['woNumber', 'idCustomer', 'customerName', 'customerPhone', 'slotTime', 'contactorName', 'leaderName', 'installerName', 'area'];
@@ -3551,9 +3503,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTickets(prev =>
       prev.map(t => {
         if (t.id !== id) return t;
+        const matchingInsts = updates.installerName
+          ? users.filter(u => u.role === 'installer' && u.active && u.name.toLowerCase().trim() === updates.installerName!.toLowerCase().trim())
+          : [];
+        const resolvedUserId = matchingInsts.length === 1 ? matchingInsts[0].id : (updates.installerName ? undefined : t.installerUserId);
         const merged: Ticket = {
           ...t,
           ...updates,
+          installerUserId: updates.installerUserId !== undefined ? updates.installerUserId : resolvedUserId,
           statusWOInstaller: updates.installerName ? 'Assigned' : t.statusWOInstaller,
           updatedAt: new Date().toISOString(),
           updatedBy: currentUser.name

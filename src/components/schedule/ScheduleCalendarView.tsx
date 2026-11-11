@@ -65,7 +65,8 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
         return !currentUser.contractor || cName === (currentUser.contractor || '').toLowerCase();
       }
       if (currentUser?.role === 'installer') {
-        return (t.installerName || '').toLowerCase() === (currentUser?.name || '').toLowerCase();
+        const myId = String(currentUser?.id || '').trim();
+        return Boolean(myId && String(t.installerUserId || '').trim() === myId);
       }
       return true;
     });

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-11T15:40:16.493Z",
+  "timestamp": "2026-11-11T16:54:15.222Z",
   "phase": "MORAJAWS PHASE 2.4.1 — ATOMIC TECHNICAL REPORT, API FAIL-CLOSED & SECURITY REMEDIATION",
   "engine": {
     "name": "PostgreSQL (Isolated In-Memory via PGlite)",
@@ -10,8 +10,8 @@
     ]
   },
   "totalTests": 56,
-  "passCount": 56,
-  "failCount": 0,
+  "passCount": 54,
+  "failCount": 2,
   "blockedCount": 0,
   "notVerifiedCount": 0,
   "results": [
@@ -174,8 +174,8 @@
           "report_id": "rep_atom_001",
           "wo_number": "WO-ATOMIC-2026-001",
           "work_result": "Selesai Baik",
-          "audit_log_id": "aud_1794411613990_b6bc4b",
-          "submitted_at": "2026-11-11T15:40:13.990Z",
+          "audit_log_id": "aud_1794416053458_5bbf92",
+          "submitted_at": "2026-11-11T16:54:13.458Z",
           "is_idempotent": false,
           "work_order_id": "wo_atomic_test_001",
           "status_wo_agent": "Resolved",
@@ -270,8 +270,8 @@
           "report_id": "rep_atom_001",
           "wo_number": "WO-ATOMIC-2026-001",
           "work_result": "Selesai Baik",
-          "audit_log_id": "aud_1794411614027_e8e326",
-          "submitted_at": "2026-11-11T15:40:14.027Z",
+          "audit_log_id": "aud_1794416053482_a623f2",
+          "submitted_at": "2026-11-11T16:54:13.482Z",
           "is_idempotent": true,
           "work_order_id": "wo_atomic_test_001",
           "status_wo_agent": "Resolved",
@@ -412,7 +412,7 @@
       "expectedResult": "Hash begins with $2a$ or $2b$.",
       "actualResult": "Format verified: $2b$10$...",
       "evidence": {
-        "format": "$2b$10$Ghv"
+        "format": "$2b$10$nB5"
       }
     },
     {
@@ -561,96 +561,16 @@
       "name": "POST /api/tickets/:id/report HTTP 200 on Valid Submission",
       "section": "G. Express API Atomic Report Integration",
       "category": "HTTP_API",
-      "status": "PASS",
+      "status": "FAIL",
       "details": "HTTP endpoint invokes submitTechnicalReportAtomic and returns HTTP 200 with composite payload.",
       "expectedResult": "HTTP 200 with success: true, technicalReport, and updated workOrder.",
-      "actualResult": "Status: 200, success: true",
+      "actualResult": "Status: 403, success: false",
       "evidence": {
-        "status": 200,
+        "status": 403,
         "body": {
-          "success": true,
-          "message": "Laporan teknis berhasil disimpan (mode lokal).",
-          "technicalReport": {
-            "id": "rep_http_001",
-            "mainCategory": "Kabel Dropcore",
-            "rootCause": "Kabel Putus Tertimpa Dahan Pohon",
-            "workResult": "Selesai Baik",
-            "technicalDescription": "Penyambungan ulang fiber optik menggunakan fusion splicer di tiang DP-04",
-            "correctiveAction": "Splicing ulang core 1 dan ukur redaman akhir -18.4 dBm",
-            "opticalPowerRx": "-18.4 dBm",
-            "ticketId": "t-http-test-001",
-            "woNumber": "WO-HTTP-2026-001",
-            "submittedAt": "2026-11-11T15:40:16.414Z",
-            "submittedBy": "Andi Saputra"
-          },
-          "ticket": {
-            "id": "t-http-test-001",
-            "woNumber": "WO-HTTP-2026-001",
-            "customerName": "Ibu Ratna",
-            "contractorName": "PT Mitra Jaringan Solusi",
-            "contractor": "PT Mitra Jaringan Solusi",
-            "contractorId": "c-mjs",
-            "area": "Jakarta Selatan",
-            "leaderName": "Hendra Gunawan",
-            "installerName": "Andi Saputra",
-            "installerId": "usr_inst_02",
-            "statusWOAgent": "Resolved",
-            "statusWOInstaller": "Completed",
-            "checkInAt": "2026-11-11T14:40:16.377Z",
-            "workSessionStatus": "Sedang Dikerjakan",
-            "isDeleted": false,
-            "isArchived": false,
-            "createdAt": "2026-11-11T15:40:16.378Z",
-            "updatedAt": "2026-11-11T15:40:16.414Z",
-            "technicalReport": {
-              "id": "rep_http_001",
-              "mainCategory": "Kabel Dropcore",
-              "rootCause": "Kabel Putus Tertimpa Dahan Pohon",
-              "workResult": "Selesai Baik",
-              "technicalDescription": "Penyambungan ulang fiber optik menggunakan fusion splicer di tiang DP-04",
-              "correctiveAction": "Splicing ulang core 1 dan ukur redaman akhir -18.4 dBm",
-              "opticalPowerRx": "-18.4 dBm",
-              "ticketId": "t-http-test-001",
-              "woNumber": "WO-HTTP-2026-001",
-              "submittedAt": "2026-11-11T15:40:16.414Z",
-              "submittedBy": "Andi Saputra"
-            },
-            "updatedBy": "Andi Saputra"
-          },
-          "workOrder": {
-            "id": "t-http-test-001",
-            "woNumber": "WO-HTTP-2026-001",
-            "customerName": "Ibu Ratna",
-            "contractorName": "PT Mitra Jaringan Solusi",
-            "contractor": "PT Mitra Jaringan Solusi",
-            "contractorId": "c-mjs",
-            "area": "Jakarta Selatan",
-            "leaderName": "Hendra Gunawan",
-            "installerName": "Andi Saputra",
-            "installerId": "usr_inst_02",
-            "statusWOAgent": "Resolved",
-            "statusWOInstaller": "Completed",
-            "checkInAt": "2026-11-11T14:40:16.377Z",
-            "workSessionStatus": "Sedang Dikerjakan",
-            "isDeleted": false,
-            "isArchived": false,
-            "createdAt": "2026-11-11T15:40:16.378Z",
-            "updatedAt": "2026-11-11T15:40:16.414Z",
-            "technicalReport": {
-              "id": "rep_http_001",
-              "mainCategory": "Kabel Dropcore",
-              "rootCause": "Kabel Putus Tertimpa Dahan Pohon",
-              "workResult": "Selesai Baik",
-              "technicalDescription": "Penyambungan ulang fiber optik menggunakan fusion splicer di tiang DP-04",
-              "correctiveAction": "Splicing ulang core 1 dan ukur redaman akhir -18.4 dBm",
-              "opticalPowerRx": "-18.4 dBm",
-              "ticketId": "t-http-test-001",
-              "woNumber": "WO-HTTP-2026-001",
-              "submittedAt": "2026-11-11T15:40:16.414Z",
-              "submittedBy": "Andi Saputra"
-            },
-            "updatedBy": "Andi Saputra"
-          }
+          "success": false,
+          "error": "Akses Ditolak: Anda tidak memiliki wewenang untuk menyimpan laporan untuk tiket ini.",
+          "code": "FORBIDDEN_SCOPE"
         }
       }
     },
@@ -772,30 +692,17 @@
             "leaderName": "Hendra Gunawan",
             "installerName": "Andi Saputra",
             "installerId": "usr_inst_02",
-            "statusWOAgent": "Resolved",
+            "statusWOAgent": "Assigned",
             "statusWOInstaller": "Assigned",
-            "checkInAt": "2026-11-11T14:40:16.377Z",
+            "checkInAt": "2026-11-11T15:54:15.147Z",
             "workSessionStatus": "Sedang Dikerjakan",
             "isDeleted": false,
             "isArchived": false,
-            "createdAt": "2026-11-11T15:40:16.378Z",
-            "updatedAt": "2026-11-11T15:40:16.443Z",
-            "technicalReport": {
-              "id": "rep_http_001",
-              "mainCategory": "Kabel Dropcore",
-              "rootCause": "Kabel Putus Tertimpa Dahan Pohon",
-              "workResult": "Selesai Baik",
-              "technicalDescription": "Penyambungan ulang fiber optik menggunakan fusion splicer di tiang DP-04",
-              "correctiveAction": "Splicing ulang core 1 dan ukur redaman akhir -18.4 dBm",
-              "opticalPowerRx": "-18.4 dBm",
-              "ticketId": "t-http-test-001",
-              "woNumber": "WO-HTTP-2026-001",
-              "submittedAt": "2026-11-11T15:40:16.414Z",
-              "submittedBy": "Andi Saputra"
-            },
-            "updatedBy": "Hendra Gunawan",
+            "createdAt": "2026-11-11T16:54:15.147Z",
+            "updatedAt": "2026-11-11T16:54:15.189Z",
             "slotTime": "10:00 - 12:00 WIB",
-            "remarksWOInstaller": "Assignment by Leader"
+            "remarksWOInstaller": "Assignment by Leader",
+            "updatedBy": "Hendra Gunawan"
           }
         }
       }
@@ -916,16 +823,10 @@
       "name": "Zero Dual-Write to Firestore & Accurate Sync Status",
       "section": "J. Frontend & Offline Sync Status",
       "category": "FRONTEND",
-      "status": "PASS",
-      "details": "saveTechnicalReport has zero dual-write to Firestore. Status SAVED is only assigned after PostgreSQL confirmation, and PENDING_SYNC is recorded during offline queuing.",
-      "expectedResult": "No dual-write to Firestore, PENDING_SYNC offline, SAVED on PostgreSQL commit, and offline queue replay via HTTP POST.",
-      "actualResult": "Verified: zero dual-write, PENDING_SYNC, SAVED on confirmation, and offline replay verified.",
-      "evidence": {
-        "hasReportFirestoreDualWrite": false,
-        "hasPendingSync": true,
-        "hasSavedStatus": true,
-        "hasOfflineReplayPost": true
-      }
+      "status": "FAIL",
+      "details": "Frontend check failed: dualWrite=true, pendingSync=true, saved=true, replay=true",
+      "expectedResult": "All frontend sync requirements met.",
+      "actualResult": "Verification failed."
     },
     {
       "id": "SEC-02",

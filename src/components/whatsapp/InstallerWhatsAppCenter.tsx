@@ -37,33 +37,15 @@ export const InstallerWhatsAppCenter: React.FC<InstallerWhatsAppCenterProps> = (
   const [statusFilter, setStatusFilter] = useState<'all' | 'unconfirmed' | 'confirmed' | 'reschedule'>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Helper matching for logged-in technician
-  const isInstallerMatch = (ticketInstaller: string | undefined, installerName: string) => {
-    if (!ticketInstaller || !ticketInstaller.trim()) return false;
-    const tInst = ticketInstaller.toLowerCase().trim();
-    const effInst = installerName.toLowerCase().trim();
-    if (tInst === effInst) return true;
-    if (tInst.includes(effInst) || effInst.includes(tInst)) return true;
-    const cleanEff = effInst.replace(/\(.*?\)/g, '').trim();
-    if (cleanEff && (tInst.includes(cleanEff) || cleanEff.includes(tInst))) return true;
-    return false;
-  };
 
-  // Strictly tickets assigned to current installer
+  // Strictly tickets assigned to current installer by account ID
   const myTickets = useMemo(() => {
-    const myName = currentUser.name || '';
-    const myUsername = currentUser.username || '';
-    const myId = currentUser.id || '';
+    const myId = String(currentUser?.id || '').trim();
+    if (!myId) return [];
 
     return (tickets || []).filter(t => {
       if (t.isArchived || t.isDeleted) return false;
-      if (!t.installerName) return false;
-
-      if (t.assignedTo && (t.assignedTo === myId || t.assignedTo === myUsername)) return true;
-      if (myName && isInstallerMatch(t.installerName, myName)) return true;
-      if (myUsername && isInstallerMatch(t.installerName, myUsername)) return true;
-
-      return false;
+      return String(t.installerUserId || '').trim() === myId;
     });
   }, [tickets, currentUser]);
 

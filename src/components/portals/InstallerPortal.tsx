@@ -141,10 +141,12 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({
       );
     }
 
+    const targetUser = users.find(u => u.name === effectiveInstallerName && u.role === 'installer');
+    const targetId = targetUser?.id;
     return tickets.filter(
-      t => !t.isArchived && !t.isDeleted && Boolean(t.installerName) && isInstallerMatch(t.installerName, effectiveInstallerName)
+      t => !t.isArchived && !t.isDeleted && ((targetId && String(t.installerUserId || '').trim() === targetId) || (Boolean(t.installerName) && isInstallerMatch(t.installerName, effectiveInstallerName)))
     );
-  }, [tickets, currentUser, effectiveInstallerName]);
+  }, [tickets, currentUser, effectiveInstallerName, users]);
 
   // Status Filter State
   const [statusFilter, setStatusFilter] = useState<StatusFilterCategory>(initialFilter);

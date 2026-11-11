@@ -1,0 +1,93 @@
+{
+  "suite": "MORAJAWS PHASE 2.4.4: MIGRATION 014 COMPATIBILITY AUDIT",
+  "migrationFile": "migrations/014_phase2_4_2_schema_and_installer_identity.sql",
+  "timestamp": "2026-11-11T16:53:49.452Z",
+  "databaseExecutionPerformed": false,
+  "schemaModified": false,
+  "total": 10,
+  "compliant": 10,
+  "nonCompliant": 0,
+  "verdict": "READY_FOR_DEPLOYMENT_APPROVAL",
+  "checks": [
+    {
+      "id": "MIG-01",
+      "category": "Column Definition",
+      "title": "work_orders.installer_user_id definition and nullability",
+      "status": "COMPLIANT",
+      "finding": "Column is defined as nullable text with conditional partial index when installer_user_id IS NOT NULL.",
+      "evidence": "ALTER TABLE public.work_orders ADD COLUMN IF NOT EXISTS installer_user_id text; CREATE INDEX IF NOT EXISTS idx_work_orders_installer_user_id ON public.work_orders(installer_user_id) WHERE installer_user_id IS NOT NULL;"
+    },
+    {
+      "id": "MIG-02",
+      "category": "Foreign Key",
+      "title": "Foreign key constraint from work_orders.installer_user_id to public.users(id)",
+      "status": "COMPLIANT",
+      "finding": "FK constraint work_orders_installer_user_id_fkey links installer_user_id to users(id) with ON DELETE SET NULL to preserve work order history if an installer is removed.",
+      "evidence": "ALTER TABLE public.work_orders ADD CONSTRAINT work_orders_installer_user_id_fkey FOREIGN KEY (installer_user_id) REFERENCES public.users(id) ON DELETE SET NULL;"
+    },
+    {
+      "id": "MIG-03",
+      "category": "Data Types",
+      "title": "Data types across all modified and referenced columns",
+      "status": "COMPLIANT",
+      "finding": "All column data types match canonical TypeScript and PostgreSQL schema: check_out_at (timestamptz), work_duration_minutes (integer), work_duration_formatted (text), and installer_user_id (text matching users.id text).",
+      "evidence": "Types: timestamptz, integer, text, and text FK referencing users(id text)."
+    },
+    {
+      "id": "MIG-04",
+      "category": "Technical Reports",
+      "title": "technical_reports insert/upsert schema parity",
+      "status": "COMPLIANT",
+      "finding": "technical_reports table exists in base schema (Migration 001/010) with matching column names, constraints, and JSON payload support. Upsert handles report edits cleanly.",
+      "evidence": "All 30 columns in INSERT INTO public.technical_reports match public.technical_reports schema definition."
+    },
+    {
+      "id": "MIG-05",
+      "category": "Audit Logs",
+      "title": "audit_logs.event_at verification and preflight check",
+      "status": "COMPLIANT",
+      "finding": "Preflight explicitly verifies event_at exists on audit_logs. Migration 001 defines event_at timestamptz NOT NULL DEFAULT now(). Audit log insertion uses event_at.",
+      "evidence": "Preflight check guarantees event_at existence; gracefully notices if created_at is also present."
+    },
+    {
+      "id": "MIG-06",
+      "category": "Atomic RPC",
+      "title": "fn_submit_technical_report_atomic implementation and row locking",
+      "status": "COMPLIANT",
+      "finding": "Function is SECURITY DEFINER with fixed search_path (public, pg_temp), acquires pessimistic row lock FOR UPDATE on work_orders, and executes technical report upsert, WO status update, work duration computation, and audit logging in a single atomic database execution.",
+      "evidence": "FOR UPDATE row lock prevents concurrent modification races; SECURITY DEFINER with sanitized search_path prevents privilege escalation."
+    },
+    {
+      "id": "MIG-07",
+      "category": "Function Security",
+      "title": "EXECUTE privileges revoked from PUBLIC/anon and granted only to service_role",
+      "status": "COMPLIANT",
+      "finding": "Function EXECUTE privilege is strictly revoked from PUBLIC, anon, and authenticated roles, and granted solely to service_role. Direct frontend client invocation without backend verification is strictly blocked (fail-closed).",
+      "evidence": "REVOKE ALL FROM PUBLIC, anon, authenticated; GRANT EXECUTE TO service_role;"
+    },
+    {
+      "id": "MIG-08",
+      "category": "Idempotency",
+      "title": "Report idempotency resolution and duplicate audit log suppression",
+      "status": "COMPLIANT",
+      "finding": "If the report was already submitted (matched by report ID, payload, or existing record on the work order), the RPC updates the existing report without generating a duplicate audit log entry, returning is_idempotent: true.",
+      "evidence": "v_is_idempotent flag gates audit_logs insert and is returned in the JSON response."
+    },
+    {
+      "id": "MIG-09",
+      "category": "Transaction Safety",
+      "title": "Transactional atomicity with preflight validation and rollback guarantees",
+      "status": "COMPLIANT",
+      "finding": "The entire migration script is wrapped in BEGIN; ... COMMIT;. If preflight assertions (presence of required tables and columns) or post-migration checks fail, the entire transaction rolls back cleanly with zero partial changes.",
+      "evidence": "Enclosed in BEGIN/COMMIT block with preflight and postflight assertion blocks."
+    },
+    {
+      "id": "MIG-10",
+      "category": "Auth Compatibility",
+      "title": "Compatibility with MoraJaws custom application login architecture",
+      "status": "COMPLIANT",
+      "finding": "MoraJaws uses custom application authentication where the security principal is public.users.id. Migration 014 links installer_user_id directly to public.users(id) and scopes report submissions via p_submitted_by_id, making it 100% compatible with custom application login without any dependency on Supabase GoTrue auth.users.",
+      "evidence": "installer_user_id references public.users(id); RPC authorizes based on authenticated internal account ID."
+    }
+  ]
+}

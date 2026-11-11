@@ -24,7 +24,12 @@
     "test:phase15a.2": "tsx scripts/verify_phase15a2_hardening.ts",
     "test:phase2.4": "tsx scripts/execute_phase2_4_acceptance_suite.ts",
     "test:phase2.4.1": "tsx scripts/execute_phase2_4_1_acceptance_suite.ts",
-    "test:phase2.4.3": "node scripts/execute_phase2_4_3_assignment_id_test.mjs && node scripts/check_phase2_4_3_syntax.mjs"
+    "test:phase2.4.3": "node scripts/execute_phase2_4_3_assignment_id_test.mjs && node scripts/check_phase2_4_3_syntax.mjs",
+    "test:phase2.4.4": "tsx scripts/execute_phase2_4_4_runtime_assignment_test.ts && tsx scripts/execute_phase2_4_4_api_integration_test.ts && tsx scripts/audit_phase2_4_4_migration_014.ts",
+    "test:phase2.4.4:runtime": "tsx scripts/execute_phase2_4_4_runtime_assignment_test.ts",
+    "test:phase2.4.4:api": "tsx scripts/execute_phase2_4_4_api_integration_test.ts",
+    "test:phase2.4.4:audit": "tsx scripts/audit_phase2_4_4_migration_014.ts",
+    "evidence:phase2.4.4": "tsx scripts/collect_phase2_4_4_build_evidence.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.16",

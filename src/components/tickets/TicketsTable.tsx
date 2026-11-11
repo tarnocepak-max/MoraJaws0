@@ -317,20 +317,13 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({ onSelectTicket, onOp
       else if (currentUser?.role === 'installer') {
         if (!woDate || woDate !== todayStr) return false;
 
-        const currentInstallerName = (currentUser.name || '').trim().toLowerCase();
-        const currentInstallerPhone = (currentUser.phone || '').trim();
-        const currentInstallerArea = (currentUser.area || '').trim().toLowerCase();
+        const myId = String(currentUser.id || '').trim();
+        if (!myId) return false;
 
-        const tInstaller = (t.installerName || '').trim().toLowerCase();
-        const tContact = (t.installerContact || '').trim();
-        const cleanMyName = currentInstallerName.replace(/\(.*?\)/g, '').trim();
-
-        const isAssignedToMe =
-          Boolean(tInstaller && (tInstaller === currentInstallerName || tInstaller === cleanMyName || tInstaller.includes(cleanMyName) || cleanMyName.includes(tInstaller))) ||
-          Boolean(tContact && currentInstallerPhone && tContact.replace(/\D/g, '') === currentInstallerPhone.replace(/\D/g, ''));
-        
+        const isAssignedToMe = String(t.installerUserId || '').trim() === myId;
         if (!isAssignedToMe) return false;
 
+        const currentInstallerArea = (currentUser.area || '').trim().toLowerCase();
         if (currentInstallerArea) {
           const tArea = (t.area || '').trim().toLowerCase();
           if (tArea && tArea !== currentInstallerArea) return false;

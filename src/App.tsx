@@ -202,34 +202,17 @@ const MainLayout: React.FC = () => {
     }).length;
   }, [isLoggedIn, tickets, currentUser]);
 
-  // Helper matching for logged-in technician
-  const isInstallerMatch = (ticketInstaller: string | undefined, installerName: string) => {
-    if (!ticketInstaller || !ticketInstaller.trim()) return false;
-    const tInst = String(ticketInstaller).toLowerCase().trim();
-    const effInst = String(installerName).toLowerCase().trim();
-    if (!tInst || !effInst) return false;
-    if (tInst === effInst) return true;
-    if (tInst.includes(effInst) || effInst.includes(tInst)) return true;
-    const cleanEff = effInst.replace(/\(.*?\)/g, '').trim();
-    if (cleanEff && (tInst.includes(cleanEff) || cleanEff.includes(tInst))) return true;
-    return false;
-  };
 
   // Scoped pending tickets count for logged-in Installer
   const installerPendingCount = useMemo(() => {
     if (!isLoggedIn || !isInstaller) return 0;
-    const myName = (currentUser?.name || '').toLowerCase().trim();
-    const myId = currentUser?.id || '';
-    const myUsername = (currentUser?.username || '').toLowerCase().trim();
+    const myId = String(currentUser?.id || '').trim();
+    if (!myId) return 0;
 
     return tickets.filter(t => {
       if (t.isArchived || t.isDeleted) return false;
-      const assigned = (myId && t.assignedTo === myId) || (myUsername && t.assignedTo === myUsername);
-      const tInst = (t.installerName || '').toLowerCase().trim();
-      const nameMatch =
-        (myName && (tInst === myName || isInstallerMatch(t.installerName, myName))) ||
-        (myUsername && (tInst === myUsername || isInstallerMatch(t.installerName, myUsername)));
-      if (!assigned && !nameMatch) return false;
+      const assigned = String(t.installerUserId || '').trim() === myId;
+      if (!assigned) return false;
 
       const cat = classifyInstallerStatus(t);
       return cat === 'pending';
@@ -239,18 +222,13 @@ const MainLayout: React.FC = () => {
   // Scoped unread chat count for logged-in Installer
   const installerUnreadChatCount = useMemo(() => {
     if (!isLoggedIn || !isInstaller) return 0;
-    const myName = (currentUser?.name || '').toLowerCase().trim();
-    const myId = currentUser?.id || '';
-    const myUsername = (currentUser?.username || '').toLowerCase().trim();
+    const myId = String(currentUser?.id || '').trim();
+    if (!myId) return 0;
 
     return tickets.reduce((total, t) => {
       if (t.isArchived || t.isDeleted) return total;
-      const assigned = (myId && t.assignedTo === myId) || (myUsername && t.assignedTo === myUsername);
-      const tInst = (t.installerName || '').toLowerCase().trim();
-      const nameMatch =
-        (myName && (tInst === myName || isInstallerMatch(t.installerName, myName))) ||
-        (myUsername && (tInst === myUsername || isInstallerMatch(t.installerName, myUsername)));
-      if (!assigned && !nameMatch) return total;
+      const assigned = String(t.installerUserId || '').trim() === myId;
+      if (!assigned) return total;
 
       return total + (getTicketUnreadCount(t.id) > 0 ? 1 : 0);
     }, 0);
@@ -273,15 +251,8 @@ const MainLayout: React.FC = () => {
 
   const handleOpenTicketDetail = (ticket: Ticket, defaultTab: 'overview' | 'report' | 'chat' | 'history' = 'overview') => {
     if (isInstaller) {
-      const myName = (currentUser.name || '').toLowerCase().trim();
-      const myId = currentUser.id || '';
-      const myUsername = (currentUser.username || '').toLowerCase().trim();
-      const tInst = (ticket.installerName || '').toLowerCase().trim();
-      const isMine =
-        (myId && ticket.assignedTo === myId) ||
-        (myUsername && (ticket.assignedTo === myUsername || (ticket.assignedTo && ticket.assignedTo.toLowerCase() === myUsername))) ||
-        (myName && (tInst === myName || isInstallerMatch(ticket.installerName, myName))) ||
-        (myUsername && (tInst === myUsername || isInstallerMatch(ticket.installerName, myUsername)));
+      const myId = String(currentUser.id || '').trim();
+      const isMine = Boolean(myId && String(ticket.installerUserId || '').trim() === myId);
 
       if (!isMine) {
         toast.error('Akses ditolak: Anda hanya dapat mengakses tiket yang ditugaskan kepada Anda.');
@@ -300,15 +271,8 @@ const MainLayout: React.FC = () => {
 
   const handleOpenWhatsAppModal = (ticket: Ticket) => {
     if (isInstaller) {
-      const myName = (currentUser.name || '').toLowerCase().trim();
-      const myId = currentUser.id || '';
-      const myUsername = (currentUser.username || '').toLowerCase().trim();
-      const tInst = (ticket.installerName || '').toLowerCase().trim();
-      const isMine =
-        (myId && ticket.assignedTo === myId) ||
-        (myUsername && (ticket.assignedTo === myUsername || (ticket.assignedTo && ticket.assignedTo.toLowerCase() === myUsername))) ||
-        (myName && (tInst === myName || isInstallerMatch(ticket.installerName, myName))) ||
-        (myUsername && (tInst === myUsername || isInstallerMatch(ticket.installerName, myUsername)));
+      const myId = String(currentUser.id || '').trim();
+      const isMine = Boolean(myId && String(ticket.installerUserId || '').trim() === myId);
 
       if (!isMine) {
         toast.error('Akses ditolak: Tiket ini bukan milik Anda.');
