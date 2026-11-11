@@ -702,39 +702,23 @@ export function evaluateFileAccessPermission(
         };
       }
 
-      // Installer verification: strict assignment check
+      // Installer authorization is based only on the immutable application user ID.
       if (role === 'installer') {
-        const myName = (user.name || '').toLowerCase().trim();
-        const cleanMyName = myName.replace(/\(.*?\)/g, '').trim();
-        const ticketInst = (ticket.installerName || '').toLowerCase().trim();
-
-        const nameMatch = Boolean(
-          ticketInst &&
-          (ticketInst === myName ||
-            ticketInst === cleanMyName ||
-            ticketInst.includes(cleanMyName) ||
-            cleanMyName.includes(ticketInst))
-        );
-        const phoneMatch = Boolean(
-          user.phone &&
-          ticket.installerContact &&
-          ticket.installerContact.replace(/\D/g, '') === user.phone.replace(/\D/g, '')
-        );
-
-        if (nameMatch || phoneMatch) {
+        const assignedUserId = String(ticket.installerUserId || '').trim();
+        const currentUserId = String(user.id || '').trim();
+        if (assignedUserId && currentUserId && assignedUserId === currentUserId) {
           return {
             allowed: true,
             statusCode: 200,
             role,
-            reason: `Diizinkan: Work Order ${woNum} ditugaskan kepada teknisi (${user.name}).`
+            reason: `Diizinkan: Work Order ${woNum} ditugaskan ke akun installer (${user.name}).`
           };
         }
-
         return {
           allowed: false,
           statusCode: 403,
           role,
-          reason: `Ditolak: Teknisi (${user.name}) bukan personil yang ditugaskan untuk Work Order ${woNum} (Ditugaskan kepada: "${ticket.installerName || 'Belum Ditugaskan'}").`
+          reason: `Ditolak: akun installer (${user.name}) bukan akun yang ditugaskan ke Work Order ${woNum}.`
         };
       }
     }

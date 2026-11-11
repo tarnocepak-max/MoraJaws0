@@ -502,6 +502,7 @@ export function ticketToPostgresRow(ticket: any): Record<string, any> {
     corlap_name: ticket.corlapName || null,
     corlap_contact: ticket.corlapContact || null,
     installer_name: ticket.installerName || null,
+    installer_user_id: ticket.installerUserId || null,
     installer_contact: ticket.installerContact || null,
     installer_contact2: ticket.installerContact2 || null,
     installer_email: ticket.installerEmail || null,
@@ -646,6 +647,7 @@ export function postgresRowToTicket(row: any): any {
     corlapName: row.corlap_name || undefined,
     corlapContact: row.corlap_contact || undefined,
     installerName: row.installer_name || undefined,
+    installerUserId: row.installer_user_id || payload.installerUserId || undefined,
     installerContact: row.installer_contact || undefined,
     installerContact2: row.installer_contact2 || undefined,
     installerEmail: row.installer_email || undefined,
@@ -1657,6 +1659,9 @@ export async function updateWorkOrderInSupabase(id: string, updates: Record<stri
     if (updates.installerName !== undefined || updates.installer_name !== undefined) {
       updateRow.installer_name = updates.installerName ?? updates.installer_name;
     }
+    if (updates.installerUserId !== undefined || updates.installer_user_id !== undefined) {
+      updateRow.installer_user_id = updates.installerUserId ?? updates.installer_user_id;
+    }
     if (updates.installerContact !== undefined || updates.installer_contact !== undefined) {
       updateRow.installer_contact = updates.installerContact ?? updates.installer_contact;
     }
@@ -1840,6 +1845,7 @@ export async function updateWorkOrderInSupabase(id: string, updates: Record<stri
     if (updates.workDurationFormatted !== undefined) mergedPayload.workDurationFormatted = updates.workDurationFormatted;
     if (updates.chatCategory !== undefined) mergedPayload.chatCategory = updates.chatCategory;
     if (updates.installerId !== undefined) mergedPayload.installerId = updates.installerId;
+    if (updates.installerUserId !== undefined) mergedPayload.installerUserId = updates.installerUserId;
     if (updates.installerUid !== undefined) mergedPayload.installerUid = updates.installerUid;
     if (updates.assignedTo !== undefined) mergedPayload.assignedTo = updates.assignedTo;
     if (updates.assignedToUid !== undefined) mergedPayload.assignedToUid = updates.assignedToUid;
@@ -3399,6 +3405,51 @@ export async function deleteContractorInSupabase(id: string): Promise<SupabaseOp
   }
 }
 
+/**
+ * Resolve an active installer account by immutable application user ID.
+ * Names are display-only and are never used as an authorization key.
+ */
+export async function resolveInstallerAccountInSupabase(
+  installerUserId: string,
+  scope: { userRole?: string; userContractor?: string | null; userContractorId?: string | null } = {}
+): Promise<SupabaseOpResult<any>> {
+  const id = String(installerUserId || '').trim();
+  if (!id) return { success: false, error: { code: 'INVALID_INPUT', message: 'ID akun installer wajib dipilih.' } };
+  const client = getSupabaseBackendClient();
+  if (!client) return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.', isUnavailable: true } };
+  try {
+    const { data, error } = await client.from('users')
+      .select('id,name,username,role,active,is_archived,is_deleted,contractor_id,contractor')
+      .eq('id', id).maybeSingle();
+    if (error) return { success: false, error: classifySupabaseError(error) };
+    if (!data) return { success: false, error: { code: 'INSTALLER_NOT_FOUND', message: 'Akun installer tidak ditemukan.' } };
+    if (String(data.role || '').toLowerCase() !== 'installer') {
+      return { success: false, error: { code: 'INVALID_INSTALLER_ROLE', message: 'Akun tujuan bukan role installer.' } };
+    }
+    if (data.active !== true || data.is_archived === true || data.is_deleted === true) {
+      return { success: false, error: { code: 'INSTALLER_INACTIVE', message: 'Akun installer tidak aktif atau sudah diarsipkan.' } };
+    }
+    if (scope.userRole === 'leader') {
+      const expectedId = String(scope.userContractorId || '').trim();
+      const actualId = String(data.contractor_id || '').trim();
+      const expectedName = String(scope.userContractor || '').trim().toLowerCase();
+      const actualName = String(data.contractor || '').trim().toLowerCase();
+      if (expectedId) {
+        if (actualId) {
+          if (actualId !== expectedId) return { success: false, error: { code: 'SCOPE_MISMATCH', message: 'Installer berada di luar cakupan kontraktor Leader.' } };
+        } else if (!expectedName || !actualName || expectedName !== actualName) {
+          return { success: false, error: { code: 'SCOPE_MISMATCH', message: 'Akun installer tidak memiliki kontraktor yang cocok dengan Leader.' } };
+        }
+      } else if (expectedName && (!actualName || expectedName !== actualName)) {
+        return { success: false, error: { code: 'SCOPE_MISMATCH', message: 'Installer berada di luar cakupan kontraktor Leader.' } };
+      }
+    }
+    return { success: true, data: { id: data.id, name: String(data.name || data.username || '').trim(), username: data.username, contractorId: data.contractor_id || null, contractor: data.contractor || null } };
+  } catch (err: any) {
+    return { success: false, error: classifySupabaseError(err) };
+  }
+}
+
 export interface AssignTicketOptions {
   workOrderIdOrWoNumber?: string;
   ticketIdOrWoNumber?: string;
@@ -3411,6 +3462,7 @@ export interface AssignTicketOptions {
   performedByRole?: string;
   performedById?: string;
   userContractor?: string | null;
+  userContractorId?: string | null;
   userRole?: string;
 }
 
@@ -3428,6 +3480,7 @@ export interface ReassignTicketOptions {
   performedByRole?: string;
   performedById?: string;
   userContractor?: string | null;
+  userContractorId?: string | null;
   userRole?: string;
 }
 
@@ -3461,10 +3514,14 @@ export async function assignTicketInSupabase(
     userRole
   } = options;
 
-  const effInstallerName = (installerName || installerId || '').trim();
-  if (!effInstallerName) {
-    return { success: false, error: { code: 'INVALID_INPUT', message: 'Nama teknisi tujuan wajib diisi.' } };
+  if (!installerId || !String(installerId).trim()) {
+    return { success: false, error: { code: 'INVALID_INPUT', message: 'ID akun installer wajib dipilih; nama bukan identitas otorisasi.' } };
   }
+  const installerRes = await resolveInstallerAccountInSupabase(installerId, { userRole, userContractor, userContractorId: options.userContractorId });
+  if (!installerRes.success || !installerRes.data) return { success: false, error: installerRes.error };
+  const resolvedInstaller = installerRes.data;
+  const effInstallerName = resolvedInstaller.name;
+  if (!effInstallerName) return { success: false, error: { code: 'INVALID_INSTALLER', message: 'Akun installer tidak memiliki nama tampilan yang valid.' } };
 
   const cleanKey = (workOrderIdOrWoNumber || ticketIdOrWoNumber || '').trim();
   if (!cleanKey) {
@@ -3531,6 +3588,7 @@ export async function assignTicketInSupabase(
   // 3. Snapshot original state for rollback compensation
   const originalState: Record<string, any> = {
     installerName: targetWO.installerName || null,
+    installerUserId: targetWO.installerUserId || null,
     slotTime: targetWO.slotTime || null,
     statusWOInstaller: targetWO.statusWOInstaller || 'Unassigned',
     remarksWOInstaller: targetWO.remarksWOInstaller || null,
@@ -3542,7 +3600,8 @@ export async function assignTicketInSupabase(
 
   const now = new Date().toISOString();
   const woUpdates: Record<string, any> = {
-    installerName: installerName.trim(),
+    installerName: effInstallerName,
+    installerUserId: resolvedInstaller.id,
     slotTime: slotTime || targetWO.slotTime,
     statusWOInstaller: 'Assigned',
     remarksWOInstaller: remarks ? (targetWO.remarksWOInstaller ? `${targetWO.remarksWOInstaller}; ${remarks}` : remarks) : targetWO.remarksWOInstaller,
@@ -3569,9 +3628,10 @@ export async function assignTicketInSupabase(
     leaderName: performedBy,
     leaderId: performedById || null,
     previousInstallerName: targetWO.installerName || null,
-    installerName: installerName.trim(),
+    installerName: effInstallerName,
     slotTime: slotTime || targetWO.slotTime,
     appointmentDate: targetWO.appointmentDate,
+    payload: { installerUserId: resolvedInstaller.id },
     sourceAction: 'initial_assignment',
     previousStatus: targetWO.statusWOInstaller || 'Unassigned',
     newStatus: 'Assigned',
@@ -3655,10 +3715,13 @@ export async function reassignTicketInSupabase(
     userRole
   } = options;
 
-  const effNewInstaller = (newInstallerName || options.installerName || '').trim();
-  if (!effNewInstaller) {
-    return { success: false, error: { code: 'INVALID_INPUT', message: 'Teknisi baru tujuan wajib dipilih.' } };
-  }
+  const targetInstallerId = String(options.newInstallerId || options.installerId || '').trim();
+  if (!targetInstallerId) return { success: false, error: { code: 'INVALID_INPUT', message: 'ID akun installer baru wajib dipilih.' } };
+  const installerRes = await resolveInstallerAccountInSupabase(targetInstallerId, { userRole, userContractor, userContractorId: options.userContractorId });
+  if (!installerRes.success || !installerRes.data) return { success: false, error: installerRes.error };
+  const resolvedInstaller = installerRes.data;
+  const effNewInstaller = resolvedInstaller.name;
+  if (!effNewInstaller) return { success: false, error: { code: 'INVALID_INSTALLER', message: 'Akun installer tidak memiliki nama tampilan yang valid.' } };
 
   if (!reason || typeof reason !== 'string' || reason.trim().length < 5) {
     return { success: false, error: { code: 'INVALID_REASON', message: 'Alasan reassign wajib diisi minimal 5 karakter untuk keperluan audit.' } };
@@ -3729,6 +3792,7 @@ export async function reassignTicketInSupabase(
   // 3. Snapshot original state for rollback compensation
   const originalState: Record<string, any> = {
     installerName: targetTicket.installerName || null,
+    installerUserId: targetTicket.installerUserId || null,
     statusWOInstaller: targetTicket.statusWOInstaller || 'Unassigned',
     slotTime: targetTicket.slotTime || null,
     remarksWOInstaller: targetTicket.remarksWOInstaller || null,
@@ -3741,7 +3805,8 @@ export async function reassignTicketInSupabase(
 
   const now = new Date().toISOString();
   const woUpdates: Record<string, any> = {
-    installerName: newInstallerName.trim(),
+    installerName: effNewInstaller,
+    installerUserId: resolvedInstaller.id,
     statusWOInstaller: 'Assigned',
     reassignedAt: now,
     reassignedBy: performedBy,
@@ -3767,9 +3832,10 @@ export async function reassignTicketInSupabase(
     leaderName: performedBy,
     leaderId: performedById || null,
     previousInstallerName: previousInstallerName?.trim() || targetTicket.installerName || 'Teknisi Sebelumnya',
-    installerName: newInstallerName.trim(),
+    installerName: effNewInstaller,
     slotTime: targetTicket.slotTime,
     appointmentDate: targetTicket.appointmentDate,
+    payload: { installerUserId: resolvedInstaller.id },
     sourceAction: 'reassign',
     previousStatus: targetTicket.statusWOInstaller || 'Assigned',
     newStatus: 'Assigned',

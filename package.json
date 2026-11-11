@@ -23,7 +23,8 @@
     "test:phase15a.1": "tsx scripts/execute_phase15a1_session_hardening_test.ts",
     "test:phase15a.2": "tsx scripts/verify_phase15a2_hardening.ts",
     "test:phase2.4": "tsx scripts/execute_phase2_4_acceptance_suite.ts",
-    "test:phase2.4.1": "tsx scripts/execute_phase2_4_1_acceptance_suite.ts"
+    "test:phase2.4.1": "tsx scripts/execute_phase2_4_1_acceptance_suite.ts",
+    "test:phase2.4.3": "node scripts/execute_phase2_4_3_assignment_id_test.mjs && node scripts/check_phase2_4_3_syntax.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.16",

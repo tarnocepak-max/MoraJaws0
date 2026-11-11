@@ -3630,6 +3630,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...t,
           leaderName: canAssignLeader && leaderName !== undefined ? leaderName : t.leaderName,
           installerName: canAssignInstaller && installerName !== undefined ? installerName : t.installerName,
+          installerUserId: canAssignInstaller && installerName ? (users.filter(u => u.role === 'installer' && u.active && u.name.toLowerCase().trim() === installerName.toLowerCase().trim()).length === 1 ? users.find(u => u.role === 'installer' && u.active && u.name.toLowerCase().trim() === installerName.toLowerCase().trim())?.id : undefined) : t.installerUserId,
           statusWOInstaller: (canAssignInstaller && installerName) ? 'Assigned' : t.statusWOInstaller,
           updatedAt: new Date().toISOString(),
           updatedBy: currentUser.name
@@ -3664,14 +3665,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
     }
 
+    const matchingInstallerAccounts = users.filter(u => u.role === 'installer' && u.active && u.name.toLowerCase().trim() === String(installerName || '').toLowerCase().trim());
+    const installerId = matchingInstallerAccounts.length === 1 ? matchingInstallerAccounts[0].id : '';
     fetch('/api/tickets/assign', {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({
-        ticketId,
-        leaderName,
-        installerName
-      })
+      body: JSON.stringify({ ticketId, leaderName, installerName, installerId })
     }).catch(e => console.error('Error syncing ticket assignment to server:', e));
 
     addAuditLog('Personnel Assigned', 'ticket', ticketId, `Leader: ${leaderName || '-'}, Installer: ${currentUser.role === 'leader' ? installerName || '-' : '(Otoritas Terbatas Leader)'}`);
@@ -3716,6 +3715,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...t,
           leaderName: leaderName !== undefined && leaderName !== '' ? leaderName : t.leaderName,
           installerName: installerName !== undefined && installerName !== '' ? installerName : t.installerName,
+          installerUserId: installerName ? (users.filter(u => u.role === 'installer' && u.active && u.name.toLowerCase().trim() === installerName.toLowerCase().trim()).length === 1 ? users.find(u => u.role === 'installer' && u.active && u.name.toLowerCase().trim() === installerName.toLowerCase().trim())?.id : undefined) : t.installerUserId,
           slotTime: slotTime !== undefined && slotTime !== '' ? slotTime : t.slotTime,
           statusWOInstaller: installerName ? 'Assigned' : t.statusWOInstaller,
           remarksWOInstaller: remarks ? (t.remarksWOInstaller ? `${t.remarksWOInstaller}; ${remarks}` : remarks) : t.remarksWOInstaller,
@@ -3749,14 +3749,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toast.error('Gagal menyimpan penugasan massal ke Cloud Firestore: ' + (err?.message || err), 'Gagal');
       });
 
+    const matchingInstallerAccounts = users.filter(u => u.role === 'installer' && u.active && u.name.toLowerCase().trim() === String(installerName || '').toLowerCase().trim());
+    const installerId = matchingInstallerAccounts.length === 1 ? matchingInstallerAccounts[0].id : '';
     fetch('/api/tickets/assign', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({
-        ticketIds,
-        leaderName,
-        installerName,
-        slotTime,
+        ticketIds, leaderName, installerName, installerId, slotTime,
         remarks
       })
     }).catch(e => console.error('Error syncing bulk assignment to server:', e));
@@ -3773,7 +3772,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const reassignTicketPersonnel = (ticketId: string, newInstallerName: string, reason: string): { success: boolean; error?: string; historyEntry?: WOAssignmentHistory } => {
     // 1. RBAC check: Leader only (or Super Admin)
-    if (currentUser.role !== 'leader' && currentUser.role !== 'super_admin') {
+    if (currentUser.role !== 'leader') {
       const err = 'Akses Ditolak: Hanya Leader / Korlap berwenang melakukan Reassign WO.';
       toast.error(err, 'Akses Ditolak');
       return { success: false, error: err };
@@ -3837,14 +3836,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     // Call backend API async to persist and verify
+    const matchingInstallerAccounts = users.filter(u => u.role === 'installer' && u.active && u.name.toLowerCase().trim() === String(newInstallerName || '').toLowerCase().trim());
+    const newInstallerId = matchingInstallerAccounts.length === 1 ? matchingInstallerAccounts[0].id : '';
     fetch('/api/tickets/reassign', {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({
-        ticketId,
-        woNumber: ticket.woNumber,
-        newInstallerName,
-        reason
+      body: JSON.stringify({ ticketId, woNumber: ticket.woNumber, newInstallerName, newInstallerId, reason
       })
     }).catch(e => console.warn('Backend reassign sync notice failed', e));
 

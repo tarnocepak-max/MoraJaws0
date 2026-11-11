@@ -1730,12 +1730,9 @@ export function checkTicketAccess(ticket: any, user: ServerUser): boolean {
     const matchContr = ticketContr === userContr || ticketContr.includes(userContr) || userContr.includes(ticketContr);
     if (!matchContr) return false;
 
-    const assignedId = (ticket.installerId || ticket.installerUid || ticket.assignedToUid || ticket.assignedToId || '').trim();
-    if (!assignedId) return false;
-
-    const matchId = assignedId === user.id.trim();
-    const matchUid = Boolean(user.firebaseUid && assignedId === user.firebaseUid.trim());
-    return Boolean(matchId || matchUid);
+    const assignedUserId = String(ticket.installerUserId || '').trim();
+    if (!assignedUserId) return false;
+    return assignedUserId === user.id.trim();
   }
 
   return false;
@@ -3673,7 +3670,11 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
   // Assign Ticket Personnel (Leader or Super Admin)
   app.post('/api/tickets/assign', requireLeaderOrAdminForAssignment, async (req: AuthenticatedRequest, res) => {
-    const { ticketId, ticketIds, woNumber, installerName, slotTime, remarks, reason } = req.body;
+    if (req.user!.role !== 'leader') return res.status(403).json({ success: false, error: 'Hanya Leader yang berwenang menugaskan WO kepada Installer.', code: 'LEADER_ONLY_ASSIGNMENT' });
+    const { ticketId, ticketIds, woNumber, installerName, installerId, slotTime, remarks, reason } = req.body;
+    if (isSupabaseMode() && (!installerId || typeof installerId !== 'string' || !installerId.trim())) {
+      return res.status(400).json({ success: false, error: 'ID akun installer wajib dipilih.', code: 'INVALID_INPUT' });
+    }
     if (!installerName || !installerName.trim()) {
       return res.status(400).json({ success: false, error: 'Nama teknisi tujuan wajib diisi.', code: 'INVALID_INPUT' });
     }
@@ -3701,6 +3702,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         const assignRes = await assignTicketInSupabase({
           workOrderIdOrWoNumber: id,
           installerName: installerName.trim(),
+          installerId,
           slotTime,
           remarks,
           reason,
@@ -3708,6 +3710,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
           performedByRole: req.user!.role,
           performedById: req.user!.id,
           userContractor: req.user!.contractor,
+          userContractorId: req.user!.contractorId,
           userRole: req.user!.role
         });
 
@@ -3730,8 +3733,8 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
           const err = errors[0];
           const status = err.isUnavailable ? 503
             : (err.code === 'SCOPE_MISMATCH' || err.code === 'PROTECTED_RECORD' || err.code === 'PROTECTED_PRODUCTION_RECORD') ? 403
-            : err.code === 'NOT_FOUND' ? 404
-            : (err.code === 'INVALID_INPUT' || err.code === 'INVALID_ID') ? 400
+            : (err.code === 'NOT_FOUND' || err.code === 'INSTALLER_NOT_FOUND') ? 404
+            : (err.code === 'INVALID_INPUT' || err.code === 'INVALID_ID' || err.code === 'INVALID_INSTALLER_ROLE' || err.code === 'INSTALLER_INACTIVE') ? 400
             : (err.code === 'ASSIGNMENT_PARTIAL_FAILURE_INCONSISTENT') ? 500
             : 500;
           return res.status(status).json({
@@ -3855,10 +3858,14 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
   // Reassign WO (Leader within contractor scope or Super Admin override)
   app.post('/api/tickets/reassign', requireLeaderOrAdminForAssignment, async (req: AuthenticatedRequest, res) => {
-    const { ticketId, woNumber, previousInstallerName, newInstallerName, reason, contractorName } = req.body;
+    if (req.user!.role !== 'leader') return res.status(403).json({ success: false, error: 'Hanya Leader yang berwenang melakukan reassign Installer.', code: 'LEADER_ONLY_ASSIGNMENT' });
+    const { ticketId, woNumber, previousInstallerName, newInstallerName, newInstallerId, reason, contractorName } = req.body;
 
     if (!woNumber && !ticketId) {
       return res.status(400).json({ success: false, error: 'WO Number atau ID Tiket wajib disertakan.', code: 'INVALID_ID' });
+    }
+    if (isSupabaseMode() && (!newInstallerId || typeof newInstallerId !== 'string' || !newInstallerId.trim())) {
+      return res.status(400).json({ success: false, error: 'ID akun installer baru wajib dipilih.', code: 'INVALID_INPUT' });
     }
     if (!newInstallerName || !newInstallerName.trim()) {
       return res.status(400).json({ success: false, error: 'Teknisi baru tujuan wajib dipilih.', code: 'INVALID_INPUT' });
@@ -3882,12 +3889,14 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         workOrderIdOrWoNumber: ticketId || woNumber,
         previousInstallerName,
         newInstallerName: newInstallerName.trim(),
+        newInstallerId,
         reason: reason.trim(),
         contractorName,
         performedBy: req.user!.name,
         performedByRole: req.user!.role,
         performedById: req.user!.id,
         userContractor: req.user!.contractor,
+        userContractorId: req.user!.contractorId,
         userRole: req.user!.role
       });
 
@@ -3896,8 +3905,8 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
           const errCode = reassignRes.error?.code;
           const status = reassignRes.error?.isUnavailable ? 503
             : (errCode === 'SCOPE_MISMATCH' || errCode === 'PROTECTED_RECORD' || errCode === 'PROTECTED_PRODUCTION_RECORD') ? 403
-            : errCode === 'NOT_FOUND' ? 404
-            : (errCode === 'INVALID_INPUT' || errCode === 'INVALID_REASON') ? 400
+            : (errCode === 'NOT_FOUND' || errCode === 'INSTALLER_NOT_FOUND') ? 404
+            : (errCode === 'INVALID_INPUT' || errCode === 'INVALID_REASON' || errCode === 'INVALID_INSTALLER_ROLE' || errCode === 'INSTALLER_INACTIVE') ? 400
             : (errCode === 'REASSIGN_PARTIAL_FAILURE_INCONSISTENT') ? 500
             : 500;
           return res.status(status).json({
@@ -8403,8 +8412,12 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   app.post(['/api/work-orders/:id/assign', '/api/supabase/work-orders/:id/assign', '/api/tickets/:id/assign'], requireLeaderOrAdminForAssignment, async (req: AuthenticatedRequest, res) => {
+    if (req.user!.role !== 'leader') return res.status(403).json({ success: false, error: 'Hanya Leader yang berwenang menugaskan WO kepada Installer.', code: 'LEADER_ONLY_ASSIGNMENT' });
     const id = req.params.id;
-    const { installerName, slotTime, remarks, reason } = req.body;
+    const { installerName, installerId, slotTime, remarks, reason } = req.body;
+    if (isSupabaseMode() && (!installerId || typeof installerId !== 'string' || !installerId.trim())) {
+      return res.status(400).json({ success: false, error: 'ID akun installer wajib dipilih.', code: 'INVALID_INPUT' });
+    }
     if (!installerName || !installerName.trim()) {
       return res.status(400).json({ error: 'Nama teknisi tujuan wajib diisi.' });
     }
@@ -8419,6 +8432,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const assignRes = await assignTicketInSupabase({
         workOrderIdOrWoNumber: id,
         installerName: installerName.trim(),
+        installerId,
         slotTime,
         remarks,
         reason,
@@ -8426,6 +8440,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         performedByRole: req.user!.role,
         performedById: req.user!.id,
         userContractor: req.user!.contractor,
+        userContractorId: req.user!.contractorId,
         userRole: req.user!.role
       });
 
@@ -8434,8 +8449,8 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
           const errCode = assignRes.error?.code;
           const status = assignRes.error?.isUnavailable ? 503
             : (errCode === 'SCOPE_MISMATCH' || errCode === 'PROTECTED_RECORD' || errCode === 'PROTECTED_PRODUCTION_RECORD') ? 403
-            : errCode === 'NOT_FOUND' ? 404
-            : errCode === 'INVALID_INPUT' ? 400
+            : (errCode === 'NOT_FOUND' || errCode === 'INSTALLER_NOT_FOUND') ? 404
+            : (errCode === 'INVALID_INPUT' || errCode === 'INVALID_INSTALLER_ROLE' || errCode === 'INSTALLER_INACTIVE') ? 400
             : 500;
           return res.status(status).json({
             error: assignRes.error?.message || 'Gagal memperbarui Work Order di Supabase.',
@@ -8492,8 +8507,12 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   app.post(['/api/work-orders/:id/reassign', '/api/supabase/work-orders/:id/reassign', '/api/tickets/:id/reassign'], requireLeaderOrAdminForAssignment, async (req: AuthenticatedRequest, res) => {
+    if (req.user!.role !== 'leader') return res.status(403).json({ success: false, error: 'Hanya Leader yang berwenang melakukan reassign Installer.', code: 'LEADER_ONLY_ASSIGNMENT' });
     const id = req.params.id;
-    const { newInstallerName, reason } = req.body;
+    const { newInstallerName, newInstallerId, reason } = req.body;
+    if (isSupabaseMode() && (!newInstallerId || typeof newInstallerId !== 'string' || !newInstallerId.trim())) {
+      return res.status(400).json({ success: false, error: 'ID akun installer baru wajib dipilih.', code: 'INVALID_INPUT' });
+    }
     if (!newInstallerName || !newInstallerName.trim()) {
       return res.status(400).json({ error: 'Teknisi baru tujuan wajib dipilih.' });
     }
@@ -8511,11 +8530,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const reassignRes = await reassignTicketInSupabase({
         workOrderIdOrWoNumber: id,
         newInstallerName: newInstallerName.trim(),
+        newInstallerId,
         reason: reason.trim(),
         performedBy: req.user!.name,
         performedByRole: req.user!.role,
         performedById: req.user!.id,
         userContractor: req.user!.contractor,
+        userContractorId: req.user!.contractorId,
         userRole: req.user!.role
       });
 
@@ -8524,8 +8545,8 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
           const errCode = reassignRes.error?.code;
           const status = reassignRes.error?.isUnavailable ? 503
             : (errCode === 'SCOPE_MISMATCH' || errCode === 'PROTECTED_RECORD' || errCode === 'PROTECTED_PRODUCTION_RECORD') ? 403
-            : errCode === 'NOT_FOUND' ? 404
-            : (errCode === 'INVALID_INPUT' || errCode === 'INVALID_REASON') ? 400
+            : (errCode === 'NOT_FOUND' || errCode === 'INSTALLER_NOT_FOUND') ? 404
+            : (errCode === 'INVALID_INPUT' || errCode === 'INVALID_REASON' || errCode === 'INVALID_INSTALLER_ROLE' || errCode === 'INSTALLER_INACTIVE') ? 400
             : 500;
           return res.status(status).json({
             error: reassignRes.error?.message || 'Gagal mereassign Work Order di Supabase.',

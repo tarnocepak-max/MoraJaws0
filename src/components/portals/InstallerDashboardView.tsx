@@ -41,38 +41,14 @@ export const InstallerDashboardView: React.FC<InstallerDashboardViewProps> = ({
   const { toast } = useToast();
   const [fullviewTicket, setFullviewTicket] = useState<Ticket | null>(null);
 
-  // Helper matching for logged-in technician
-  const isInstallerMatch = (ticketInstaller: string | undefined, installerName: string) => {
-    if (!ticketInstaller || !ticketInstaller.trim()) return false;
-    const tInst = ticketInstaller.toLowerCase().trim();
-    const effInst = installerName.toLowerCase().trim();
-    if (tInst === effInst) return true;
-    if (tInst.includes(effInst) || effInst.includes(tInst)) return true;
-    const cleanEff = effInst.replace(/\(.*?\)/g, '').trim();
-    if (cleanEff && (tInst.includes(cleanEff) || cleanEff.includes(tInst))) return true;
-    return false;
-  };
-
-  // Strictly filter tickets to current logged-in installer
+  // Installer tickets are scoped by immutable application user ID only.
   const myTickets = useMemo(() => {
-    const myName = currentUser.name || '';
-    const myUsername = currentUser.username || '';
-    const myId = currentUser.id || '';
-
-    return (tickets || []).filter(t => {
-      if (t.isArchived || t.isDeleted) return false;
-      if (!t.installerName) return false;
-
-      // Primary check: assignedTo id matching
-      if (t.assignedTo && (t.assignedTo === myId || t.assignedTo === myUsername)) return true;
-
-      // Secondary check: name matching
-      if (myName && isInstallerMatch(t.installerName, myName)) return true;
-      if (myUsername && isInstallerMatch(t.installerName, myUsername)) return true;
-
-      return false;
-    });
-  }, [tickets, currentUser]);
+    const myId = String(currentUser.id || '').trim();
+    if (!myId) return [];
+    return (tickets || []).filter(t =>
+      !t.isArchived && !t.isDeleted && String(t.installerUserId || '').trim() === myId
+    );
+  }, [tickets, currentUser.id]);
 
   // Realtime synced ticket for fullview mode
   const activeFullviewTicket = useMemo(() => {

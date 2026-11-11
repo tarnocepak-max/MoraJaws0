@@ -305,6 +305,7 @@ export interface Ticket {
   corlapContact?: string;
   installerName?: string;
   installerId?: string;
+  installerUserId?: string;
   installerUid?: string;
   assignedTo?: string;
   assignedToUid?: string;

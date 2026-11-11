@@ -1,0 +1,113 @@
+{
+  "phase": "2.4.3",
+  "title": "Backend Assignment and Installer ID Alignment",
+  "executedAt": "2026-11-11T15:58:09.736Z",
+  "mode": "STATIC_SOURCE_ACCEPTANCE_ONLY",
+  "supabaseDeploymentPerformed": false,
+  "supabaseDataModified": false,
+  "total": 25,
+  "passed": 25,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "Ticket type includes installerUserId",
+      "status": "PASS"
+    },
+    {
+      "name": "WO insert mapping persists installer_user_id",
+      "status": "PASS"
+    },
+    {
+      "name": "WO read mapping restores installerUserId",
+      "status": "PASS"
+    },
+    {
+      "name": "Partial update mapping persists installer_user_id",
+      "status": "PASS"
+    },
+    {
+      "name": "Installer account is looked up by immutable user ID",
+      "status": "PASS"
+    },
+    {
+      "name": "Installer role is checked server-side",
+      "status": "PASS"
+    },
+    {
+      "name": "Inactive, archived and deleted accounts are rejected",
+      "status": "PASS"
+    },
+    {
+      "name": "Leader contractor scope is fail-closed",
+      "status": "PASS"
+    },
+    {
+      "name": "Initial assignment requires installerId",
+      "status": "PASS"
+    },
+    {
+      "name": "Reassignment requires new installer ID",
+      "status": "PASS"
+    },
+    {
+      "name": "Assignment endpoint requires ID in Supabase mode",
+      "status": "PASS"
+    },
+    {
+      "name": "Single WO assignment endpoint requires ID in Supabase mode",
+      "status": "PASS"
+    },
+    {
+      "name": "Bulk UI sends installerId",
+      "status": "PASS"
+    },
+    {
+      "name": "Single UI assignment sends installerId",
+      "status": "PASS"
+    },
+    {
+      "name": "Reassign UI sends newInstallerId",
+      "status": "PASS"
+    },
+    {
+      "name": "Single WO reassign endpoint requires ID in Supabase mode",
+      "status": "PASS"
+    },
+    {
+      "name": "Batch reassign endpoint passes newInstallerId to adapter",
+      "status": "PASS"
+    },
+    {
+      "name": "Reassign rollback restores previous installer ID",
+      "status": "PASS"
+    },
+    {
+      "name": "Assignment history records installer user ID in payload",
+      "status": "PASS"
+    },
+    {
+      "name": "Initial assignment endpoints enforce Leader-only role",
+      "status": "PASS"
+    },
+    {
+      "name": "Reassignment endpoints enforce Leader-only role",
+      "status": "PASS"
+    },
+    {
+      "name": "Backend installer access uses installerUserId only",
+      "status": "PASS"
+    },
+    {
+      "name": "Storage access removes installer name and phone authorization",
+      "status": "PASS"
+    },
+    {
+      "name": "Installer dashboard filters by user ID",
+      "status": "PASS"
+    },
+    {
+      "name": "Installer portal filters current installer by user ID",
+      "status": "PASS"
+    }
+  ]
+}

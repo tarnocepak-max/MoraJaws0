@@ -134,24 +134,11 @@ export const InstallerPortal: React.FC<InstallerPortalProps> = ({
   // Filter tickets for this technician: ONLY work orders assigned to their account!
   const myTickets = useMemo(() => {
     if (currentUser.role === 'installer') {
-      const myId = currentUser.id || '';
-      const myUsername = (currentUser.username || '').toLowerCase().trim();
-      const myName = (currentUser.name || '').toLowerCase().trim();
-
-      return tickets.filter(t => {
-        if (t.isArchived || t.isDeleted) return false;
-        if (!t.installerName && !t.assignedTo) return false;
-
-        // Check UID / assignedTo
-        if (myId && t.assignedTo === myId) return true;
-        if (myUsername && (t.assignedTo === myUsername || (t.assignedTo && t.assignedTo.toLowerCase() === myUsername))) return true;
-
-        // Check installerName
-        if (myName && isInstallerMatch(t.installerName, myName)) return true;
-        if (myUsername && isInstallerMatch(t.installerName, myUsername)) return true;
-
-        return false;
-      });
+      const myId = String(currentUser.id || '').trim();
+      if (!myId) return [];
+      return tickets.filter(t =>
+        !t.isArchived && !t.isDeleted && String(t.installerUserId || '').trim() === myId
+      );
     }
 
     return tickets.filter(

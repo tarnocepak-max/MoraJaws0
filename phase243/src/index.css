@@ -1,0 +1,161 @@
+@import "tailwindcss";
+
+:root {
+  --mj-dark-purple: #160D29;
+  --mj-deep-purple: #35105E;
+  --mj-gloss-purple: #7135B5;
+  --mj-violet: #A855F7;
+  --mj-lilac: #D8B4FE;
+  --mj-light-lilac: #E9D5FF;
+  --mj-white-glow: #FFFFFF;
+}
+
+/* -------------------------------------------------------------
+   MoraJaws Dark Purple Gloss + Lilac Keyframe Animations
+   ------------------------------------------------------------- */
+@keyframes morajaws-spin-clockwise {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes morajaws-spin-counter {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes morajaws-pulse-lilac {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(216, 180, 254, 0.35), inset 0 0 10px rgba(168, 85, 247, 0.2);
+    border-color: rgba(216, 180, 254, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 32px rgba(216, 180, 254, 0.75), 0 0 60px rgba(168, 85, 247, 0.35), inset 0 0 18px rgba(168, 85, 247, 0.45);
+    border-color: rgba(233, 213, 255, 0.95);
+  }
+}
+
+@keyframes morajaws-gloss-sweep {
+  0% {
+    transform: translateX(-150%) skewX(-25deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.85;
+  }
+  60% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: translateX(300%) skewX(-25deg);
+    opacity: 0;
+  }
+}
+
+@keyframes morajaws-float {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateY(-8px) scale(1.08);
+    opacity: 0.85;
+  }
+}
+
+@keyframes morajaws-shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  20%, 60% {
+    transform: translateX(-5px);
+  }
+  40%, 80% {
+    transform: translateX(5px);
+  }
+}
+
+@keyframes morajaws-scale-up {
+  0% {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes morajaws-progress-countdown {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+/* -------------------------------------------------------------
+   Custom Luxury Utility Classes
+   ------------------------------------------------------------- */
+.mj-gloss-card {
+  background: linear-gradient(135deg, rgba(22, 13, 41, 0.96) 0%, rgba(53, 16, 94, 0.92) 55%, rgba(22, 13, 41, 0.98) 100%);
+  border: 1px solid rgba(216, 180, 254, 0.32);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 12px 35px -8px rgba(22, 13, 41, 0.8), 0 0 25px -4px rgba(168, 85, 247, 0.25);
+}
+
+.mj-gloss-card-light {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.97) 0%, rgba(243, 232, 255, 0.95) 100%);
+  border: 1px solid rgba(216, 180, 254, 0.6);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 12px 35px -8px rgba(113, 53, 181, 0.15), 0 0 20px -2px rgba(168, 85, 247, 0.2);
+}
+
+.mj-lilac-glow {
+  box-shadow: 0 0 24px rgba(216, 180, 254, 0.5), inset 0 0 12px rgba(168, 85, 247, 0.25);
+}
+
+.mj-lilac-border {
+  border-color: rgba(216, 180, 254, 0.45);
+}
+
+.mj-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.mj-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.15) 30%,
+    rgba(216, 180, 254, 0.35) 50%,
+    rgba(255, 255, 255, 0.15) 70%,
+    transparent 100%
+  );
+  animation: morajaws-gloss-sweep 3.5s infinite ease-in-out;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mj-shimmer::after,
+  .animate-spin,
+  .animate-pulse {
+    animation: none !important;
+  }
+}
