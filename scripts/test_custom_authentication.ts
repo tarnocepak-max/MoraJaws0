@@ -222,12 +222,11 @@ async function runTestSuite() {
     email: 'inactive@morajaws.net',
     role: 'installer',
     active: false,
-    accountStatus: 'inactive',
     passwordHash: inactiveUserPasswordHash,
     sessionVersion: 1,
     mustChangePassword: false,
     createdAt: new Date().toISOString()
-  };
+  } as ServerUser;
 
   // Create Express app & listen on dynamic port
   const app = await createExpressApp({ skipVite: true });

@@ -14,14 +14,19 @@ import type { ServerUser, ServerSession } from '../server.ts';
 import { db, saveDatabaseToDisk, isLocalJsonModeAllowed, logServerAuditAsync, hashPasswordLegacy } from '../server.ts';
 
 // ==============================================================================
-// MORAJAWS CUSTOM AUTHENTICATION SERVICE
-// Internal authentication engine for MoraJaws using Supabase PostgreSQL as MAIN DB.
-// - Password hashing: bcrypt (10 rounds) with automated legacy upgrade.
-// - Cryptographically secure access tokens & refresh tokens with rotation.
-// - Database-backed session management (auth_sessions, refresh_tokens, login_attempts).
-// - Brute-force protection & temporary account lockout (5 attempts in 15 mins).
-// - Strict RBAC: Superadmin-exclusive user management and password resets.
-// - Zero dependency on Supabase Auth (auth.users) or Firebase Auth.
+// MORAJAWS CUSTOM AUTHENTICATION SERVICE (PHASE 1 REMEDIATION)
+// Fail-Closed Custom Authentication & PostgreSQL Session Integrity Engine.
+//
+// Rules enforced:
+// 1. Production requires Supabase PostgreSQL (fail-closed if unavailable).
+// 2. All logins verify accounts against public.users.
+// 3. All sessions are persisted to public.auth_sessions.
+// 4. All refresh tokens are persisted to public.refresh_tokens with rotation.
+// 5. Session validation verifies session_version against authoritative public.users.
+// 6. Token hashes stored (SHA-256) - raw tokens never stored in database.
+// 7. Atomic transaction with compensation rollback on session or refresh token failure.
+// 8. Replay attacks on refresh tokens are strictly rejected.
+// 9. Local fallback stores are STRICTLY FORBIDDEN on production (NODE_ENV=production).
 // ==============================================================================
 
 export interface AuthTokens {
@@ -63,6 +68,7 @@ export interface StoredRefreshToken {
   sessionId: string;
   tokenHash: string;
   expiresAt: string;
+  sessionVersion?: number;
   revokedAt?: string | null;
   replacedByTokenHash?: string | null;
   createdAt: string;
@@ -77,10 +83,56 @@ export interface StoredLoginAttempt {
   attemptedAt: string;
 }
 
-// In-memory fallback stores (used when local dev mode is permitted)
+// In-memory fallback stores (strictly allowed ONLY in non-production local development)
 export const LOCAL_AUTH_SESSIONS: StoredAuthSession[] = [];
 export const LOCAL_REFRESH_TOKENS: StoredRefreshToken[] = [];
 export const LOCAL_LOGIN_ATTEMPTS: StoredLoginAttempt[] = [];
+
+// Simulation flags for testing resilience and failure injection
+let simulateSessionInsertFailure = false;
+let simulateRefreshTokenInsertFailure = false;
+let simulateSupabaseUnavailable = false;
+
+export function setSimulateSessionInsertFailure(val: boolean): void {
+  simulateSessionInsertFailure = val;
+}
+
+export function setSimulateRefreshTokenInsertFailure(val: boolean): void {
+  simulateRefreshTokenInsertFailure = val;
+}
+
+export function setSimulateSupabaseUnavailable(val: boolean): void {
+  simulateSupabaseUnavailable = val;
+}
+
+export function resetSimulateFlags(): void {
+  simulateSessionInsertFailure = false;
+  simulateRefreshTokenInsertFailure = false;
+  simulateSupabaseUnavailable = false;
+}
+
+/**
+ * Determines whether local fallback (memory/JSON) is permitted.
+ * STRICT: Returns false on production (NODE_ENV=production or APP_ENV=production).
+ * Returns true only when NOT in production and isLocalJsonModeAllowed() is true.
+ */
+export function isLocalAuthAllowed(): boolean {
+  if (process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'production') {
+    return false;
+  }
+  return isLocalJsonModeAllowed();
+}
+
+/**
+ * Resolves active Supabase backend client with fail-closed checks.
+ * Honors simulation flag for testing.
+ */
+function getActiveBackendClient() {
+  if (simulateSupabaseUnavailable) {
+    return null;
+  }
+  return getSupabaseBackendClient();
+}
 
 // Rate limiting & lockout tracker (in-memory fast cache, backed by login_attempts table)
 interface LockoutTracker {
@@ -130,7 +182,7 @@ export async function hashPasswordWithBcrypt(password: string): Promise<string> 
  * Verifies a candidate password against stored password hash.
  * Supports:
  * 1. Standard bcrypt hash ($2a$, $2b$, $2y$)
- * 2. Legacy PBKDF2 hash (pbkdf2:sha256:...)
+ * 2. Legacy PBKDF2 hash (pbkdf2:sha256:iterations:salt:hash)
  * 3. Legacy FNV-1a hash
  * If verified via a legacy algorithm, returns `needsRehash: true` so the caller
  * can automatically upgrade the stored hash to bcrypt.
@@ -243,7 +295,7 @@ export async function checkRateLimitAndLockout(
   }
 
   // 2. Authoritative check in Supabase PostgreSQL login_attempts
-  const client = getSupabaseBackendClient();
+  const client = getActiveBackendClient();
   if (client) {
     try {
       const windowStart = new Date(now - ATTEMPT_WINDOW_MS).toISOString();
@@ -324,7 +376,7 @@ export async function recordLoginAttempt(params: {
   }
 
   // Persist to Supabase PostgreSQL login_attempts table
-  const client = getSupabaseBackendClient();
+  const client = getActiveBackendClient();
   if (client) {
     try {
       await client.from('login_attempts').insert([
@@ -338,12 +390,11 @@ export async function recordLoginAttempt(params: {
         }
       ]);
     } catch (err: any) {
-      // Table might not be created yet, fallback gracefully
       console.warn('[CustomAuth] Record login attempt warning:', err?.message || err);
     }
   }
 
-  if (isLocalJsonModeAllowed()) {
+  if (isLocalAuthAllowed()) {
     LOCAL_LOGIN_ATTEMPTS.unshift({
       id: attemptId,
       identifier: cleanId,
@@ -362,6 +413,15 @@ export async function recordLoginAttempt(params: {
 
 /**
  * Creates an authoritative auth session and associated initial refresh token in Supabase PostgreSQL.
+ *
+ * Enforces Fail-Closed & Atomic Session Persistence:
+ * 1. Tokens created cryptographically secure.
+ * 2. SHA-256 token hashes stored; raw tokens never stored.
+ * 3. Session record inserted to auth_sessions with session_version.
+ * 4. Refresh token record inserted to refresh_tokens with session_version.
+ * 5. If either insert fails, atomic compensation rolls back the entire session.
+ * 6. Never returns success if session persistence failed.
+ * 7. In production, local storage is NEVER used as fallback.
  */
 export async function persistNewAuthSession(params: {
   userId: string;
@@ -370,7 +430,7 @@ export async function persistNewAuthSession(params: {
   ipAddress?: string;
   userAgent?: string;
   sessionVersion?: number;
-}): Promise<{ sessionId: string; expiresAt: string }> {
+}): Promise<CustomAuthResult<{ sessionId: string; expiresAt: string }>> {
   const { userId, accessToken, refreshToken, ipAddress, userAgent, sessionVersion = 1 } = params;
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
@@ -383,103 +443,274 @@ export async function persistNewAuthSession(params: {
   const sessionHash = hashToken(accessToken);
   const rtHash = hashToken(refreshToken);
 
-  const sessionRecord: StoredAuthSession = {
-    id: sessionId,
-    userId,
-    sessionIdHash: sessionHash,
-    tokenHash: sessionHash,
-    expiresAt,
-    lastActivityAt: nowIso,
-    sessionVersion,
-    revokedAt: null,
-    ipAddress,
-    userAgent,
-    deviceType: userAgent && /mobile|android|iphone/i.test(userAgent) ? 'mobile' : 'desktop',
-    createdAt: nowIso
-  };
+  const deviceType = userAgent && /mobile|android|iphone/i.test(userAgent) ? 'mobile' : 'desktop';
 
-  const rtRecord: StoredRefreshToken = {
-    id: rtId,
-    userId,
-    sessionId,
-    tokenHash: rtHash,
-    expiresAt: refreshExpiresAt,
-    revokedAt: null,
-    replacedByTokenHash: null,
-    createdAt: nowIso
-  };
+  const client = getActiveBackendClient();
 
-  const client = getSupabaseBackendClient();
-  if (client) {
-    try {
-      const { error: sessErr } = await client.from('auth_sessions').insert([
-        {
-          id: sessionId,
-          user_id: userId,
-          session_id_hash: sessionHash,
-          token_hash: sessionHash,
-          expires_at: expiresAt,
-          last_activity_at: nowIso,
-          ip_address: ipAddress || null,
-          user_agent: userAgent || null,
-          device_type: sessionRecord.deviceType,
-          created_at: nowIso
+  // Fail-closed check: Supabase PostgreSQL is MANDATORY in production
+  if (!client) {
+    if (!isLocalAuthAllowed()) {
+      return {
+        success: false,
+        error: {
+          code: 'DATABASE_UNAVAILABLE',
+          message: 'Koneksi Supabase PostgreSQL wajib tersedia pada environment produksi untuk menyimpan sesi login.'
         }
-      ]);
-      if (sessErr) {
-        console.warn('[CustomAuth] Failed to insert into auth_sessions:', sessErr.message);
-      }
-
-      const { error: rtErr } = await client.from('refresh_tokens').insert([
-        {
-          id: rtId,
-          user_id: userId,
-          session_id: sessionId,
-          token_hash: rtHash,
-          expires_at: refreshExpiresAt,
-          created_at: nowIso
-        }
-      ]);
-      if (rtErr) {
-        console.warn('[CustomAuth] Failed to insert into refresh_tokens:', rtErr.message);
-      }
-    } catch (err: any) {
-      console.warn('[CustomAuth] Session insert exception:', err?.message || err);
+      };
     }
+
+    // Non-production local fallback mode explicitly permitted
+    const localSess: StoredAuthSession = {
+      id: sessionId,
+      userId,
+      sessionIdHash: sessionHash,
+      tokenHash: sessionHash,
+      expiresAt,
+      lastActivityAt: nowIso,
+      sessionVersion,
+      revokedAt: null,
+      ipAddress,
+      userAgent,
+      deviceType,
+      createdAt: nowIso
+    };
+    const localRt: StoredRefreshToken = {
+      id: rtId,
+      userId,
+      sessionId,
+      tokenHash: rtHash,
+      sessionVersion,
+      expiresAt: refreshExpiresAt,
+      revokedAt: null,
+      replacedByTokenHash: null,
+      createdAt: nowIso
+    };
+
+    LOCAL_AUTH_SESSIONS.push(localSess);
+    LOCAL_REFRESH_TOKENS.push(localRt);
+
+    return {
+      success: true,
+      data: { sessionId, expiresAt }
+    };
   }
 
-  // Always store in memory / local store for immediate access and fallback
-  LOCAL_AUTH_SESSIONS.push(sessionRecord);
-  LOCAL_REFRESH_TOKENS.push(rtRecord);
-
-  // Sync to server.ts SERVER_SESSIONS array so existing server checks seamlessly recognize it
-  const existingSessIdx = db.sessions ? db.sessions.findIndex((s: any) => s.sessionId === sessionId) : -1;
-  const serverSess: ServerSession = {
-    sessionId,
-    token: accessToken,
-    userId,
-    username: '', // Populated by caller
-    name: '',     // Populated by caller
-    role: 'super_admin',
-    sessionVersion,
-    loginAt: nowIso,
-    lastActivityAt: nowIso,
-    expiresAt,
-    status: 'active',
-    ipAddress,
-    userAgent
-  };
-  if (existingSessIdx >= 0 && db.sessions) {
-    db.sessions[existingSessIdx] = serverSess;
-  } else if (db.sessions) {
-    db.sessions.push(serverSess);
+  // Handle simulation hooks for testing
+  if (simulateSessionInsertFailure) {
+    return {
+      success: false,
+      error: {
+        code: 'SESSION_INSERT_FAILED',
+        message: 'Simulasi kegagalan penyimpanan auth_sessions ke PostgreSQL.'
+      }
+    };
   }
 
-  return { sessionId, expiresAt };
+  // 1. Attempt atomic RPC function if provisioned in PostgreSQL (from migration 009)
+  try {
+    const { data: rpcData, error: rpcError } = await client.rpc('fn_create_auth_session_atomic', {
+      p_session_id: sessionId,
+      p_user_id: userId,
+      p_session_id_hash: sessionHash,
+      p_token_hash: sessionHash,
+      p_rt_id: rtId,
+      p_rt_hash: rtHash,
+      p_session_expires_at: expiresAt,
+      p_rt_expires_at: refreshExpiresAt,
+      p_session_version: sessionVersion,
+      p_ip_address: ipAddress || null,
+      p_user_agent: userAgent || null,
+      p_device_type: deviceType
+    });
+
+    if (!rpcError && rpcData?.success) {
+      if (isLocalAuthAllowed()) {
+        LOCAL_AUTH_SESSIONS.push({
+          id: sessionId,
+          userId,
+          sessionIdHash: sessionHash,
+          tokenHash: sessionHash,
+          expiresAt,
+          lastActivityAt: nowIso,
+          sessionVersion,
+          revokedAt: null,
+          ipAddress,
+          userAgent,
+          deviceType,
+          createdAt: nowIso
+        });
+        LOCAL_REFRESH_TOKENS.push({
+          id: rtId,
+          userId,
+          sessionId,
+          tokenHash: rtHash,
+          sessionVersion,
+          expiresAt: refreshExpiresAt,
+          revokedAt: null,
+          replacedByTokenHash: null,
+          createdAt: nowIso
+        });
+      }
+      return { success: true, data: { sessionId, expiresAt } };
+    }
+  } catch {
+    // RPC not present in schema yet; proceed with strict transactional insert with rollback
+  }
+
+  // 2. Sequential transactional insert with Fail-Closed compensation rollback
+  try {
+    // A. Insert Session Record
+    const sessionInsertPayload: any = {
+      id: sessionId,
+      user_id: userId,
+      session_id_hash: sessionHash,
+      token_hash: sessionHash,
+      expires_at: expiresAt,
+      last_activity_at: nowIso,
+      session_version: sessionVersion,
+      ip_address: ipAddress || null,
+      user_agent: userAgent || null,
+      device_type: deviceType,
+      created_at: nowIso
+    };
+
+    const { error: sessErr } = await client.from('auth_sessions').insert([sessionInsertPayload]);
+    if (sessErr) {
+      // If error was due to missing session_version column in legacy schema, retry without it
+      if (sessErr.code === '42703' || sessErr.message?.includes('session_version')) {
+        delete sessionInsertPayload.session_version;
+        const { error: sessRetryErr } = await client.from('auth_sessions').insert([sessionInsertPayload]);
+        if (sessRetryErr) {
+          return {
+            success: false,
+            error: {
+              code: 'SESSION_INSERT_FAILED',
+              message: `Gagal menyimpan session record ke PostgreSQL: ${sessRetryErr.message}`
+            }
+          };
+        }
+      } else {
+        return {
+          success: false,
+          error: {
+            code: 'SESSION_INSERT_FAILED',
+            message: `Gagal menyimpan session record ke PostgreSQL: ${sessErr.message}`
+          }
+        };
+      }
+    }
+
+    // Simulation hook for refresh token failure testing
+    if (simulateRefreshTokenInsertFailure) {
+      // ATOMIC COMPENSATION ROLLBACK: Delete previously inserted session record
+      await client.from('auth_sessions').delete().eq('id', sessionId);
+      return {
+        success: false,
+        error: {
+          code: 'REFRESH_TOKEN_INSERT_FAILED',
+          message: 'Simulasi kegagalan penyimpanan refresh_tokens ke PostgreSQL.'
+        }
+      };
+    }
+
+    // B. Insert Refresh Token Record
+    const rtInsertPayload: any = {
+      id: rtId,
+      user_id: userId,
+      session_id: sessionId,
+      token_hash: rtHash,
+      session_version: sessionVersion,
+      expires_at: refreshExpiresAt,
+      created_at: nowIso
+    };
+
+    const { error: rtErr } = await client.from('refresh_tokens').insert([rtInsertPayload]);
+    if (rtErr) {
+      // If error was due to missing session_version column, retry without it
+      let insertFailed = true;
+      if (rtErr.code === '42703' || rtErr.message?.includes('session_version')) {
+        delete rtInsertPayload.session_version;
+        const { error: rtRetryErr } = await client.from('refresh_tokens').insert([rtInsertPayload]);
+        if (!rtRetryErr) {
+          insertFailed = false;
+        }
+      }
+
+      if (insertFailed) {
+        // ATOMIC COMPENSATION ROLLBACK: Delete the created session record!
+        try {
+          await client.from('auth_sessions').delete().eq('id', sessionId);
+        } catch (delErr) {
+          console.error('[CustomAuth] Failed to rollback auth_session after refresh_token failure:', delErr);
+        }
+
+        return {
+          success: false,
+          error: {
+            code: 'REFRESH_TOKEN_INSERT_FAILED',
+            message: `Gagal menyimpan refresh token record ke PostgreSQL: ${rtErr.message}. Sesi login dibatalkan secara atomik.`
+          }
+        };
+      }
+    }
+
+    // Mirror to local memory ONLY if in local mode
+    if (isLocalAuthAllowed()) {
+      LOCAL_AUTH_SESSIONS.push({
+        id: sessionId,
+        userId,
+        sessionIdHash: sessionHash,
+        tokenHash: sessionHash,
+        expiresAt,
+        lastActivityAt: nowIso,
+        sessionVersion,
+        revokedAt: null,
+        ipAddress,
+        userAgent,
+        deviceType,
+        createdAt: nowIso
+      });
+      LOCAL_REFRESH_TOKENS.push({
+        id: rtId,
+        userId,
+        sessionId,
+        tokenHash: rtHash,
+        sessionVersion,
+        expiresAt: refreshExpiresAt,
+        revokedAt: null,
+        replacedByTokenHash: null,
+        createdAt: nowIso
+      });
+    }
+
+    return {
+      success: true,
+      data: { sessionId, expiresAt }
+    };
+  } catch (err: any) {
+    // Fail closed on exception
+    try {
+      await client.from('auth_sessions').delete().eq('id', sessionId);
+    } catch {}
+    return {
+      success: false,
+      error: {
+        code: 'SESSION_PERSISTENCE_FAILED',
+        message: `Terjadi exception saat menyimpan sesi login: ${err?.message || err}`
+      }
+    };
+  }
 }
 
 /**
  * Verifies access token against Supabase PostgreSQL auth_sessions table and authoritative user status.
+ *
+ * Rules:
+ * 1. Validates token format and computes SHA-256 hash.
+ * 2. In production, Supabase PostgreSQL MUST be queried (no local memory fallback).
+ * 3. Rejects revoked sessions and expired sessions.
+ * 4. Compares session_version between user and session/token; rejects if mismatched.
+ * 5. Database failure fails closed with DATABASE_UNAVAILABLE.
  */
 export async function verifyAccessToken(
   token: string
@@ -494,11 +725,19 @@ export async function verifyAccessToken(
   const cleanToken = token.trim();
   const tokenHash = hashToken(cleanToken);
   const now = Date.now();
-  const client = getSupabaseBackendClient();
+  const client = getActiveBackendClient();
+
+  // Fail-closed in production if Supabase client is not available
+  if (!client && !isLocalAuthAllowed()) {
+    return {
+      success: false,
+      error: { code: 'DATABASE_UNAVAILABLE', message: 'Database PostgreSQL tidak tersedia saat verifikasi sesi login.' }
+    };
+  }
 
   let matchedSession: StoredAuthSession | null = null;
 
-  // 1. Check Supabase PostgreSQL auth_sessions
+  // 1. Authoritative check in Supabase PostgreSQL auth_sessions
   if (client) {
     try {
       const { data, error } = await client
@@ -508,7 +747,14 @@ export async function verifyAccessToken(
         .limit(1)
         .maybeSingle();
 
-      if (!error && data) {
+      if (error) {
+        if (!isLocalAuthAllowed()) {
+          return {
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: `Database error saat verifikasi sesi: ${error.message}` }
+          };
+        }
+      } else if (data) {
         matchedSession = {
           id: data.id,
           userId: data.user_id,
@@ -516,6 +762,7 @@ export async function verifyAccessToken(
           tokenHash: data.token_hash || data.session_id_hash,
           expiresAt: data.expires_at,
           lastActivityAt: data.last_activity_at,
+          sessionVersion: typeof data.session_version === 'number' ? data.session_version : undefined,
           revokedAt: data.revoked_at,
           ipAddress: data.ip_address,
           userAgent: data.user_agent,
@@ -523,37 +770,23 @@ export async function verifyAccessToken(
           createdAt: data.created_at
         };
       }
-    } catch (err) {
-      console.warn('[CustomAuth] DB verify session warning:', err);
+    } catch (err: any) {
+      if (!isLocalAuthAllowed()) {
+        return {
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: `Koneksi database gagal saat verifikasi sesi: ${err?.message || err}` }
+        };
+      }
     }
   }
 
-  // Fallback to local session store
-  if (!matchedSession) {
+  // 2. In non-production ONLY, fallback to local store if permitted
+  if (!matchedSession && isLocalAuthAllowed()) {
     const found = LOCAL_AUTH_SESSIONS.find(
       s => (s.sessionIdHash === tokenHash || s.tokenHash === tokenHash || cleanToken.includes(s.id))
     );
     if (found) {
       matchedSession = found;
-    }
-  }
-
-  // Also check SERVER_SESSIONS in server.ts if token matches
-  if (!matchedSession) {
-    const sSess = db.sessions?.find((s: any) => s.token === cleanToken);
-    if (sSess) {
-      matchedSession = {
-        id: sSess.sessionId,
-        userId: sSess.userId,
-        sessionIdHash: tokenHash,
-        tokenHash,
-        expiresAt: sSess.expiresAt,
-        lastActivityAt: sSess.lastActivityAt,
-        revokedAt: sSess.status === 'revoked' ? new Date().toISOString() : null,
-        ipAddress: sSess.ipAddress,
-        userAgent: sSess.userAgent,
-        createdAt: sSess.loginAt
-      };
     }
   }
 
@@ -580,20 +813,30 @@ export async function verifyAccessToken(
     };
   }
 
-  // 2. Fetch authoritative user from Supabase PostgreSQL users table
+  // 3. Fetch authoritative user from Supabase PostgreSQL users table
   let authoritativeUser: ServerUser | null = null;
   if (client) {
     try {
       const userRes = await findUserInSupabaseDetailed(matchedSession.userId);
       if (userRes.success && userRes.data) {
         authoritativeUser = userRes.data;
+      } else if (!userRes.success && !isLocalAuthAllowed()) {
+        return {
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Gagal mengambil data pengguna dari database PostgreSQL.' }
+        };
       }
-    } catch (err) {
-      console.warn('[CustomAuth] Fetch user detail exception:', err);
+    } catch (err: any) {
+      if (!isLocalAuthAllowed()) {
+        return {
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Database error saat mengambil profil pengguna.' }
+        };
+      }
     }
   }
 
-  if (!authoritativeUser && isLocalJsonModeAllowed()) {
+  if (!authoritativeUser && isLocalAuthAllowed()) {
     authoritativeUser = db.users.find((u: any) => u.id === matchedSession!.userId) || null;
   }
 
@@ -605,23 +848,30 @@ export async function verifyAccessToken(
   }
 
   // Check user active and soft-deleted status
+  const nowIso = new Date().toISOString();
   if (authoritativeUser.isDeleted) {
-    matchedSession.revokedAt = new Date().toISOString();
+    matchedSession.revokedAt = nowIso;
+    if (client) {
+      client.from('auth_sessions').update({ revoked_at: nowIso }).eq('id', matchedSession.id).then(() => {}, () => {});
+    }
     return {
       success: false,
       error: { code: 'ACCOUNT_DELETED', message: 'Akun staf telah dihapus dari sistem.' }
     };
   }
 
-  if (!authoritativeUser.active) {
-    matchedSession.revokedAt = new Date().toISOString();
+  if (!authoritativeUser.active || (authoritativeUser as any).account_status === 'inactive' || (authoritativeUser as any).account_status === 'locked') {
+    matchedSession.revokedAt = nowIso;
+    if (client) {
+      client.from('auth_sessions').update({ revoked_at: nowIso }).eq('id', matchedSession.id).then(() => {}, () => {});
+    }
     return {
       success: false,
       error: { code: 'ACCOUNT_DISABLED', message: 'Akun Anda sedang dinonaktifkan oleh Administrator.' }
     };
   }
 
-  // Authoritative Session Version Check
+  // 4. Authoritative Session Version Check
   const authoritativeVersion = authoritativeUser.sessionVersion || 1;
   const tokenVersionMatch = cleanToken.match(/^mora_at_v(\d+)_/);
   const tokenSessionVersion = tokenVersionMatch ? parseInt(tokenVersionMatch[1], 10) : undefined;
@@ -631,14 +881,13 @@ export async function verifyAccessToken(
     (tokenSessionVersion !== undefined && tokenSessionVersion !== authoritativeVersion) ||
     (sessionStoredVersion !== undefined && sessionStoredVersion !== authoritativeVersion)
   ) {
-    matchedSession.revokedAt = new Date().toISOString();
+    matchedSession.revokedAt = nowIso;
     if (client) {
       client
         .from('auth_sessions')
-        .update({ revoked_at: new Date().toISOString() })
+        .update({ revoked_at: nowIso })
         .eq('id', matchedSession.id)
-        .then(() => {})
-        .catch(() => {});
+        .then(() => {}, () => {});
     }
     return {
       success: false,
@@ -653,12 +902,11 @@ export async function verifyAccessToken(
   if (client) {
     client
       .from('auth_sessions')
-      .update({ last_activity_at: new Date().toISOString() })
+      .update({ last_activity_at: nowIso })
       .eq('id', matchedSession.id)
-      .then(() => {})
-      .catch(() => {});
+      .then(() => {}, () => {});
   }
-  matchedSession.lastActivityAt = new Date().toISOString();
+  matchedSession.lastActivityAt = nowIso;
 
   return {
     success: true,
@@ -672,9 +920,12 @@ export async function verifyAccessToken(
 /**
  * Rotates a refresh token:
  * 1. Validates refresh token in Supabase PostgreSQL refresh_tokens table.
- * 2. Revokes the old refresh token (prevents replay attacks).
- * 3. Issues a new cryptographically secure access token and refresh token.
- * 4. Extends the parent session.
+ * 2. Replay attack rejection: if token is already revoked, reject immediately.
+ * 3. Verifies session version matches authoritative user session_version.
+ * 4. Revokes the old refresh token (sets revoked_at and replaced_by_token_hash).
+ * 5. Issues a new cryptographically secure access token and refresh token.
+ * 6. Extends parent auth_session record.
+ * 7. Sequential atomic compensation rollback if any database step fails.
  */
 export async function rotateRefreshToken(
   rawRefreshToken: string,
@@ -691,7 +942,14 @@ export async function rotateRefreshToken(
   const cleanRt = rawRefreshToken.trim();
   const rtHash = hashToken(cleanRt);
   const now = Date.now();
-  const client = getSupabaseBackendClient();
+  const client = getActiveBackendClient();
+
+  if (!client && !isLocalAuthAllowed()) {
+    return {
+      success: false,
+      error: { code: 'DATABASE_UNAVAILABLE', message: 'Database PostgreSQL tidak tersedia saat memperbarui token.' }
+    };
+  }
 
   let matchedRt: StoredRefreshToken | null = null;
 
@@ -705,25 +963,38 @@ export async function rotateRefreshToken(
         .limit(1)
         .maybeSingle();
 
-      if (!error && data) {
+      if (error) {
+        if (!isLocalAuthAllowed()) {
+          return {
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: `Database error saat kueri refresh token: ${error.message}` }
+          };
+        }
+      } else if (data) {
         matchedRt = {
           id: data.id,
           userId: data.user_id,
           sessionId: data.session_id,
           tokenHash: data.token_hash,
+          sessionVersion: typeof data.session_version === 'number' ? data.session_version : undefined,
           expiresAt: data.expires_at,
           revokedAt: data.revoked_at,
           replacedByTokenHash: data.replaced_by_token_hash,
           createdAt: data.created_at
         };
       }
-    } catch (err) {
-      console.warn('[CustomAuth] DB query refresh token warning:', err);
+    } catch (err: any) {
+      if (!isLocalAuthAllowed()) {
+        return {
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: `Koneksi database gagal saat kueri refresh token: ${err?.message || err}` }
+        };
+      }
     }
   }
 
-  // Fallback to local store
-  if (!matchedRt) {
+  // Fallback to local store ONLY in local mode
+  if (!matchedRt && isLocalAuthAllowed()) {
     matchedRt = LOCAL_REFRESH_TOKENS.find(r => r.tokenHash === rtHash) || null;
   }
 
@@ -734,11 +1005,11 @@ export async function rotateRefreshToken(
     };
   }
 
-  // Check revocation
+  // Replay Attack Protection: if already revoked, reject immediately
   if (matchedRt.revokedAt) {
     return {
       success: false,
-      error: { code: 'REFRESH_TOKEN_REVOKED', message: 'Refresh token telah dicabut. Silakan login kembali.' }
+      error: { code: 'REFRESH_TOKEN_REVOKED', message: 'Refresh token telah dicabut (terindikasi replay attack). Silakan login kembali.' }
     };
   }
 
@@ -756,9 +1027,14 @@ export async function rotateRefreshToken(
     const userRes = await findUserInSupabaseDetailed(matchedRt.userId);
     if (userRes.success && userRes.data) {
       user = userRes.data;
+    } else if (!userRes.success && !isLocalAuthAllowed()) {
+      return {
+        success: false,
+        error: { code: 'DATABASE_UNAVAILABLE', message: 'Database PostgreSQL tidak tersedia saat verifikasi pengguna.' }
+      };
     }
   }
-  if (!user && isLocalJsonModeAllowed()) {
+  if (!user && isLocalAuthAllowed()) {
     user = db.users.find((u: any) => u.id === matchedRt!.userId) || null;
   }
 
@@ -769,15 +1045,20 @@ export async function rotateRefreshToken(
     };
   }
 
-  // Authoritative Session Version Check on Refresh Token
+  // 3. Authoritative Session Version Check on Refresh Token
   const authoritativeVersion = user.sessionVersion || 1;
   const rtVersionMatch = cleanRt.match(/^mora_rt_v(\d+)_/);
   const rtTokenVersion = rtVersionMatch ? parseInt(rtVersionMatch[1], 10) : undefined;
+  const rtStoredVersion = matchedRt.sessionVersion;
 
-  if (rtTokenVersion !== undefined && rtTokenVersion !== authoritativeVersion) {
-    matchedRt.revokedAt = new Date().toISOString();
+  if (
+    (rtTokenVersion !== undefined && rtTokenVersion !== authoritativeVersion) ||
+    (rtStoredVersion !== undefined && rtStoredVersion !== authoritativeVersion)
+  ) {
+    const revokeIso = new Date().toISOString();
+    matchedRt.revokedAt = revokeIso;
     if (client) {
-      await client.from('refresh_tokens').update({ revoked_at: matchedRt.revokedAt }).eq('id', matchedRt.id);
+      await client.from('refresh_tokens').update({ revoked_at: revokeIso }).eq('id', matchedRt.id);
     }
     return {
       success: false,
@@ -785,7 +1066,7 @@ export async function rotateRefreshToken(
     };
   }
 
-  // 3. Issue new tokens with rotation tied to current sessionVersion
+  // 4. Issue new tokens with rotation tied to authoritative sessionVersion
   const newAccessToken = generateSecureAccessToken(authoritativeVersion);
   const newRefreshToken = generateSecureRefreshToken(authoritativeVersion);
   const newSessionHash = hashToken(newAccessToken);
@@ -794,63 +1075,120 @@ export async function rotateRefreshToken(
   const newExpiresAt = new Date(now + ACCESS_TOKEN_TTL_MS).toISOString();
   const newRtExpiresAt = new Date(now + REFRESH_TOKEN_TTL_MS).toISOString();
   const nowIso = new Date(now).toISOString();
+  const newRtId = `rt_${now}_${crypto.randomBytes(8).toString('hex')}`;
 
-  // Revoke old refresh token & mark replaced
-  matchedRt.revokedAt = nowIso;
-  matchedRt.replacedByTokenHash = newRtHash;
-
-  const newRtRecord: StoredRefreshToken = {
-    id: `rt_${now}_${crypto.randomBytes(8).toString('hex')}`,
-    userId: user.id,
-    sessionId: matchedRt.sessionId,
-    tokenHash: newRtHash,
-    expiresAt: newRtExpiresAt,
-    revokedAt: null,
-    replacedByTokenHash: null,
-    createdAt: nowIso
-  };
-  LOCAL_REFRESH_TOKENS.push(newRtRecord);
-
-  // Update Supabase PostgreSQL
+  // 5. Try atomic RPC rotation if available
+  let rotatedViaRpc = false;
   if (client) {
     try {
-      await client
-        .from('refresh_tokens')
-        .update({ revoked_at: nowIso, replaced_by_token_hash: newRtHash })
-        .eq('id', matchedRt.id);
+      const { data: rpcData, error: rpcError } = await client.rpc('fn_rotate_refresh_token_atomic', {
+        p_old_rt_hash: rtHash,
+        p_new_rt_id: newRtId,
+        p_new_rt_hash: newRtHash,
+        p_new_session_hash: newSessionHash,
+        p_new_session_expires_at: newExpiresAt,
+        p_new_rt_expires_at: newRtExpiresAt,
+        p_session_version: authoritativeVersion
+      });
 
-      await client.from('refresh_tokens').insert([
-        {
-          id: newRtRecord.id,
-          user_id: user.id,
-          session_id: matchedRt.sessionId,
-          token_hash: newRtHash,
-          expires_at: newRtExpiresAt,
-          created_at: nowIso
-        }
-      ]);
+      if (!rpcError && rpcData?.success) {
+        rotatedViaRpc = true;
+      }
+    } catch {}
+  }
 
-      await client
-        .from('auth_sessions')
-        .update({
-          session_id_hash: newSessionHash,
-          token_hash: newSessionHash,
-          expires_at: newExpiresAt,
-          last_activity_at: nowIso
-        })
-        .eq('id', matchedRt.sessionId);
-    } catch (err: any) {
-      console.warn('[CustomAuth] DB token rotation warning:', err?.message || err);
+  // 6. Sequential atomic rotation with fail-closed compensation rollback
+  if (!rotatedViaRpc && client) {
+    // Step A: Revoke old refresh token
+    const { error: revErr } = await client
+      .from('refresh_tokens')
+      .update({ revoked_at: nowIso, replaced_by_token_hash: newRtHash })
+      .eq('id', matchedRt.id);
+
+    if (revErr) {
+      return {
+        success: false,
+        error: { code: 'DATABASE_ERROR', message: `Gagal mencabut refresh token lama di database: ${revErr.message}` }
+      };
+    }
+
+    // Step B: Insert new refresh token
+    const newRtPayload: any = {
+      id: newRtId,
+      user_id: user.id,
+      session_id: matchedRt.sessionId,
+      token_hash: newRtHash,
+      session_version: authoritativeVersion,
+      expires_at: newRtExpiresAt,
+      created_at: nowIso
+    };
+
+    const { error: insErr } = await client.from('refresh_tokens').insert([newRtPayload]);
+    if (insErr) {
+      // Check legacy column
+      let insFailed = true;
+      if (insErr.code === '42703' || insErr.message?.includes('session_version')) {
+        delete newRtPayload.session_version;
+        const { error: insRetryErr } = await client.from('refresh_tokens').insert([newRtPayload]);
+        if (!insRetryErr) insFailed = false;
+      }
+
+      if (insFailed) {
+        // Rollback Step A: un-revoke old token
+        await client.from('refresh_tokens').update({ revoked_at: null, replaced_by_token_hash: null }).eq('id', matchedRt.id);
+        return {
+          success: false,
+          error: { code: 'DATABASE_ERROR', message: `Gagal menyimpan refresh token baru ke database: ${insErr.message}` }
+        };
+      }
+    }
+
+    // Step C: Update parent session
+    const { error: sessUpdErr } = await client
+      .from('auth_sessions')
+      .update({
+        session_id_hash: newSessionHash,
+        token_hash: newSessionHash,
+        expires_at: newExpiresAt,
+        last_activity_at: nowIso
+      })
+      .eq('id', matchedRt.sessionId);
+
+    if (sessUpdErr) {
+      // Rollback Step B & A
+      await client.from('refresh_tokens').delete().eq('id', newRtId);
+      await client.from('refresh_tokens').update({ revoked_at: null, replaced_by_token_hash: null }).eq('id', matchedRt.id);
+      return {
+        success: false,
+        error: { code: 'DATABASE_ERROR', message: `Gagal memperbarui session record: ${sessUpdErr.message}` }
+      };
     }
   }
 
-  // Update local session
-  const localSess = LOCAL_AUTH_SESSIONS.find(s => s.id === matchedRt!.sessionId);
-  if (localSess) {
-    localSess.sessionIdHash = newSessionHash;
-    localSess.tokenHash = newSessionHash;
-    localSess.expiresAt = newExpiresAt;
-    localSess.lastActivityAt = nowIso;
+  // Update in-memory local state if allowed
+  matchedRt.revokedAt = nowIso;
+  matchedRt.replacedByTokenHash = newRtHash;
+
+  if (isLocalAuthAllowed()) {
+    LOCAL_REFRESH_TOKENS.push({
+      id: newRtId,
+      userId: user.id,
+      sessionId: matchedRt.sessionId,
+      tokenHash: newRtHash,
+      sessionVersion: authoritativeVersion,
+      expiresAt: newRtExpiresAt,
+      revokedAt: null,
+      replacedByTokenHash: null,
+      createdAt: nowIso
+    });
+
+    const localSess = LOCAL_AUTH_SESSIONS.find(s => s.id === matchedRt!.sessionId);
+    if (localSess) {
+      localSess.sessionIdHash = newSessionHash;
+      localSess.tokenHash = newSessionHash;
+      localSess.expiresAt = newExpiresAt;
+      localSess.lastActivityAt = nowIso;
+    }
   }
 
   const { passwordHash: _, ...safeUser } = user;
@@ -872,7 +1210,7 @@ export async function rotateRefreshToken(
 
 /**
  * Revokes all sessions and refresh tokens for a specified user in Supabase PostgreSQL.
- * Increments user.session_version to instantly invalidate any cached tokens.
+ * Increments user.session_version atomically to instantly invalidate any cached tokens.
  */
 export async function revokeAllUserSessions(
   userId: string,
@@ -883,47 +1221,109 @@ export async function revokeAllUserSessions(
   }
 
   const nowIso = new Date().toISOString();
-  const client = getSupabaseBackendClient();
+  const client = getActiveBackendClient();
 
-  // 1. Revoke in Supabase PostgreSQL
+  if (!client && !isLocalAuthAllowed()) {
+    return {
+      success: false,
+      error: { code: 'DATABASE_UNAVAILABLE', message: 'Database PostgreSQL tidak tersedia saat mencabut seluruh sesi.' }
+    };
+  }
+
+  // 1. Try atomic RPC function if available (from migration 009)
   if (client) {
     try {
-      await client
+      const { data: rpcData, error: rpcErr } = await client.rpc('fn_revoke_all_user_sessions_atomic', {
+        p_user_id: userId,
+        p_revoked_by: revokedByUserId || null
+      });
+
+      if (!rpcErr && rpcData?.success) {
+        if (isLocalAuthAllowed()) {
+          LOCAL_AUTH_SESSIONS.forEach(s => { if (s.userId === userId) s.revokedAt = nowIso; });
+          LOCAL_REFRESH_TOKENS.forEach(r => { if (r.userId === userId) r.revokedAt = nowIso; });
+          const lu = db.users.find((u: any) => u.id === userId);
+          if (lu) { lu.sessionVersion = rpcData.new_session_version; saveDatabaseToDisk(); }
+        }
+        return { success: true, data: true };
+      }
+    } catch {}
+  }
+
+  // 2. Sequential atomic update in Supabase PostgreSQL
+  if (client) {
+    try {
+      // Fetch user to confirm existence and current version
+      const { data: userData, error: userFetchErr } = await client
+        .from('users')
+        .select('session_version')
+        .eq('id', userId)
+        .single();
+
+      if (userFetchErr || !userData) {
+        return {
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: `Pengguna ID ${userId} tidak ditemukan di database.` }
+        };
+      }
+
+      const nextVersion = (typeof userData.session_version === 'number' ? userData.session_version : 1) + 1;
+
+      // Increment session_version in users table
+      const { error: userUpdErr } = await client
+        .from('users')
+        .update({ session_version: nextVersion, updated_at: nowIso })
+        .eq('id', userId);
+
+      if (userUpdErr) {
+        return {
+          success: false,
+          error: { code: 'DATABASE_ERROR', message: `Gagal menaikkan session_version pengguna: ${userUpdErr.message}` }
+        };
+      }
+
+      // Revoke all active auth_sessions
+      const { error: sessRevErr } = await client
         .from('auth_sessions')
         .update({ revoked_at: nowIso })
         .eq('user_id', userId)
         .is('revoked_at', null);
 
-      await client
+      if (sessRevErr) {
+        console.warn('[CustomAuth] Failed to revoke active auth_sessions:', sessRevErr.message);
+      }
+
+      // Revoke all active refresh_tokens
+      const { error: rtRevErr } = await client
         .from('refresh_tokens')
         .update({ revoked_at: nowIso })
         .eq('user_id', userId)
         .is('revoked_at', null);
 
-      // Increment session_version in users table
-      const { data: userData } = await client.from('users').select('session_version').eq('id', userId).single();
-      const currentVer = typeof userData?.session_version === 'number' ? userData.session_version : 1;
-      await client
-        .from('users')
-        .update({ session_version: currentVer + 1, updated_at: nowIso })
-        .eq('id', userId);
+      if (rtRevErr) {
+        console.warn('[CustomAuth] Failed to revoke active refresh_tokens:', rtRevErr.message);
+      }
     } catch (err: any) {
-      console.warn('[CustomAuth] DB revoke sessions warning:', err?.message || err);
+      return {
+        success: false,
+        error: { code: 'DATABASE_ERROR', message: `Terjadi kesalahan saat membatalkan sesi pengguna: ${err?.message || err}` }
+      };
     }
   }
 
-  // 2. Revoke in local memory stores
-  LOCAL_AUTH_SESSIONS.forEach(s => {
-    if (s.userId === userId) s.revokedAt = nowIso;
-  });
-  LOCAL_REFRESH_TOKENS.forEach(r => {
-    if (r.userId === userId) r.revokedAt = nowIso;
-  });
-
-  const localUser = db.users.find((u: any) => u.id === userId);
-  if (localUser) {
-    localUser.sessionVersion = (localUser.sessionVersion || 1) + 1;
-    saveDatabaseToDisk();
+  // 3. Mirror to local memory ONLY in local mode
+  if (isLocalAuthAllowed()) {
+    LOCAL_AUTH_SESSIONS.forEach(s => {
+      if (s.userId === userId) s.revokedAt = nowIso;
+    });
+    LOCAL_REFRESH_TOKENS.forEach(r => {
+      if (r.userId === userId) r.revokedAt = nowIso;
+    });
+    const localUser = db.users.find((u: any) => u.id === userId);
+    if (localUser) {
+      localUser.sessionVersion = (localUser.sessionVersion || 1) + 1;
+      saveDatabaseToDisk();
+    }
   }
 
   return { success: true, data: true };
@@ -936,7 +1336,7 @@ export async function revokeSingleSession(tokenOrSessionId: string): Promise<boo
   if (!tokenOrSessionId) return false;
   const tokenHash = hashToken(tokenOrSessionId);
   const nowIso = new Date().toISOString();
-  const client = getSupabaseBackendClient();
+  const client = getActiveBackendClient();
 
   if (client) {
     try {
@@ -952,11 +1352,13 @@ export async function revokeSingleSession(tokenOrSessionId: string): Promise<boo
     } catch {}
   }
 
-  LOCAL_AUTH_SESSIONS.forEach(s => {
-    if (s.id === tokenOrSessionId || s.sessionIdHash === tokenHash || s.tokenHash === tokenHash) {
-      s.revokedAt = nowIso;
-    }
-  });
+  if (isLocalAuthAllowed()) {
+    LOCAL_AUTH_SESSIONS.forEach(s => {
+      if (s.id === tokenOrSessionId || s.sessionIdHash === tokenHash || s.tokenHash === tokenHash) {
+        s.revokedAt = nowIso;
+      }
+    });
+  }
 
   return true;
 }
@@ -999,9 +1401,20 @@ export async function loginWithCustomAuth(params: {
     };
   }
 
-  // 2. Authoritative User Lookup in Supabase PostgreSQL
+  // 2. Fail-closed check: Supabase PostgreSQL is MANDATORY in production
+  const client = getActiveBackendClient();
+  if (!client && !isLocalAuthAllowed()) {
+    return {
+      success: false,
+      error: {
+        code: 'DATABASE_UNAVAILABLE',
+        message: 'Koneksi ke Supabase PostgreSQL database produksi wajib tersedia dan aktif untuk melakukan autentikasi.'
+      }
+    };
+  }
+
+  // 3. Authoritative User Lookup in Supabase PostgreSQL
   let user: ServerUser | null = null;
-  const client = getSupabaseBackendClient();
 
   if (client) {
     const userRes = await findUserInSupabaseDetailed(cleanIdent);
@@ -1017,15 +1430,24 @@ export async function loginWithCustomAuth(params: {
     user = userRes.data;
   }
 
-  // Fallback to local store if Supabase not configured in local development
-  if (!user && isLocalJsonModeAllowed()) {
+  // Fallback to local store ONLY if in local development mode
+  if (!user && isLocalAuthAllowed()) {
+    // 1. Prioritize exact username or email match
     user = db.users.find(
       (u: any) =>
         !u.isDeleted &&
-        (u.username.toLowerCase() === cleanIdent ||
-          u.email.toLowerCase() === cleanIdent ||
-          (u.altEmail && u.altEmail.toLowerCase().includes(cleanIdent)))
+        (u.username.toLowerCase() === cleanIdent || u.email.toLowerCase() === cleanIdent)
     ) || null;
+
+    // 2. If not found, check altEmail token list
+    if (!user) {
+      user = db.users.find(
+        (u: any) =>
+          !u.isDeleted &&
+          u.altEmail &&
+          u.altEmail.toLowerCase().split(/[,;\s]+/).map((s: string) => s.trim()).includes(cleanIdent)
+      ) || null;
+    }
   }
 
   // User not found in directory
@@ -1091,7 +1513,7 @@ export async function loginWithCustomAuth(params: {
     };
   }
 
-  // 3. Verify Password (bcrypt + legacy upgrade fallback)
+  // 4. Verify Password (bcrypt + legacy upgrade fallback)
   const passwordCheck = await verifyUserPasswordEx(password, user.passwordHash);
   if (!passwordCheck.valid) {
     await recordLoginAttempt({
@@ -1109,7 +1531,7 @@ export async function loginWithCustomAuth(params: {
         updates.locked_until = new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString();
         updates.account_status = 'locked';
       }
-      client.from('users').update(updates).eq('id', user.id).then(() => {}).catch(() => {});
+      client.from('users').update(updates).eq('id', user.id).then(() => {}, () => {});
     }
 
     return {
@@ -1121,7 +1543,7 @@ export async function loginWithCustomAuth(params: {
     };
   }
 
-  // 4. Password valid -> Rehash if needed
+  // 5. Password valid -> Rehash if needed
   if (passwordCheck.needsRehash) {
     try {
       const newBcryptHash = await hashPasswordWithBcrypt(password);
@@ -1136,7 +1558,7 @@ export async function loginWithCustomAuth(params: {
           })
           .eq('id', user.id);
       }
-      if (isLocalJsonModeAllowed()) {
+      if (isLocalAuthAllowed()) {
         const lu = db.users.find((u: any) => u.id === user!.id);
         if (lu) {
           lu.passwordHash = newBcryptHash;
@@ -1148,13 +1570,13 @@ export async function loginWithCustomAuth(params: {
     }
   }
 
-  // 5. Generate Access Token & Refresh Token tied to current sessionVersion
+  // 6. Generate Access Token & Refresh Token tied to current authoritative sessionVersion
   const currentVersion = user.sessionVersion || 1;
   const accessToken = generateSecureAccessToken(currentVersion);
   const refreshToken = generateSecureRefreshToken(currentVersion);
 
-  // 6. Persist Session into Supabase PostgreSQL
-  const { sessionId, expiresAt } = await persistNewAuthSession({
+  // 7. Persist Session into Supabase PostgreSQL (Fail-closed & Atomic)
+  const persistRes = await persistNewAuthSession({
     userId: user.id,
     accessToken,
     refreshToken,
@@ -1163,7 +1585,25 @@ export async function loginWithCustomAuth(params: {
     sessionVersion: currentVersion
   });
 
-  // 7. Update User login stats & reset failed login count in Supabase PostgreSQL
+  if (!persistRes.success || !persistRes.data) {
+    await recordLoginAttempt({
+      identifier: cleanIdent,
+      ipAddress,
+      success: false,
+      reason: 'SESSION_PERSISTENCE_FAILED'
+    });
+    return {
+      success: false,
+      error: persistRes.error || {
+        code: 'SESSION_PERSISTENCE_FAILED',
+        message: 'Gagal menyimpan sesi login ke database PostgreSQL. Login dibatalkan.'
+      }
+    };
+  }
+
+  const { sessionId, expiresAt } = persistRes.data;
+
+  // 8. Update User login stats & reset failed login count in Supabase PostgreSQL
   const nowIso = new Date().toISOString();
   if (client) {
     try {
@@ -1181,7 +1621,7 @@ export async function loginWithCustomAuth(params: {
     } catch {}
   }
 
-  if (isLocalJsonModeAllowed()) {
+  if (isLocalAuthAllowed()) {
     const lu = db.users.find((u: any) => u.id === user!.id);
     if (lu) {
       lu.lastLoginAt = nowIso;
@@ -1190,14 +1630,14 @@ export async function loginWithCustomAuth(params: {
     }
   }
 
-  // 8. Record successful login attempt
+  // 9. Record successful login attempt
   await recordLoginAttempt({
     identifier: cleanIdent,
     ipAddress,
     success: true
   });
 
-  // 9. Record Audit Log
+  // 10. Record Audit Log
   await logServerAuditAsync(
     'USER_LOGIN_SUCCESS',
     'auth',

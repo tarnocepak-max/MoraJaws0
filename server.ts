@@ -966,6 +966,7 @@ export interface AuditLogOptions {
   newState?: any;
   ipAddress?: string;
   userAgent?: string;
+  targetUserId?: string;
   metadata?: any;
 }
 
@@ -1397,8 +1398,8 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
       }
     }
 
-    // 3. Server Session Verification with strict sessionVersion checking
-    if (!found) {
+    // 3. Server Session Verification with strict sessionVersion checking (Non-production local development only)
+    if (!found && isLocalJsonModeAllowed()) {
       activeSession = SERVER_SESSIONS.find(s => s.token === token && s.status === 'active');
       if (activeSession) {
         if (new Date(activeSession.expiresAt).getTime() < now) {
@@ -3137,7 +3138,20 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
   app.post('/api/admin/users/:id/revoke-sessions', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
-    await revokeAllUserSessions(id, req.user!.id);
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      return res.status(400).json({ success: false, error: 'User ID wajib diisi.', code: 'INVALID_ID' });
+    }
+
+    const revRes = await revokeAllUserSessions(id.trim(), req.user!.id);
+    if (!revRes.success) {
+      const statusCode = revRes.error?.code === 'USER_NOT_FOUND' ? 404 :
+                         revRes.error?.code === 'DATABASE_UNAVAILABLE' ? 503 : 500;
+      return res.status(statusCode).json({
+        success: false,
+        error: revRes.error?.message || 'Gagal membatalkan sesi pengguna.',
+        code: revRes.error?.code || 'REVOKE_FAILED'
+      });
+    }
 
     await logServerAuditAsync(
       'ADMIN_REVOKE_SESSIONS',
