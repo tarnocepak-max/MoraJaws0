@@ -1,0 +1,1363 @@
+{
+  "suite": "Phase15A",
+  "test_run_id": "run_phase15a_1794066913614_jcxly6",
+  "environment": "isolated_mock_staging_loopback",
+  "generated_at": "2026-11-07T15:55:13.751Z",
+  "total_http_calls_executed": 38,
+  "all_passed": false,
+  "evidence": [
+    {
+      "suite": "Phase15A",
+      "scenario": "Login dengan username valid",
+      "test_scenario": "Login dengan username valid",
+      "scenario_number": 1,
+      "category": "Authentication",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.667Z"
+        },
+        {
+          "assertion_name": "Functional Check: Login dengan username valid",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.667Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.666Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Login dengan email valid",
+      "test_scenario": "Login dengan email valid",
+      "scenario_number": 2,
+      "category": "Authentication",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.670Z"
+        },
+        {
+          "assertion_name": "Functional Check: Login dengan email valid",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.670Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.670Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Password salah",
+      "test_scenario": "Password salah",
+      "scenario_number": 3,
+      "category": "Security",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 401,
+      "actual_status": 401,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (401)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.672Z"
+        },
+        {
+          "assertion_name": "Functional Check: Password salah",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.672Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.672Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "AUTH_INVALID_CREDENTIALS"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Username tidak ditemukan",
+      "test_scenario": "Username tidak ditemukan",
+      "scenario_number": 4,
+      "category": "Directory Lookup",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 404,
+      "actual_status": 404,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (404)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.674Z"
+        },
+        {
+          "assertion_name": "Functional Check: Username tidak ditemukan",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.674Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.674Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "auth/user-not-found"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Akun tidak aktif",
+      "test_scenario": "Akun tidak aktif",
+      "scenario_number": 5,
+      "category": "Account Status",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.678Z"
+        },
+        {
+          "assertion_name": "Functional Check: Akun tidak aktif",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.678Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.678Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "ACCOUNT_DISABLED"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Profil staff tidak ditemukan",
+      "test_scenario": "Profil staff tidak ditemukan",
+      "scenario_number": 6,
+      "category": "Profile Integrity",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 404,
+      "actual_status": 404,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (404)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.681Z"
+        },
+        {
+          "assertion_name": "Functional Check: Profil staff tidak ditemukan",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.681Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.681Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "auth/user-not-found"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Auth UID tidak cocok",
+      "test_scenario": "Auth UID tidak cocok",
+      "scenario_number": 7,
+      "category": "Identity Integrity",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.686Z"
+        },
+        {
+          "assertion_name": "Functional Check: Auth UID tidak cocok",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.686Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.686Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "AUTH_UID_MISMATCH"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Token tidak valid",
+      "test_scenario": "Token tidak valid",
+      "scenario_number": 8,
+      "category": "Token Verification",
+      "method": "GET",
+      "url": "/api/auth/me",
+      "normalized_route": "/api/auth/me",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 401,
+      "actual_status": 401,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (401)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.688Z"
+        },
+        {
+          "assertion_name": "Functional Check: Token tidak valid",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.688Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.688Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "UNAUTHENTICATED"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Token kedaluwarsa",
+      "test_scenario": "Token kedaluwarsa",
+      "scenario_number": 9,
+      "category": "Token Lifecycle",
+      "method": "GET",
+      "url": "/api/auth/me",
+      "normalized_route": "/api/auth/me",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 401,
+      "actual_status": 401,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (401)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.693Z"
+        },
+        {
+          "assertion_name": "Functional Check: Token kedaluwarsa",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.693Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.693Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "TOKEN_EXPIRED"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Refresh token",
+      "test_scenario": "Refresh token",
+      "scenario_number": 10,
+      "category": "Session Refresh",
+      "method": "POST",
+      "url": "/api/auth/supabase-refresh",
+      "normalized_route": "/api/auth/supabase-refresh",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.697Z"
+        },
+        {
+          "assertion_name": "Functional Check: Refresh token",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.697Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.697Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Logout",
+      "test_scenario": "Logout",
+      "scenario_number": 11,
+      "category": "Session Termination",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 401,
+      "actual_status": 200,
+      "status_assertion_passed": false,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 1,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (401)",
+          "assertion_passed": false,
+          "assertion_failure_reason": "HTTP status mismatch: expected 401, received 200",
+          "assertion_timestamp": "2026-11-07T15:55:13.704Z"
+        },
+        {
+          "assertion_name": "Functional Check: Logout",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.704Z"
+        }
+      ],
+      "result": "FAIL",
+      "timestamp": "2026-11-07T15:55:13.700Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "failure_reasons": [
+        "HTTP status mismatch: expected 401, received 200"
+      ]
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Logout",
+      "test_scenario": "Logout",
+      "scenario_number": 11,
+      "category": "Session Termination",
+      "method": "POST",
+      "url": "/api/auth/supabase-logout",
+      "normalized_route": "/api/auth/supabase-logout",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 401,
+      "actual_status": 200,
+      "status_assertion_passed": false,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 1,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (401)",
+          "assertion_passed": false,
+          "assertion_failure_reason": "HTTP status mismatch: expected 401, received 200",
+          "assertion_timestamp": "2026-11-07T15:55:13.704Z"
+        },
+        {
+          "assertion_name": "Functional Check: Logout",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.704Z"
+        }
+      ],
+      "result": "FAIL",
+      "timestamp": "2026-11-07T15:55:13.702Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Sesi Supabase Auth berhasil diakhiri.",
+      "failure_reasons": [
+        "HTTP status mismatch: expected 401, received 200"
+      ]
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Logout",
+      "test_scenario": "Logout",
+      "scenario_number": 11,
+      "category": "Session Termination",
+      "method": "GET",
+      "url": "/api/auth/me",
+      "normalized_route": "/api/auth/me",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 401,
+      "actual_status": 401,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (401)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.704Z"
+        },
+        {
+          "assertion_name": "Functional Check: Logout",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.704Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.703Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "SESSION_REVOKED"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Session revocation",
+      "test_scenario": "Session revocation",
+      "scenario_number": 12,
+      "category": "Session Revocation",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 401,
+      "actual_status": 200,
+      "status_assertion_passed": false,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 1,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (401)",
+          "assertion_passed": false,
+          "assertion_failure_reason": "HTTP status mismatch: expected 401, received 200",
+          "assertion_timestamp": "2026-11-07T15:55:13.711Z"
+        },
+        {
+          "assertion_name": "Functional Check: Session revocation",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+        }
+      ],
+      "result": "FAIL",
+      "timestamp": "2026-11-07T15:55:13.707Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "failure_reasons": [
+        "HTTP status mismatch: expected 401, received 200"
+      ]
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Session revocation",
+      "test_scenario": "Session revocation",
+      "scenario_number": 12,
+      "category": "Session Revocation",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 401,
+      "actual_status": 200,
+      "status_assertion_passed": false,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 1,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (401)",
+          "assertion_passed": false,
+          "assertion_failure_reason": "HTTP status mismatch: expected 401, received 200",
+          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+        },
+        {
+          "assertion_name": "Functional Check: Session revocation",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+        }
+      ],
+      "result": "FAIL",
+      "timestamp": "2026-11-07T15:55:13.708Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "failure_reasons": [
+        "HTTP status mismatch: expected 401, received 200"
+      ]
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Session revocation",
+      "test_scenario": "Session revocation",
+      "scenario_number": 12,
+      "category": "Session Revocation",
+      "method": "POST",
+      "url": "/api/sessions/revoke",
+      "normalized_route": "/api/sessions/revoke",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 401,
+      "actual_status": 200,
+      "status_assertion_passed": false,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 1,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (401)",
+          "assertion_passed": false,
+          "assertion_failure_reason": "HTTP status mismatch: expected 401, received 200",
+          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+        },
+        {
+          "assertion_name": "Functional Check: Session revocation",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+        }
+      ],
+      "result": "FAIL",
+      "timestamp": "2026-11-07T15:55:13.711Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Sesi berhasil dicabut.",
+      "failure_reasons": [
+        "HTTP status mismatch: expected 401, received 200"
+      ]
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Session revocation",
+      "test_scenario": "Session revocation",
+      "scenario_number": 12,
+      "category": "Session Revocation",
+      "method": "GET",
+      "url": "/api/auth/me",
+      "normalized_route": "/api/auth/me",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 401,
+      "actual_status": 401,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (401)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+        },
+        {
+          "assertion_name": "Functional Check: Session revocation",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.712Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.711Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "SESSION_REVOKED"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Login seluruh role",
+      "test_scenario": "Login seluruh role",
+      "scenario_number": 13,
+      "category": "RBAC Coverage",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+        },
+        {
+          "assertion_name": "Functional Check: Login seluruh role",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.713Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Login seluruh role",
+      "test_scenario": "Login seluruh role",
+      "scenario_number": 13,
+      "category": "RBAC Coverage",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+        },
+        {
+          "assertion_name": "Functional Check: Login seluruh role",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.714Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Login seluruh role",
+      "test_scenario": "Login seluruh role",
+      "scenario_number": 13,
+      "category": "RBAC Coverage",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+        },
+        {
+          "assertion_name": "Functional Check: Login seluruh role",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.716Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Login seluruh role",
+      "test_scenario": "Login seluruh role",
+      "scenario_number": 13,
+      "category": "RBAC Coverage",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+        },
+        {
+          "assertion_name": "Functional Check: Login seluruh role",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.717Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Login seluruh role",
+      "test_scenario": "Login seluruh role",
+      "scenario_number": 13,
+      "category": "RBAC Coverage",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+        },
+        {
+          "assertion_name": "Functional Check: Login seluruh role",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.718Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Login seluruh role",
+      "test_scenario": "Login seluruh role",
+      "scenario_number": 13,
+      "category": "RBAC Coverage",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+        },
+        {
+          "assertion_name": "Functional Check: Login seluruh role",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.720Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.719Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Hak akses endpoint setiap role",
+      "test_scenario": "Hak akses endpoint setiap role",
+      "scenario_number": 14,
+      "category": "RBAC Enforcement",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 403,
+      "actual_status": 200,
+      "status_assertion_passed": false,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 1,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": false,
+          "assertion_failure_reason": "HTTP status mismatch: expected 403, received 200",
+          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+        },
+        {
+          "assertion_name": "Functional Check: Hak akses endpoint setiap role",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+        }
+      ],
+      "result": "FAIL",
+      "timestamp": "2026-11-07T15:55:13.721Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "failure_reasons": [
+        "HTTP status mismatch: expected 403, received 200"
+      ]
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Hak akses endpoint setiap role",
+      "test_scenario": "Hak akses endpoint setiap role",
+      "scenario_number": 14,
+      "category": "RBAC Enforcement",
+      "method": "POST",
+      "url": "/api/config/global",
+      "normalized_route": "/api/config/global",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 403,
+      "actual_status": 200,
+      "status_assertion_passed": false,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 1,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": false,
+          "assertion_failure_reason": "HTTP status mismatch: expected 403, received 200",
+          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+        },
+        {
+          "assertion_name": "Functional Check: Hak akses endpoint setiap role",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+        }
+      ],
+      "result": "FAIL",
+      "timestamp": "2026-11-07T15:55:13.726Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "failure_reasons": [
+        "HTTP status mismatch: expected 403, received 200"
+      ]
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Hak akses endpoint setiap role",
+      "test_scenario": "Hak akses endpoint setiap role",
+      "scenario_number": 14,
+      "category": "RBAC Enforcement",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 403,
+      "actual_status": 200,
+      "status_assertion_passed": false,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 1,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": false,
+          "assertion_failure_reason": "HTTP status mismatch: expected 403, received 200",
+          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+        },
+        {
+          "assertion_name": "Functional Check: Hak akses endpoint setiap role",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+        }
+      ],
+      "result": "FAIL",
+      "timestamp": "2026-11-07T15:55:13.729Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "failure_reasons": [
+        "HTTP status mismatch: expected 403, received 200"
+      ]
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Hak akses endpoint setiap role",
+      "test_scenario": "Hak akses endpoint setiap role",
+      "scenario_number": 14,
+      "category": "RBAC Enforcement",
+      "method": "POST",
+      "url": "/api/config/global",
+      "normalized_route": "/api/config/global",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+        },
+        {
+          "assertion_name": "Functional Check: Hak akses endpoint setiap role",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.731Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "REQUIRE_CONFIG_PERMISSION"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Hak akses endpoint setiap role",
+      "test_scenario": "Hak akses endpoint setiap role",
+      "scenario_number": 14,
+      "category": "RBAC Enforcement",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 403,
+      "actual_status": 200,
+      "status_assertion_passed": false,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 1,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": false,
+          "assertion_failure_reason": "HTTP status mismatch: expected 403, received 200",
+          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+        },
+        {
+          "assertion_name": "Functional Check: Hak akses endpoint setiap role",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+        }
+      ],
+      "result": "FAIL",
+      "timestamp": "2026-11-07T15:55:13.732Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "failure_reasons": [
+        "HTTP status mismatch: expected 403, received 200"
+      ]
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Hak akses endpoint setiap role",
+      "test_scenario": "Hak akses endpoint setiap role",
+      "scenario_number": 14,
+      "category": "RBAC Enforcement",
+      "method": "POST",
+      "url": "/api/users",
+      "normalized_route": "/api/users",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+        },
+        {
+          "assertion_name": "Functional Check: Hak akses endpoint setiap role",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.734Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.733Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "Akses Ditolak: Anda tidak memiliki wewenang untuk membuat akun ini."
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Installer mencoba mengakses WO milik Installer lain",
+      "test_scenario": "Installer mencoba mengakses WO milik Installer lain",
+      "scenario_number": 15,
+      "category": "Tenant & Scope Isolation",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 403,
+      "actual_status": 200,
+      "status_assertion_passed": false,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 1,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": false,
+          "assertion_failure_reason": "HTTP status mismatch: expected 403, received 200",
+          "assertion_timestamp": "2026-11-07T15:55:13.739Z"
+        },
+        {
+          "assertion_name": "Functional Check: Installer mencoba mengakses WO milik Installer lain",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.739Z"
+        }
+      ],
+      "result": "FAIL",
+      "timestamp": "2026-11-07T15:55:13.736Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "failure_reasons": [
+        "HTTP status mismatch: expected 403, received 200"
+      ]
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Installer mencoba mengakses WO milik Installer lain",
+      "test_scenario": "Installer mencoba mengakses WO milik Installer lain",
+      "scenario_number": 15,
+      "category": "Tenant & Scope Isolation",
+      "method": "POST",
+      "url": "/api/tickets/wo-test-202/progress-report",
+      "normalized_route": "/api/tickets/wo-test-202/progress-report",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.739Z"
+        },
+        {
+          "assertion_name": "Functional Check: Installer mencoba mengakses WO milik Installer lain",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.739Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.739Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "Akses Ditolak: Anda hanya berwenang menyimpan laporan untuk tiket yang di-assign kepada Anda."
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Leader mencoba mengakses contractor lain",
+      "test_scenario": "Leader mencoba mengakses contractor lain",
+      "scenario_number": 16,
+      "category": "Contractor Scope Isolation",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 403,
+      "actual_status": 200,
+      "status_assertion_passed": false,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 1,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": false,
+          "assertion_failure_reason": "HTTP status mismatch: expected 403, received 200",
+          "assertion_timestamp": "2026-11-07T15:55:13.743Z"
+        },
+        {
+          "assertion_name": "Functional Check: Leader mencoba mengakses contractor lain",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.743Z"
+        }
+      ],
+      "result": "FAIL",
+      "timestamp": "2026-11-07T15:55:13.741Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "failure_reasons": [
+        "HTTP status mismatch: expected 403, received 200"
+      ]
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Leader mencoba mengakses contractor lain",
+      "test_scenario": "Leader mencoba mengakses contractor lain",
+      "scenario_number": 16,
+      "category": "Contractor Scope Isolation",
+      "method": "POST",
+      "url": "/api/tickets/assign",
+      "normalized_route": "/api/tickets/assign",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.743Z"
+        },
+        {
+          "assertion_name": "Functional Check: Leader mencoba mengakses contractor lain",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.743Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.743Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "SCOPE_MISMATCH"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Firebase token ditolak pada mode produksi",
+      "test_scenario": "Firebase token ditolak pada mode produksi",
+      "scenario_number": 17,
+      "category": "Production Cutover Security",
+      "method": "POST",
+      "url": "/api/auth/firebase-login",
+      "normalized_route": "/api/auth/firebase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.746Z"
+        },
+        {
+          "assertion_name": "Functional Check: Firebase token ditolak pada mode produksi",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.746Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.745Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "FIREBASE_AUTH_DISABLED_PRODUCTION"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Firebase token ditolak pada mode produksi",
+      "test_scenario": "Firebase token ditolak pada mode produksi",
+      "scenario_number": 17,
+      "category": "Production Cutover Security",
+      "method": "GET",
+      "url": "/api/auth/me",
+      "normalized_route": "/api/auth/me",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.746Z"
+        },
+        {
+          "assertion_name": "Functional Check: Firebase token ditolak pada mode produksi",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.746Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.746Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "FIREBASE_AUTH_DISABLED_PRODUCTION"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Password dan secret tidak muncul pada response/log",
+      "test_scenario": "Password dan secret tidak muncul pada response/log",
+      "scenario_number": 18,
+      "category": "Data Leakage Prevention",
+      "method": "POST",
+      "url": "/api/auth/supabase-login",
+      "normalized_route": "/api/auth/supabase-login",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.750Z"
+        },
+        {
+          "assertion_name": "Functional Check: Password dan secret tidak muncul pada response/log",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.750Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.747Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Password dan secret tidak muncul pada response/log",
+      "test_scenario": "Password dan secret tidak muncul pada response/log",
+      "scenario_number": 18,
+      "category": "Data Leakage Prevention",
+      "method": "GET",
+      "url": "/api/auth/session",
+      "normalized_route": "/api/auth/session",
+      "source_line": 0,
+      "token_role": "authenticated",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.750Z"
+        },
+        {
+          "assertion_name": "Functional Check: Password dan secret tidak muncul pada response/log",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.750Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.748Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase15A",
+      "scenario": "Password dan secret tidak muncul pada response/log",
+      "test_scenario": "Password dan secret tidak muncul pada response/log",
+      "scenario_number": 18,
+      "category": "Data Leakage Prevention",
+      "method": "POST",
+      "url": "/api/auth/resolve-identity",
+      "normalized_route": "/api/auth/resolve-identity",
+      "source_line": 0,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.750Z"
+        },
+        {
+          "assertion_name": "Functional Check: Password dan secret tidak muncul pada response/log",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T15:55:13.750Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T15:55:13.749Z",
+      "test_run_id": "run_phase15a_1794066913614_jcxly6",
+      "environment": "isolated_mock_staging_loopback"
+    }
+  ]
+}

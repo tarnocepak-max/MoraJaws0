@@ -1,0 +1,121 @@
+{
+  "phase": "2.4.5",
+  "title": "Installer Account Authority & RBAC Hardening",
+  "executionType": "static_source_assertions",
+  "databaseExecutionPerformed": false,
+  "supabaseDeploymentPerformed": false,
+  "total": 27,
+  "passed": 27,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "Legacy sync-profile endpoint requires authentication and blocks Superadmin Installer changes",
+      "status": "PASS"
+    },
+    {
+      "name": "Generic session revoke endpoint blocks Superadmin from Installer sessions",
+      "status": "PASS"
+    },
+    {
+      "name": "POST /api/users blocks Superadmin Installer creation",
+      "status": "PASS"
+    },
+    {
+      "name": "POST /api/users permits Leader-only Installer creation",
+      "status": "PASS"
+    },
+    {
+      "name": "Leader contractor scope is fail-closed",
+      "status": "PASS"
+    },
+    {
+      "name": "Leader cannot override contractor using request body",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin cannot edit Installer through /api/users/:id",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin cannot toggle Installer through legacy user endpoint",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin cannot delete Installer through legacy user endpoint",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin cannot create Installer through /api/admin/users",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin cannot edit Installer through /api/admin/users/:id",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin cannot change Installer status through admin endpoint",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin cannot separately revoke Installer sessions",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin cannot create Installer through /api/supabase/users",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin cannot edit Installer through /api/supabase/users/:id",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin cannot delete Installer through /api/supabase/users/:id",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin reset password endpoint remains available",
+      "status": "PASS"
+    },
+    {
+      "name": "Installer registration in AppContext is Leader-only",
+      "status": "PASS"
+    },
+    {
+      "name": "Installer registration requires Leader contractor scope",
+      "status": "PASS"
+    },
+    {
+      "name": "AppContext blocks Superadmin editing Installer",
+      "status": "PASS"
+    },
+    {
+      "name": "AppContext blocks Superadmin deleting Installer",
+      "status": "PASS"
+    },
+    {
+      "name": "AppContext blocks Superadmin changing Installer status",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin UI does not offer Installer role in create dropdown",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin UI does not offer Installer role in edit dropdown",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin UI hides Installer edit controls",
+      "status": "PASS"
+    },
+    {
+      "name": "Superadmin UI keeps Installer password reset control",
+      "status": "PASS"
+    },
+    {
+      "name": "User management service create endpoint remains server-routed",
+      "status": "PASS"
+    }
+  ],
+  "generatedAt": "2026-11-11T17:40:21.988Z"
+}

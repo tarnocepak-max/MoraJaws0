@@ -1,0 +1,732 @@
+UPDATE APLIKASI MORAJAWS
+
+Portal Login, Session Management, Global Configuration, Schedule Filter, Database Synchronization, dan Role Management
+
+1. INSTRUKSI UTAMA
+
+Lakukan pembaruan terhadap aplikasi MoraJaws yang sudah ada tanpa membangun ulang aplikasi dari nol.
+
+Sebelum melakukan perubahan:
+
+1. Audit struktur frontend, backend, database, autentikasi, role permission, dan konfigurasi aplikasi yang sudah tersedia.
+2. Identifikasi komponen yang menyebabkan masalah dan gunakan kembali komponen yang masih berfungsi.
+3. Pertahankan seluruh fitur existing yang tidak bertentangan dengan instruksi pembaruan ini.
+4. Pastikan setiap perubahan frontend didukung oleh backend dan database yang sesuai.
+5. Jangan menggunakan data simulasi, dummy credentials, atau status sinkronisasi palsu.
+6. Jangan menghapus data operasional yang valid selama proses pembaruan.
+7. Terapkan perubahan secara konsisten pada seluruh portal Super Admin, Dispatch, Leader, Installer, dan role Management Data.
+8. Setelah implementasi selesai, lakukan audit dan pengujian terhadap seluruh fitur yang terdampak.
+
+---
+
+2. HALAMAN AWAL: PORTAL LOGIN SEDERHANA
+
+Ubah halaman awal aplikasi menjadi satu halaman login sederhana dan profesional.
+
+Ketentuan UI
+
+- Saat aplikasi dibuka, pengguna langsung diarahkan ke halaman login apabila belum memiliki sesi autentikasi yang valid.
+- Hilangkan pilihan kategori role akun pada halaman login.
+- Jangan tampilkan tombol pilihan Super Admin, Dispatch, Leader, Installer, atau Management Data.
+- Pengguna cukup memasukkan username atau identitas login yang telah didaftarkan dan password.
+- Sistem menentukan role secara otomatis berdasarkan data akun yang tersimpan di database.
+- Setelah autentikasi berhasil, arahkan pengguna ke dashboard sesuai role dan permission yang dimiliki.
+- Jika autentikasi gagal, tampilkan pesan kesalahan yang jelas tanpa membocorkan informasi sensitif.
+- Sediakan tombol tampilkan/sembunyikan password.
+- Pastikan tampilan responsif pada perangkat desktop dan mobile.
+- Gunakan identitas visual MoraJaws dengan dominasi ungu muda dan dark violet.
+
+Ketentuan autentikasi
+
+1. Hanya akun yang terdaftar dan diaktifkan oleh administrator yang berwenang yang dapat masuk.
+2. Role tidak boleh ditentukan berdasarkan input pengguna di halaman login.
+3. Backend wajib memvalidasi identitas akun, password, status akun, dan permission.
+4. Jangan menyimpan username, password, atau informasi akun dalam bentuk teks biasa di browser, localStorage, sessionStorage, log aplikasi, maupun data analitik.
+5. Password harus disimpan di database dalam bentuk hash menggunakan algoritma yang sesuai, seperti Argon2id atau bcrypt dengan konfigurasi yang aman.
+6. Jangan pernah menyimpan password asli setelah proses autentikasi.
+7. Hindari menyimpan access token atau session identifier di localStorage.
+8. Gunakan sesi yang aman melalui cookie HttpOnly, Secure pada HTTPS, dan SameSite yang sesuai.
+9. Terapkan perlindungan terhadap brute-force login, session fixation, dan percobaan autentikasi berulang.
+10. Terapkan logout yang benar dengan membatalkan sesi di sisi server.
+
+Catatan penting: Sistem boleh menyimpan hash password, ID akun, role, dan metadata sesi yang diperlukan untuk menjalankan autentikasi. Namun, password asli tidak boleh disimpan atau dicatat dalam log.
+
+---
+
+3. SESSION MANAGEMENT UNTUK STAFF DISPATCH, LEADER, DAN INSTALLER
+
+Buat sistem pengelolaan sesi login yang aman dan terstruktur untuk akun staff Dispatch, Leader, dan Installer.
+
+Pengaturan sesi harus dapat dikelola oleh Super Admin melalui menu konfigurasi aplikasi.
+
+A. Konfigurasi sesi
+
+Sediakan pengaturan berikut:
+
+- Durasi maksimum sesi login.
+- Batas waktu tidak aktif sebelum sesi berakhir.
+- Kebijakan perpanjangan sesi ketika pengguna aktif.
+- Batas jumlah sesi aktif per akun.
+- Kebijakan sesi baru ketika akun login dari perangkat lain.
+- Logout manual.
+- Pembatalan sesi oleh administrator.
+- Kebijakan sesi ketika akun dinonaktifkan.
+- Kebijakan sesi ketika password akun diubah.
+
+Nilai konfigurasi harus dapat diubah oleh Super Admin tanpa mengubah source code.
+
+B. Perilaku sesi
+
+1. Sesi harus memiliki masa berlaku yang jelas.
+2. Jika sesi kedaluwarsa, pengguna diarahkan kembali ke halaman login.
+3. Ketika akun dinonaktifkan, seluruh sesi aktif akun tersebut harus dapat dicabut.
+4. Jika Super Admin mencabut sesi, akun terkait tidak boleh tetap mengakses halaman melalui sesi lama.
+5. Setelah logout, sesi harus tidak dapat digunakan kembali.
+6. Halaman yang memerlukan autentikasi harus memvalidasi sesi melalui backend.
+7. Jangan hanya mengandalkan proteksi route pada frontend.
+8. Terapkan pemeriksaan role dan permission pada setiap endpoint yang dilindungi.
+9. Hindari pemutusan sesi secara tidak sengaja ketika pengguna sedang mengerjakan laporan atau memperbarui tiket.
+
+C. Monitoring sesi
+
+Super Admin dapat melihat metadata sesi yang diperlukan untuk keamanan, seperti:
+
+- Nama atau ID akun.
+- Role akun.
+- Waktu login.
+- Waktu aktivitas terakhir.
+- Waktu kedaluwarsa.
+- Status sesi aktif atau berakhir.
+- Informasi perangkat yang dibatasi pada kebutuhan keamanan.
+
+Jangan menampilkan password, hash password, session cookie, atau token autentikasi dalam menu monitoring.
+
+---
+
+4. PERBAIKAN UI IMPORT TEXT DAN TOMBOL KONFIRMASI
+
+Perbaiki fitur import data menggunakan teks, terutama ketika pengguna mendaftarkan banyak kategori kontraktor sekaligus.
+
+Masalah yang harus diselesaikan
+
+Saat proses import menggunakan teks menghasilkan daftar kontraktor yang panjang, tombol Konfirmasi atau Simpan tertutup oleh komponen UI lain sehingga pengguna tidak dapat menyelesaikan proses import.
+
+Ketentuan perbaikan
+
+1. Audit modal, dialog, panel preview, daftar kontraktor, dan tombol konfirmasi pada fitur import.
+2. Jadikan area preview sebagai bagian yang dapat di-scroll secara vertikal.
+3. Tempatkan tombol Konfirmasi dan Batal pada footer yang tetap terlihat selama preview di-scroll.
+4. Gunakan sticky footer atau struktur layout flex yang tepat.
+5. Pastikan footer tidak menutupi isi data yang sedang ditinjau.
+6. Perbaiki pengaturan "z-index", "overflow", tinggi modal, dan posisi elemen.
+7. Pastikan modal tetap berada dalam batas layar perangkat.
+8. Pada perangkat mobile, tombol konfirmasi harus tetap mudah dijangkau.
+9. Ketika daftar kontraktor bertambah, tinggi daftar mengikuti ruang yang tersedia dan bukan memperbesar modal tanpa batas.
+10. Tambahkan ringkasan jumlah data yang akan diimpor dan jumlah kontraktor baru yang terdeteksi.
+
+Validasi sebelum konfirmasi
+
+Sebelum data disimpan, tampilkan:
+
+- Total baris yang dibaca.
+- Total baris valid.
+- Total baris yang gagal divalidasi.
+- Total kontraktor baru.
+- Total kontraktor yang sudah terdaftar.
+- Total data duplikat.
+- Daftar kesalahan pemetaan field.
+- Daftar baris yang akan diabaikan beserta alasannya.
+
+Jangan langsung menyimpan data jika terdapat kesalahan validasi yang membutuhkan tindakan pengguna.
+
+Tombol Konfirmasi harus menjalankan proses import hanya satu kali untuk setiap permintaan, dengan mekanisme pencegahan duplikasi akibat klik berulang.
+
+Selama proses berlangsung:
+
+- Tampilkan indikator pemrosesan.
+- Nonaktifkan tombol konfirmasi sementara.
+- Tampilkan hasil import setelah backend memberikan respons.
+- Berikan informasi jumlah data berhasil, gagal, dilewati, dan diperbarui.
+
+Kriteria keberhasilan: Pengguna tetap dapat mengakses tombol Konfirmasi meskipun terdapat ratusan kategori kontraktor atau baris data dalam preview.
+
+---
+
+5. GLOBAL CONFIGURATION: SIMPAN KONFIGURASI SUPER ADMIN
+
+Buat sistem konfigurasi global agar setiap pengaturan aplikasi yang dilakukan Super Admin tersimpan secara permanen di database dan diterapkan secara konsisten pada seluruh menu staff.
+
+A. Konfigurasi yang harus dipertahankan
+
+Simpan konfigurasi yang relevan, termasuk:
+
+- Pengaturan UI dan tema.
+- Warna aplikasi.
+- Layout halaman.
+- Pengaturan sidebar dan toolbar.
+- Urutan menu.
+- Visibilitas kolom tabel.
+- Konfigurasi field dan kategori.
+- Template import data.
+- Pemetaan header import.
+- Konfigurasi filter dan tampilan tabel.
+- Pengaturan sesi login.
+- Pengaturan workflow WO.
+- Pengaturan kategori kontraktor.
+- Pengaturan kategori laporan teknisi.
+- Pengaturan sinkronisasi database.
+- Pengaturan notifikasi.
+- Konfigurasi integrasi yang aman dan tidak bersifat rahasia.
+
+Jangan memasukkan password, access token, private key, atau credential rahasia ke dalam konfigurasi frontend.
+
+B. Mekanisme penyimpanan
+
+1. Semua perubahan konfigurasi Super Admin harus disimpan ke database melalui backend.
+2. Jangan hanya menyimpan konfigurasi di state frontend, localStorage, atau sessionStorage.
+3. Gunakan struktur konfigurasi yang terorganisasi berdasarkan kategori dan key.
+4. Simpan metadata perubahan seperti waktu perubahan dan ID administrator.
+5. Terapkan validasi terhadap setiap konfigurasi sebelum disimpan.
+6. Sediakan status penyimpanan: Menyimpan, Berhasil, atau Gagal.
+7. Jika penyimpanan gagal, tampilkan pesan kesalahan dan jangan menganggap konfigurasi sudah tersimpan.
+8. Ketika aplikasi dimuat ulang, konfigurasi terakhir harus tetap berlaku.
+9. Ketika administrator mengubah konfigurasi, perubahan harus tersedia bagi staff tanpa perlu mengedit source code.
+10. Hindari konflik jika dua administrator mengubah konfigurasi yang sama secara bersamaan.
+
+C. Penerapan global
+
+Konfigurasi global harus diterapkan pada:
+
+- Portal Dispatch.
+- Portal Leader.
+- Portal Installer.
+- Dashboard monitoring.
+- Halaman Management WO.
+- Halaman import.
+- Tabel dan detail tiket.
+- Menu pengaturan yang relevan.
+
+Gunakan satu sumber konfigurasi yang konsisten.
+
+Jika diperlukan, implementasikan mekanisme cache invalidation atau pembaruan konfigurasi secara berkala agar perubahan dapat diterapkan pada halaman staff yang sedang terbuka.
+
+D. Batasan permission
+
+- Super Admin: dapat membaca, mengubah, dan mengelola konfigurasi global.
+- Dispatch, Leader, dan Installer: hanya dapat menggunakan konfigurasi yang diizinkan untuk role mereka.
+- Role Management Data: tidak otomatis memperoleh hak untuk mengubah seluruh konfigurasi aplikasi.
+- Setiap perubahan konfigurasi harus diperiksa oleh backend berdasarkan permission.
+
+Pengaturan personal yang hanya berlaku untuk satu pengguna harus dipisahkan dari konfigurasi global agar tidak mengubah tampilan atau perilaku seluruh pengguna secara tidak sengaja.
+
+---
+
+6. PERBAIKAN FILTER SCHEDULE APPOINTMENT DATE
+
+Audit dan perbaiki seluruh filter Appointment Date pada aplikasi MoraJaws.
+
+Tanggal acuan awal
+
+Gunakan tanggal 28 Oktober 2026 sebagai tanggal acuan pengujian awal.
+
+Namun, jangan menjadikan 28 Oktober 2026 sebagai tanggal tetap yang digunakan selamanya dalam aplikasi.
+
+Tanggal operasional harus diperbarui otomatis mengikuti tanggal kalender aktual setiap hari.
+
+A. Logika filter tanggal
+
+1. Filter menggunakan field Appointment Date yang benar dari database hasil import.
+2. Gunakan tanggal kalender lokal operasional dengan zona waktu "Asia/Jakarta".
+3. Jangan menggunakan tanggal komputer pengguna sebagai satu-satunya sumber kebenaran jika hal tersebut menyebabkan hasil filter berbeda antarperangkat.
+4. Tetapkan satu aturan konsisten untuk menentukan tanggal operasional.
+5. Jika backend menjadi sumber tanggal operasional, kirimkan atau sediakan nilai tanggal tersebut kepada frontend.
+6. Pastikan tanggal tidak bergeser akibat konversi UTC atau parsing string tanggal yang salah.
+7. Tangani format tanggal dari spreadsheet, termasuk tanggal Excel dan string tanggal.
+8. Jangan mengubah tanggal appointment menjadi tanggal lain saat import.
+9. Jika nilai tanggal tidak valid, tampilkan status validasi yang jelas.
+10. Hindari penggunaan tanggal hardcoded dalam query, komponen frontend, maupun backend.
+
+B. Filter berdasarkan jadwal
+
+Sediakan filter yang konsisten untuk:
+
+- Appointment Date hari ini.
+- Appointment Date sebelumnya.
+- Appointment Date mendatang.
+- Rentang tanggal tertentu.
+- Semua tanggal.
+
+Jika aplikasi memiliki filter tambahan berdasarkan kontraktor, area, Leader, atau Installer, seluruh filter tersebut harus dapat bekerja bersamaan dengan Appointment Date.
+
+C. Perilaku otomatis setiap hari
+
+Pada tanggal acuan 28 Oktober 2026:
+
+- Filter Hari Ini harus menampilkan WO dengan Appointment Date 28 Oktober 2026.
+- Ketika tanggal operasional berubah menjadi 29 Oktober 2026, filter Hari Ini harus otomatis menggunakan 29 Oktober 2026.
+- Proses ini berlanjut setiap hari tanpa perlu perubahan source code atau konfigurasi manual.
+
+Jangan otomatis mengubah Appointment Date yang tersimpan pada WO. Yang berubah adalah tanggal acuan untuk filter, bukan data appointment pelanggan.
+
+D. Konsistensi antarportal
+
+Pastikan filter Appointment Date memberikan hasil yang konsisten pada:
+
+- Dashboard Super Admin.
+- Dashboard Dispatch.
+- Portal Leader.
+- Portal Installer.
+- Daftar WO.
+- Daftar distribusi WO.
+- Laporan dan monitoring terkait.
+
+Hasil tetap harus dibatasi oleh permission, kontraktor, area, dan penugasan masing-masing role.
+
+E. Pengujian wajib
+
+Uji data yang memiliki:
+
+- Appointment Date 27 Oktober 2026.
+- Appointment Date 28 Oktober 2026.
+- Appointment Date 29 Oktober 2026.
+- Appointment Date kosong.
+- Appointment Date dengan format tidak valid.
+
+Pastikan filter Hari Ini hanya menampilkan WO yang sesuai tanggal operasional dan tidak memasukkan tanggal sebelumnya atau berikutnya.
+
+---
+
+7. MENU KHUSUS: DATABASE SYNCHRONIZATION MONITORING
+
+Tambahkan menu baru bernama Database Synchronization atau Monitoring Sinkronisasi Database.
+
+Menu ini digunakan untuk memantau proses sinkronisasi antara database aplikasi MoraJaws dan Google Sheets.
+
+A. Tujuan menu
+
+Menu ini harus memberikan informasi yang dapat diverifikasi mengenai:
+
+- Status koneksi Google Sheets.
+- Status koneksi database aplikasi.
+- Waktu sinkronisasi terakhir.
+- Hasil sinkronisasi terakhir.
+- Jumlah data yang dibaca.
+- Jumlah data baru.
+- Jumlah data yang diperbarui.
+- Jumlah data yang dihapus jika penghapusan memang diizinkan dan dilakukan.
+- Jumlah data yang gagal diproses.
+- Durasi sinkronisasi.
+- Pesan kesalahan.
+- Riwayat sinkronisasi.
+
+B. Dashboard monitoring
+
+Buat tampilan dashboard yang menampilkan:
+
+1. Status koneksi database.
+2. Status koneksi Google Sheets.
+3. Status sinkronisasi terakhir.
+4. Waktu sinkronisasi terakhir yang berhasil.
+5. Waktu percobaan sinkronisasi terakhir.
+6. Total record yang berhasil dibaca.
+7. Total record yang berhasil diproses.
+8. Total record yang gagal.
+9. Jumlah perubahan yang belum tersinkronisasi jika sistem mendukung pelacakan perubahan.
+10. Riwayat sinkronisasi dalam bentuk tabel.
+
+Gunakan status yang jelas:
+
+- Connected.
+- Disconnected.
+- Syncing.
+- Success.
+- Partial Success.
+- Failed.
+- Pending.
+
+Status tersebut harus berasal dari hasil pemeriksaan koneksi dan proses yang benar-benar terjadi. Jangan menampilkan Connected atau Success hanya karena tombol sinkronisasi telah ditekan.
+
+C. Riwayat sinkronisasi
+
+Setiap proses sinkronisasi harus mencatat:
+
+- ID proses sinkronisasi.
+- Jenis proses.
+- Waktu mulai.
+- Waktu selesai.
+- Status akhir.
+- Jumlah data yang diproses.
+- Jumlah data yang berhasil.
+- Jumlah data yang gagal.
+- Ringkasan kesalahan.
+- Sumber data.
+- ID akun yang memulai proses, jika tersedia.
+
+Jangan mencatat password, access token, private key, cookie sesi, atau credential rahasia ke dalam log.
+
+Batasi akses ke log sesuai role dan kebijakan keamanan aplikasi.
+
+D. Tombol tindakan
+
+Sediakan tombol:
+
+- Periksa Koneksi.
+- Sinkronkan Sekarang.
+- Lihat Detail Proses.
+- Muat Ulang Status.
+- Lihat Riwayat.
+
+Tombol hanya boleh tersedia jika role pengguna memiliki permission yang sesuai.
+
+Ketika sinkronisasi sedang berjalan:
+
+- Tampilkan indikator proses.
+- Cegah proses identik dijalankan berulang kali secara bersamaan.
+- Tampilkan hasil aktual setelah proses selesai.
+- Jika proses gagal, tampilkan alasan yang aman dan dapat dipahami.
+- Sediakan mekanisme retry yang tidak menyebabkan duplikasi data.
+
+E. Pengamanan proses sinkronisasi
+
+Gunakan job ID, status proses, dan mekanisme idempotensi untuk mencegah sinkronisasi ganda.
+
+Jika terjadi kegagalan di tengah proses:
+
+- Catat bagian yang berhasil.
+- Catat bagian yang gagal.
+- Jangan menganggap seluruh proses berhasil.
+- Hindari penghapusan atau penimpaan data yang belum tervalidasi.
+- Sediakan mekanisme pemulihan atau pengulangan proses yang aman.
+
+Jika sinkronisasi berlangsung secara otomatis, tampilkan jadwal atau status proses otomatis tersebut.
+
+Jangan mengklaim bahwa sinkronisasi otomatis aktif jika scheduler atau mekanisme pemicunya belum benar-benar diimplementasikan.
+
+---
+
+8. KEBIJAKAN GOOGLE SHEETS DAN HAK AKSES DATA
+
+Pertahankan prinsip bahwa Google Sheets yang terhubung merupakan milik atau berada di bawah kendali akun Google Super Admin yang dikonfigurasi secara resmi.
+
+Ketentuan utama
+
+1. Integrasi Google Sheets harus menggunakan konfigurasi autentikasi yang valid dan aman.
+2. Jangan menggunakan credential palsu atau token hardcoded.
+3. Credential integrasi harus dikelola melalui environment variables atau penyimpanan rahasia yang sesuai.
+4. Jangan pernah menampilkan private key, refresh token, atau access token kepada staff.
+5. Batasi akses perubahan dan penghapusan data sesuai permission yang telah ditetapkan.
+6. Terapkan pemeriksaan permission pada backend untuk setiap operasi tulis dan hapus.
+7. Catat perubahan data penting ke audit log.
+8. Gunakan transaksi atau mekanisme konsistensi yang sesuai untuk operasi database.
+9. Jangan menghapus data hanya karena sebuah record tidak ditemukan dalam satu respons sinkronisasi yang belum lengkap.
+10. Sebelum mengubah atau menghapus banyak record, lakukan validasi sumber dan jumlah data yang terdampak.
+
+Jangan mengubah integrasi yang sudah valid tanpa alasan teknis yang jelas.
+
+---
+
+9. ROLE BARU: MANAGEMENT DATA
+
+Tambahkan role khusus bernama Management Data.
+
+Role ini digunakan untuk memisahkan pekerjaan pengelolaan data operasional dari tugas administrasi aplikasi dan pengelolaan akun.
+
+Role Management Data harus memiliki portal dan dashboard tersendiri, tetapi tetap menggunakan sistem autentikasi MoraJaws yang sama.
+
+A. Tujuan role
+
+Management Data bertugas mengelola, memvalidasi, memeriksa, dan memantau data WO sesuai permission yang diberikan.
+
+Role ini bukan Super Admin dan tidak boleh otomatis mendapatkan seluruh hak administrator.
+
+B. Fitur portal Management Data
+
+Buat halaman yang mencakup:
+
+1. Dashboard Data
+
+- Total WO.
+- Total data valid.
+- Total data bermasalah.
+- Total data duplikat.
+- Total data tanpa Appointment Date.
+- Total data yang menunggu validasi.
+- Ringkasan hasil import terbaru.
+
+2. Data WO
+
+- Melihat daftar WO sesuai cakupan akses.
+- Melakukan pencarian berdasarkan WO Number.
+- Melakukan pencarian berdasarkan Customer ID.
+- Melakukan pencarian berdasarkan nama pelanggan.
+- Memfilter berdasarkan Appointment Date.
+- Memfilter berdasarkan kontraktor.
+- Memfilter berdasarkan area.
+- Memeriksa kelengkapan field.
+- Melihat detail sumber dan status validasi data.
+
+3. Import dan Validasi
+
+- Melihat hasil import.
+- Memeriksa pemetaan header.
+- Memeriksa field yang belum dikenali.
+- Memeriksa duplikasi WO Number.
+- Memeriksa Customer ID yang tidak sesuai aturan tujuh digit.
+- Memeriksa tanggal appointment yang tidak valid.
+- Meninjau data yang gagal diproses.
+- Menyusun laporan kesalahan import.
+
+4. Monitoring Kualitas Data
+
+- Menampilkan data yang belum lengkap.
+- Menampilkan data dengan format tidak valid.
+- Menampilkan potensi konflik pemetaan.
+- Menampilkan data yang memerlukan pemeriksaan.
+- Menyediakan filter dan ekspor laporan sesuai permission.
+
+C. Permission Management Data
+
+Gunakan permission terpisah dan dapat dikonfigurasi oleh Super Admin.
+
+Contoh permission yang dapat disediakan:
+
+- "data.view"
+- "data.validate"
+- "data.import"
+- "data.edit"
+- "data.delete"
+- "data.export"
+- "data.sync.view"
+- "data.sync.run"
+- "data.audit.view"
+
+Permission tersebut merupakan daftar kemampuan yang tersedia, bukan berarti seluruhnya harus langsung diaktifkan.
+
+D. Batasan akses
+
+Secara default:
+
+- Management Data dapat melihat dan memvalidasi data sesuai cakupan akses.
+- Management Data tidak dapat membuat akun Super Admin.
+- Management Data tidak dapat mengubah role atau permission akun lain.
+- Management Data tidak dapat mengubah konfigurasi global.
+- Management Data tidak dapat mengubah credential Google Sheets.
+- Management Data tidak dapat menghapus data produksi.
+- Management Data tidak dapat menjalankan sinkronisasi yang mengubah data sebelum diberi permission khusus.
+
+Jika Super Admin memberikan permission import atau edit, sistem hanya boleh mengizinkan tindakan tersebut sesuai cakupan yang diberikan.
+
+Penting: Jangan menjadikan Management Data sebagai administrator penuh. Pisahkan pengelolaan data dari administrasi akun, keamanan, konfigurasi global, dan credential integrasi.
+
+---
+
+10. PENERAPAN ROLE-BASED ACCESS CONTROL
+
+Audit seluruh sistem RBAC dan pastikan role baru dapat berjalan tanpa mengganggu role existing.
+
+Role utama:
+
+1. Super Admin.
+2. Dispatch.
+3. Leader.
+4. Installer.
+5. Management Data.
+
+Setiap akun memiliki satu role utama atau mekanisme role yang secara eksplisit didukung oleh sistem.
+
+Prinsip keamanan
+
+- Frontend hanya mengatur tampilan menu berdasarkan permission.
+- Backend tetap menjadi sumber kebenaran untuk otorisasi.
+- Setiap endpoint wajib memvalidasi permission.
+- Pengguna tidak boleh memperoleh akses tambahan hanya dengan mengganti URL atau payload request.
+- Role dan permission tidak boleh diterima sebagai nilai otoritatif dari frontend.
+- Akun yang dinonaktifkan tidak boleh melakukan operasi baru.
+- Perubahan role harus divalidasi dan dicatat dalam audit log.
+
+Pastikan role Management Data ditambahkan ke:
+
+- Database role.
+- Sistem autentikasi.
+- Middleware otorisasi.
+- Navigasi sidebar.
+- Dashboard.
+- Pengaturan permission.
+- Audit log.
+- Pengujian akses.
+
+Jangan hanya menambahkan label role di frontend tanpa mengimplementasikan kontrol akses di backend.
+
+---
+
+11. AUDIT UI DAN RESPONSIVE LAYOUT
+
+Setelah seluruh fitur diterapkan, audit tampilan aplikasi secara menyeluruh.
+
+Periksa:
+
+- Tombol tertutup modal.
+- Footer modal yang tidak terlihat.
+- Dropdown yang terpotong.
+- Sidebar yang menutupi konten.
+- Dialog yang keluar dari layar.
+- Tabel yang melampaui lebar layar.
+- Filter tanggal yang tidak dapat diakses.
+- Tombol aksi yang saling menimpa.
+- Toast notification yang menutupi tombol penting.
+- Tampilan dashboard pada ponsel.
+- Navigasi role Management Data.
+
+Gunakan layout responsif, pengaturan overflow yang benar, dan hierarki z-index yang konsisten.
+
+Pastikan setiap halaman memiliki:
+
+- Loading state.
+- Empty state.
+- Error state.
+- Success state.
+- Indikator penyimpanan ketika diperlukan.
+
+Jangan mengatasi masalah UI dengan sekadar menaikkan z-index tanpa memperbaiki struktur layout yang menyebabkan masalah.
+
+---
+
+12. DATABASE DAN BACKEND
+
+Audit struktur database yang telah digunakan oleh MoraJaws sebelum menambahkan tabel atau kolom.
+
+Implementasikan perubahan schema menggunakan migration yang aman dan dapat ditelusuri.
+
+Tambahkan atau sesuaikan struktur penyimpanan untuk:
+
+- Konfigurasi global.
+- Role dan permission.
+- Sesi autentikasi.
+- Riwayat sinkronisasi.
+- Status proses sinkronisasi.
+- Audit log.
+- Metadata validasi data.
+- Pengaturan filter tanggal operasional jika memang diperlukan.
+
+Gunakan tabel dan field existing jika fungsinya sudah tersedia.
+
+Jangan membuat tabel duplikat untuk data yang sama hanya karena nama atau struktur sebelumnya kurang ideal.
+
+Pastikan:
+
+- Relasi antarentitas konsisten.
+- Indeks tersedia untuk pencarian dan filter penting.
+- Operasi tulis memiliki validasi.
+- Operasi massal menggunakan transaksi bila sesuai.
+- Kegagalan tidak meninggalkan status data yang menyesatkan.
+- Perubahan schema tidak menghilangkan data existing.
+- Migration dan rollback disiapkan jika memungkinkan.
+
+---
+
+13. AUDIT DAN PENGUJIAN WAJIB
+
+Setelah implementasi, jalankan pengujian berikut.
+
+A. Login dan sesi
+
+- Login tanpa memilih role.
+- Login dengan akun valid.
+- Login dengan akun tidak terdaftar.
+- Login dengan akun nonaktif.
+- Login dengan password salah.
+- Session timeout.
+- Idle timeout.
+- Logout.
+- Pencabutan sesi oleh administrator.
+- Pemeriksaan akses endpoint setelah logout.
+
+B. Import text
+
+- Import satu kontraktor.
+- Import banyak kontraktor.
+- Import dengan ratusan baris.
+- Import dengan field kosong.
+- Import dengan header yang tidak dikenali.
+- Import dengan WO Number duplikat.
+- Import dengan Customer ID tidak valid.
+- Konfirmasi import pada layar desktop.
+- Konfirmasi import pada layar mobile.
+- Klik konfirmasi berulang kali.
+- Pemulihan ketika proses import gagal.
+
+C. Konfigurasi global
+
+- Mengubah konfigurasi melalui Super Admin.
+- Menyimpan perubahan.
+- Memuat ulang aplikasi.
+- Memastikan konfigurasi tetap tersimpan.
+- Memeriksa penerapan pada portal staff.
+- Memastikan role yang tidak berwenang tidak dapat mengubah konfigurasi.
+
+D. Appointment Date
+
+- Filter tanggal 27 Oktober 2026.
+- Filter tanggal 28 Oktober 2026.
+- Filter tanggal 29 Oktober 2026.
+- Perubahan tanggal operasional ke hari berikutnya.
+- Pengujian zona waktu Asia/Jakarta.
+- Pengujian tanggal kosong dan tidak valid.
+- Pengujian filter gabungan kontraktor, area, dan tanggal.
+
+E. Database synchronization
+
+- Pemeriksaan koneksi berhasil.
+- Pemeriksaan koneksi gagal.
+- Sinkronisasi berhasil.
+- Sinkronisasi sebagian berhasil.
+- Sinkronisasi gagal.
+- Sinkronisasi berulang.
+- Pemeriksaan riwayat.
+- Pemeriksaan validitas jumlah data.
+- Pemeriksaan pencegahan duplikasi.
+- Pemeriksaan pembatasan akses.
+
+F. Management Data
+
+- Login role Management Data.
+- Melihat data sesuai permission.
+- Memvalidasi data.
+- Memeriksa hasil import.
+- Memastikan akses edit dan delete ditolak jika tidak diizinkan.
+- Memastikan akses konfigurasi global ditolak.
+- Memastikan endpoint backend menolak request tanpa permission.
+- Memastikan audit log mencatat tindakan penting.
+
+---
+
+14. OUTPUT IMPLEMENTASI
+
+Setelah semua perubahan selesai, berikan laporan implementasi yang mencakup:
+
+1. Ringkasan perubahan frontend.
+2. Ringkasan perubahan backend.
+3. Daftar migration database.
+4. Daftar endpoint baru atau yang diperbarui.
+5. Daftar role dan permission baru.
+6. Daftar konfigurasi yang dapat dikelola Super Admin.
+7. Penjelasan mekanisme sesi login.
+8. Penjelasan filter Appointment Date.
+9. Penjelasan cara kerja monitoring sinkronisasi.
+10. Penjelasan permission Management Data.
+11. Hasil pengujian yang benar-benar telah dijalankan.
+12. Daftar masalah yang masih ditemukan.
+13. Daftar environment variables yang perlu dikonfigurasi.
+14. Petunjuk menjalankan migration dan deployment.
+
+Jangan menyatakan pengujian berhasil jika belum dijalankan.
+
+Jika terdapat fitur yang belum dapat diselesaikan karena membutuhkan credential, izin Google Sheets, atau konfigurasi server, jelaskan kebutuhan tersebut secara spesifik.
+
+---
+
+TARGET AKHIR
+
+Aplikasi MoraJaws harus memiliki satu halaman login sederhana tanpa pilihan role, sistem sesi yang aman untuk staff, fitur import text dengan tombol konfirmasi yang selalu dapat diakses, konfigurasi global yang tersimpan secara permanen, filter Appointment Date yang otomatis mengikuti tanggal operasional, menu monitoring sinkronisasi database, dan role Management Data dengan permission terpisah.
+
+Semua fitur harus terintegrasi dengan database aktual, aman, responsif, dapat diaudit, dan tidak merusak fitur existing yang masih digunakan.

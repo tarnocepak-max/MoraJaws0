@@ -1,0 +1,2839 @@
+{
+  "suite": "Phase14C.3",
+  "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+  "environment": "isolated_mock_staging_loopback",
+  "generated_at": "2026-11-07T14:07:06.025Z",
+  "total_http_calls_executed": 74,
+  "all_passed": true,
+  "evidence": [
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/health - Public health check returns database status without secret leakage",
+      "test_scenario": "GET /api/health - Public health check returns database status without secret leakage",
+      "scenario_number": 1,
+      "category": "Health & Telemetry",
+      "method": "GET",
+      "url": "/api/health",
+      "normalized_route": "/api/health",
+      "source_line": 831,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 4,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.839Z"
+        },
+        {
+          "assertion_name": "Health Status matches ok",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.839Z"
+        },
+        {
+          "assertion_name": "Active Database Status defined",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.839Z"
+        },
+        {
+          "assertion_name": "Zero Secret Key Leakage in Health",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.839Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.838Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/auth/session - Unauthenticated session check returns safe null user",
+      "test_scenario": "GET /api/auth/session - Unauthenticated session check returns safe null user",
+      "scenario_number": 2,
+      "category": "Authentication & Identity",
+      "method": "GET",
+      "url": "/api/auth/session",
+      "normalized_route": "/api/auth/session",
+      "source_line": 851,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.842Z"
+        },
+        {
+          "assertion_name": "Authenticated Flag is False",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.842Z"
+        },
+        {
+          "assertion_name": "User is Null",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.842Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.842Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/auth/session - Authenticated session returns safe sanitized user profile",
+      "test_scenario": "GET /api/auth/session - Authenticated session returns safe sanitized user profile",
+      "scenario_number": 3,
+      "category": "Authentication & Identity",
+      "method": "GET",
+      "url": "/api/auth/session",
+      "normalized_route": "/api/auth/session",
+      "source_line": 869,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 4,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.845Z"
+        },
+        {
+          "assertion_name": "Authenticated Flag is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.845Z"
+        },
+        {
+          "assertion_name": "Role matches super_admin",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.845Z"
+        },
+        {
+          "assertion_name": "passwordHash is stripped",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.845Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.845Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/auth/resolve-identity - Missing identifier rejected (HTTP 400)",
+      "test_scenario": "POST /api/auth/resolve-identity - Missing identifier rejected (HTTP 400)",
+      "scenario_number": 4,
+      "category": "Authentication & Identity",
+      "method": "POST",
+      "url": "/api/auth/resolve-identity",
+      "normalized_route": "/api/auth/resolve-identity",
+      "source_line": 888,
+      "token_role": null,
+      "expected_status": 400,
+      "actual_status": 400,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (400)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.859Z"
+        },
+        {
+          "assertion_name": "Status is 400",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.859Z"
+        },
+        {
+          "assertion_name": "Code is INVALID_INPUT",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.859Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.859Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "INVALID_INPUT"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/auth/resolve-identity - Valid staff identifier resolved without passwordHash",
+      "test_scenario": "POST /api/auth/resolve-identity - Valid staff identifier resolved without passwordHash",
+      "scenario_number": 5,
+      "category": "Authentication & Identity",
+      "method": "POST",
+      "url": "/api/auth/resolve-identity",
+      "normalized_route": "/api/auth/resolve-identity",
+      "source_line": 906,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 4,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.861Z"
+        },
+        {
+          "assertion_name": "Found is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.861Z"
+        },
+        {
+          "assertion_name": "Role matches super_admin",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.861Z"
+        },
+        {
+          "assertion_name": "passwordHash is omitted",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.861Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.861Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/auth/logout - Unauthenticated request rejected (HTTP 401)",
+      "test_scenario": "POST /api/auth/logout - Unauthenticated request rejected (HTTP 401)",
+      "scenario_number": 6,
+      "category": "Authentication & Identity",
+      "method": "POST",
+      "url": "/api/auth/logout",
+      "normalized_route": "/api/auth/logout",
+      "source_line": 925,
+      "token_role": null,
+      "expected_status": 401,
+      "actual_status": 401,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (401)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.863Z"
+        },
+        {
+          "assertion_name": "Status is 401",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.863Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.863Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "UNAUTHENTICATED"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/auth/logout - Authenticated logout revokes session and increments version",
+      "test_scenario": "POST /api/auth/logout - Authenticated logout revokes session and increments version",
+      "scenario_number": 7,
+      "category": "Authentication & Identity",
+      "method": "POST",
+      "url": "/api/auth/logout",
+      "normalized_route": "/api/auth/logout",
+      "source_line": 942,
+      "token_role": "installer",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.866Z"
+        },
+        {
+          "assertion_name": "Success Flag is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.866Z"
+        },
+        {
+          "assertion_name": "Message confirms session ended",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.866Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.866Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Sesi berhasil diakhiri"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/tickets - Unauthenticated request rejected (HTTP 401)",
+      "test_scenario": "GET /api/tickets - Unauthenticated request rejected (HTTP 401)",
+      "scenario_number": 8,
+      "category": "Work Orders & Tickets",
+      "method": "GET",
+      "url": "/api/tickets",
+      "normalized_route": "/api/tickets",
+      "source_line": 967,
+      "token_role": null,
+      "expected_status": 401,
+      "actual_status": 401,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (401)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.868Z"
+        },
+        {
+          "assertion_name": "Status is 401",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.868Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.868Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "UNAUTHENTICATED"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/tickets - Authenticated Dispatch retrieves scoped work orders list",
+      "test_scenario": "GET /api/tickets - Authenticated Dispatch retrieves scoped work orders list",
+      "scenario_number": 9,
+      "category": "Work Orders & Tickets",
+      "method": "GET",
+      "url": "/api/tickets",
+      "normalized_route": "/api/tickets",
+      "source_line": 984,
+      "token_role": "dispatch",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.873Z"
+        },
+        {
+          "assertion_name": "Success Flag is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.873Z"
+        },
+        {
+          "assertion_name": "Tickets is Array",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.873Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.873Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/tickets/:id - Retrieves full work order detail with scope validation",
+      "test_scenario": "GET /api/tickets/:id - Retrieves full work order detail with scope validation",
+      "scenario_number": 10,
+      "category": "Work Orders & Tickets",
+      "method": "GET",
+      "url": "/api/tickets/wo_test_mock_202",
+      "normalized_route": "/api/tickets/wo_test_mock_202",
+      "source_line": 1002,
+      "token_role": "dispatch",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.877Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.877Z"
+        },
+        {
+          "assertion_name": "Ticket object present",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.877Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.877Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/supabase/work-orders/:id - Supabase proxy retrieves single work order by ID",
+      "test_scenario": "GET /api/supabase/work-orders/:id - Supabase proxy retrieves single work order by ID",
+      "scenario_number": 11,
+      "category": "Supabase Proxy",
+      "method": "GET",
+      "url": "/api/supabase/work-orders/wo_test_mock_202",
+      "normalized_route": "/api/supabase/work-orders/wo_test_mock_202",
+      "source_line": 1020,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.880Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.880Z"
+        },
+        {
+          "assertion_name": "Target work order retrieved",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.880Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.880Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PUT /api/tickets/:id - Mutation attempt on Protected WO rejected (HTTP 403)",
+      "test_scenario": "PUT /api/tickets/:id - Mutation attempt on Protected WO rejected (HTTP 403)",
+      "scenario_number": 12,
+      "category": "Work Orders & Tickets",
+      "method": "PUT",
+      "url": "/api/tickets/wo_1793825457141_u4bnht",
+      "normalized_route": "/api/tickets/wo_1793825457141_u4bnht",
+      "source_line": 1038,
+      "token_role": "super_admin",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.882Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.882Z"
+        },
+        {
+          "assertion_name": "Protected WO Code matches PROTECTED_RECORD",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.882Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.882Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "PROTECTED_RECORD"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PUT /api/tickets/:id - Valid work order update persists and updates state (HTTP 200)",
+      "test_scenario": "PUT /api/tickets/:id - Valid work order update persists and updates state (HTTP 200)",
+      "scenario_number": 13,
+      "category": "Work Orders & Tickets",
+      "method": "PUT",
+      "url": "/api/tickets/wo_test_mock_202",
+      "normalized_route": "/api/tickets/wo_test_mock_202",
+      "source_line": 1058,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.885Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.885Z"
+        },
+        {
+          "assertion_name": "statusWOInstaller updated to In Progress",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.885Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.885Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PATCH /api/tickets/:id - Mutation attempt on Protected WO rejected (HTTP 403)",
+      "test_scenario": "PATCH /api/tickets/:id - Mutation attempt on Protected WO rejected (HTTP 403)",
+      "scenario_number": 14,
+      "category": "Work Orders & Tickets",
+      "method": "PATCH",
+      "url": "/api/tickets/wo_imp_1793825458959_4i4f1h",
+      "normalized_route": "/api/tickets/wo_imp_1793825458959_4i4f1h",
+      "source_line": 1079,
+      "token_role": "super_admin",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.886Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.886Z"
+        },
+        {
+          "assertion_name": "Code matches PROTECTED_RECORD",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.886Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.886Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "PROTECTED_RECORD"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PATCH /api/tickets/:id - Valid partial patch updates work order state (HTTP 200)",
+      "test_scenario": "PATCH /api/tickets/:id - Valid partial patch updates work order state (HTTP 200)",
+      "scenario_number": 15,
+      "category": "Work Orders & Tickets",
+      "method": "PATCH",
+      "url": "/api/tickets/wo_test_mock_202",
+      "normalized_route": "/api/tickets/wo_test_mock_202",
+      "source_line": 1099,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.888Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.888Z"
+        },
+        {
+          "assertion_name": "slotTime updated",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.888Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.888Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PATCH /api/supabase/work-orders/:id - Valid partial update via Supabase proxy",
+      "test_scenario": "PATCH /api/supabase/work-orders/:id - Valid partial update via Supabase proxy",
+      "scenario_number": 16,
+      "category": "Supabase Proxy",
+      "method": "PATCH",
+      "url": "/api/supabase/work-orders/wo_test_mock_202",
+      "normalized_route": "/api/supabase/work-orders/wo_test_mock_202",
+      "source_line": 1119,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.891Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.891Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.891Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "DELETE /api/tickets/:id - Non-Management Data role rejected (HTTP 403)",
+      "test_scenario": "DELETE /api/tickets/:id - Non-Management Data role rejected (HTTP 403)",
+      "scenario_number": 17,
+      "category": "Work Orders & Tickets",
+      "method": "DELETE",
+      "url": "/api/tickets/wo_test_mock_202",
+      "normalized_route": "/api/tickets/wo_test_mock_202",
+      "source_line": 1138,
+      "token_role": "installer",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.892Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.892Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.892Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "REQUIRE_MANAGEMENT_DATA"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "DELETE /api/tickets/:id - Deletion attempt on Protected WO rejected (HTTP 403)",
+      "test_scenario": "DELETE /api/tickets/:id - Deletion attempt on Protected WO rejected (HTTP 403)",
+      "scenario_number": 18,
+      "category": "Work Orders & Tickets",
+      "method": "DELETE",
+      "url": "/api/tickets/wo_imp_1793825458959_262dei",
+      "normalized_route": "/api/tickets/wo_imp_1793825458959_262dei",
+      "source_line": 1157,
+      "token_role": "management_data",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.895Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.895Z"
+        },
+        {
+          "assertion_name": "Code matches PROTECTED_RECORD",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.895Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.895Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "PROTECTED_RECORD"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "DELETE /api/tickets/:id - Management Data executes valid soft delete (HTTP 200)",
+      "test_scenario": "DELETE /api/tickets/:id - Management Data executes valid soft delete (HTTP 200)",
+      "scenario_number": 19,
+      "category": "Work Orders & Tickets",
+      "method": "DELETE",
+      "url": "/api/tickets/wo_test_mock_202",
+      "normalized_route": "/api/tickets/wo_test_mock_202",
+      "source_line": 1177,
+      "token_role": "management_data",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.898Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.898Z"
+        },
+        {
+          "assertion_name": "Message confirms soft delete",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.898Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.897Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Work Order WO-TEST-MOCK-202 berhasil dihapus."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/tickets/:woNumber/assignment-history - Retrieves assignment history array",
+      "test_scenario": "GET /api/tickets/:woNumber/assignment-history - Retrieves assignment history array",
+      "scenario_number": 20,
+      "category": "Work Orders & Tickets",
+      "method": "GET",
+      "url": "/api/tickets/WO-TEST-MOCK-202/assignment-history",
+      "normalized_route": "/api/tickets/WO-TEST-MOCK-202/assignment-history",
+      "source_line": 1197,
+      "token_role": "dispatch",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.900Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.900Z"
+        },
+        {
+          "assertion_name": "History is Array",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.900Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.900Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/assignment-history/:woNumber - Alias route returns assignment history",
+      "test_scenario": "GET /api/assignment-history/:woNumber - Alias route returns assignment history",
+      "scenario_number": 21,
+      "category": "Work Orders & Tickets",
+      "method": "GET",
+      "url": "/api/assignment-history/WO-TEST-MOCK-202",
+      "normalized_route": "/api/assignment-history/WO-TEST-MOCK-202",
+      "source_line": 1215,
+      "token_role": "dispatch",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.901Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.901Z"
+        },
+        {
+          "assertion_name": "History is Array",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.901Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.901Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PUT /api/contractors/:id - Unauthorized Installer role rejected (HTTP 403)",
+      "test_scenario": "PUT /api/contractors/:id - Unauthorized Installer role rejected (HTTP 403)",
+      "scenario_number": 22,
+      "category": "Master Data CRUD",
+      "method": "PUT",
+      "url": "/api/contractors/c-test-01",
+      "normalized_route": "/api/contractors/c-test-01",
+      "source_line": 1238,
+      "token_role": "installer",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.902Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.902Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.902Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "Akses Ditolak: Hanya Super Admin dan Dispatch yang dapat mengubah data kontraktor."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PUT /api/contractors/:id - Super Admin updates contractor details (HTTP 200)",
+      "test_scenario": "PUT /api/contractors/:id - Super Admin updates contractor details (HTTP 200)",
+      "scenario_number": 23,
+      "category": "Master Data CRUD",
+      "method": "PUT",
+      "url": "/api/contractors/c-test-01",
+      "normalized_route": "/api/contractors/c-test-01",
+      "source_line": 1257,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.904Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.904Z"
+        },
+        {
+          "assertion_name": "Contractor object returned",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.904Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.904Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Data kontraktor berhasil diperbarui."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PATCH /api/contractors/:id - Super Admin patches contractor status (HTTP 200)",
+      "test_scenario": "PATCH /api/contractors/:id - Super Admin patches contractor status (HTTP 200)",
+      "scenario_number": 24,
+      "category": "Master Data CRUD",
+      "method": "PATCH",
+      "url": "/api/contractors/c-test-01",
+      "normalized_route": "/api/contractors/c-test-01",
+      "source_line": 1278,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.906Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.906Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.906Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Data kontraktor berhasil diperbarui."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "DELETE /api/contractors/:id - Super Admin deletes contractor record (HTTP 200)",
+      "test_scenario": "DELETE /api/contractors/:id - Super Admin deletes contractor record (HTTP 200)",
+      "scenario_number": 25,
+      "category": "Master Data CRUD",
+      "method": "DELETE",
+      "url": "/api/contractors/c-to-delete-99",
+      "normalized_route": "/api/contractors/c-to-delete-99",
+      "source_line": 1297,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.908Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.908Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.908Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Kontraktor berhasil dihapus dari database."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PUT /api/coverage-areas/:id - Unauthorized Installer role rejected (HTTP 403)",
+      "test_scenario": "PUT /api/coverage-areas/:id - Unauthorized Installer role rejected (HTTP 403)",
+      "scenario_number": 26,
+      "category": "Master Data CRUD",
+      "method": "PUT",
+      "url": "/api/coverage-areas/a-test-01",
+      "normalized_route": "/api/coverage-areas/a-test-01",
+      "source_line": 1314,
+      "token_role": "installer",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.910Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.910Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.909Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "Akses Ditolak: Hanya Super Admin dan Dispatch yang dapat mengubah coverage area."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PUT /api/coverage-areas/:id - Super Admin updates coverage area clusters (HTTP 200)",
+      "test_scenario": "PUT /api/coverage-areas/:id - Super Admin updates coverage area clusters (HTTP 200)",
+      "scenario_number": 27,
+      "category": "Master Data CRUD",
+      "method": "PUT",
+      "url": "/api/coverage-areas/a-test-01",
+      "normalized_route": "/api/coverage-areas/a-test-01",
+      "source_line": 1333,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.912Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.912Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.912Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Coverage area berhasil diperbarui."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PATCH /api/coverage-areas/:id - Super Admin patches coverage area (HTTP 200)",
+      "test_scenario": "PATCH /api/coverage-areas/:id - Super Admin patches coverage area (HTTP 200)",
+      "scenario_number": 28,
+      "category": "Master Data CRUD",
+      "method": "PATCH",
+      "url": "/api/coverage-areas/a-test-01",
+      "normalized_route": "/api/coverage-areas/a-test-01",
+      "source_line": 1353,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.915Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.915Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.915Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Coverage area berhasil diperbarui."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "DELETE /api/coverage-areas/:id - Super Admin deletes coverage area (HTTP 200)",
+      "test_scenario": "DELETE /api/coverage-areas/:id - Super Admin deletes coverage area (HTTP 200)",
+      "scenario_number": 29,
+      "category": "Master Data CRUD",
+      "method": "DELETE",
+      "url": "/api/coverage-areas/a-to-delete-99",
+      "normalized_route": "/api/coverage-areas/a-to-delete-99",
+      "source_line": 1372,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.917Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.917Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.917Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Coverage area berhasil dihapus dari database."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "DELETE /api/users/:id - Self-deletion attempt by logged-in admin rejected (HTTP 400)",
+      "test_scenario": "DELETE /api/users/:id - Self-deletion attempt by logged-in admin rejected (HTTP 400)",
+      "scenario_number": 30,
+      "category": "User Management & RBAC",
+      "method": "DELETE",
+      "url": "/api/users/u_superadmin_01",
+      "normalized_route": "/api/users/u_superadmin_01",
+      "source_line": 1389,
+      "token_role": "super_admin",
+      "expected_status": 400,
+      "actual_status": 400,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (400)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.919Z"
+        },
+        {
+          "assertion_name": "Status is 400",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.919Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.919Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "Anda tidak dapat menghapus akun Anda sendiri saat sedang login."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "DELETE /api/users/:id - Super Admin deletes user and revokes active sessions (HTTP 200)",
+      "test_scenario": "DELETE /api/users/:id - Super Admin deletes user and revokes active sessions (HTTP 200)",
+      "scenario_number": 31,
+      "category": "User Management & RBAC",
+      "method": "DELETE",
+      "url": "/api/users/u_to_delete_99",
+      "normalized_route": "/api/users/u_to_delete_99",
+      "source_line": 1408,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.920Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.920Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.920Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Akun User To Delete berhasil dihapus dari database."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/integrations/google-sheets/config - Non-admin role rejected (HTTP 403)",
+      "test_scenario": "GET /api/integrations/google-sheets/config - Non-admin role rejected (HTTP 403)",
+      "scenario_number": 32,
+      "category": "Google Sheets & Sync",
+      "method": "GET",
+      "url": "/api/integrations/google-sheets/config",
+      "normalized_route": "/api/integrations/google-sheets/config",
+      "source_line": 1432,
+      "token_role": "installer",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.922Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.922Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.922Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "REQUIRE_SUPER_ADMIN"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/integrations/google-sheets/config - Super Admin reads configuration safely",
+      "test_scenario": "GET /api/integrations/google-sheets/config - Super Admin reads configuration safely",
+      "scenario_number": 33,
+      "category": "Google Sheets & Sync",
+      "method": "GET",
+      "url": "/api/integrations/google-sheets/config",
+      "normalized_route": "/api/integrations/google-sheets/config",
+      "source_line": 1449,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.923Z"
+        },
+        {
+          "assertion_name": "Config object present",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.923Z"
+        },
+        {
+          "assertion_name": "spreadsheetId present",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.923Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.923Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/integrations/google-sheets/config - Super Admin updates sync sheet settings",
+      "test_scenario": "POST /api/integrations/google-sheets/config - Super Admin updates sync sheet settings",
+      "scenario_number": 34,
+      "category": "Google Sheets & Sync",
+      "method": "POST",
+      "url": "/api/integrations/google-sheets/config",
+      "normalized_route": "/api/integrations/google-sheets/config",
+      "source_line": 1467,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.925Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.925Z"
+        },
+        {
+          "assertion_name": "sheetName updated",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.925Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.925Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/sync/check-connection - Verifies connectivity to App DB and Sheets integration",
+      "test_scenario": "POST /api/sync/check-connection - Verifies connectivity to App DB and Sheets integration",
+      "scenario_number": 35,
+      "category": "Google Sheets & Sync",
+      "method": "POST",
+      "url": "/api/sync/check-connection",
+      "normalized_route": "/api/sync/check-connection",
+      "source_line": 1488,
+      "token_role": "dispatch",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.926Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.926Z"
+        },
+        {
+          "assertion_name": "App DB Connected",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.926Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.926Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/sync/history - Retrieves synchronization execution logs history array",
+      "test_scenario": "GET /api/sync/history - Retrieves synchronization execution logs history array",
+      "scenario_number": 36,
+      "category": "Google Sheets & Sync",
+      "method": "GET",
+      "url": "/api/sync/history",
+      "normalized_route": "/api/sync/history",
+      "source_line": 1506,
+      "token_role": "dispatch",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.928Z"
+        },
+        {
+          "assertion_name": "History is Array",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.928Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.928Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/storage/readiness - Public readiness endpoint returns storage status",
+      "test_scenario": "GET /api/storage/readiness - Public readiness endpoint returns storage status",
+      "scenario_number": 37,
+      "category": "Storage Subsystem",
+      "method": "GET",
+      "url": "/api/storage/readiness",
+      "normalized_route": "/api/storage/readiness",
+      "source_line": 1528,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 4,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.929Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.929Z"
+        },
+        {
+          "assertion_name": "Bucket is morajaws-reports",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.929Z"
+        },
+        {
+          "assertion_name": "Readiness object present",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.929Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.929Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/storage/classify-file - Classifies file source and taxonomy category",
+      "test_scenario": "POST /api/storage/classify-file - Classifies file source and taxonomy category",
+      "scenario_number": 38,
+      "category": "Storage Subsystem",
+      "method": "POST",
+      "url": "/api/storage/classify-file",
+      "normalized_route": "/api/storage/classify-file",
+      "source_line": 1547,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.931Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.931Z"
+        },
+        {
+          "assertion_name": "Source type classified",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.931Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.931Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/storage/actual-bucket-status - Probes actual bucket accessibility and privacy",
+      "test_scenario": "GET /api/storage/actual-bucket-status - Probes actual bucket accessibility and privacy",
+      "scenario_number": 39,
+      "category": "Storage Subsystem",
+      "method": "GET",
+      "url": "/api/storage/actual-bucket-status",
+      "normalized_route": "/api/storage/actual-bucket-status",
+      "source_line": 1567,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.932Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.932Z"
+        },
+        {
+          "assertion_name": "Bucket name matches morajaws-reports",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.932Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.932Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Bucket \"morajaws-reports\" benar-benar tersedia dan terverifikasi di Supabase Storage (PRIVATE)."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/storage/verify-access - Evaluates document access permissions against user scope",
+      "test_scenario": "POST /api/storage/verify-access - Evaluates document access permissions against user scope",
+      "scenario_number": 40,
+      "category": "Storage Subsystem",
+      "method": "POST",
+      "url": "/api/storage/verify-access",
+      "normalized_route": "/api/storage/verify-access",
+      "source_line": 1585,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.935Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.935Z"
+        },
+        {
+          "assertion_name": "Evaluation present",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.935Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.935Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/storage/phase2-sandbox-test - Executes storage sandbox integration verification",
+      "test_scenario": "POST /api/storage/phase2-sandbox-test - Executes storage sandbox integration verification",
+      "scenario_number": 41,
+      "category": "Storage Subsystem",
+      "method": "POST",
+      "url": "/api/storage/phase2-sandbox-test",
+      "normalized_route": "/api/storage/phase2-sandbox-test",
+      "source_line": 1606,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.938Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.938Z"
+        },
+        {
+          "assertion_name": "Stages object present",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.938Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.938Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/storage/adapter/upload - Uploads binary file, stores metadata, and returns signed URL",
+      "test_scenario": "POST /api/storage/adapter/upload - Uploads binary file, stores metadata, and returns signed URL",
+      "scenario_number": 42,
+      "category": "Storage Subsystem",
+      "method": "POST",
+      "url": "/api/storage/adapter/upload",
+      "normalized_route": "/api/storage/adapter/upload",
+      "source_line": 1630,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 4,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.940Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.940Z"
+        },
+        {
+          "assertion_name": "Metadata filePath present",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.940Z"
+        },
+        {
+          "assertion_name": "Signed URL generated",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.940Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.940Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/storage/adapter/download - Downloads authorized storage binary object",
+      "test_scenario": "GET /api/storage/adapter/download - Downloads authorized storage binary object",
+      "scenario_number": 43,
+      "category": "Storage Subsystem",
+      "method": "GET",
+      "url": "/api/storage/adapter/download?storagePath=test-sandbox%2Fu_superadmin_01%2Fimage_report%2Fdata%2Fadp_file_1794060425940_8994713c_report_teknisi_01.jpg&category=test-sandbox",
+      "normalized_route": "/api/storage/adapter/download",
+      "source_line": 1657,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.943Z"
+        },
+        {
+          "assertion_name": "Status is 200",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.943Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.943Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/storage/adapter/signed-url - Issues short-lived signed URL for file access",
+      "test_scenario": "POST /api/storage/adapter/signed-url - Issues short-lived signed URL for file access",
+      "scenario_number": 44,
+      "category": "Storage Subsystem",
+      "method": "POST",
+      "url": "/api/storage/adapter/signed-url",
+      "normalized_route": "/api/storage/adapter/signed-url",
+      "source_line": 1675,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.945Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.945Z"
+        },
+        {
+          "assertion_name": "Signed URL present",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.945Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.945Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/storage/adapter/refresh-signed-url - Refreshes expired signed URL",
+      "test_scenario": "POST /api/storage/adapter/refresh-signed-url - Refreshes expired signed URL",
+      "scenario_number": 45,
+      "category": "Storage Subsystem",
+      "method": "POST",
+      "url": "/api/storage/adapter/refresh-signed-url",
+      "normalized_route": "/api/storage/adapter/refresh-signed-url",
+      "source_line": 1698,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.947Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.947Z"
+        },
+        {
+          "assertion_name": "Signed URL present",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.947Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.946Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "DELETE /api/storage/adapter/file - Deletes object from storage and removes metadata",
+      "test_scenario": "DELETE /api/storage/adapter/file - Deletes object from storage and removes metadata",
+      "scenario_number": 46,
+      "category": "Storage Subsystem",
+      "method": "DELETE",
+      "url": "/api/storage/adapter/file",
+      "normalized_route": "/api/storage/adapter/file",
+      "source_line": 1721,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.948Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.948Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.948Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "File sandbox \"test-sandbox/u_superadmin_01/image_report/data/adp_file_1794060425940_8994713c_report_teknisi_01.jpg\" berhasil dihapus."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/storage/adapter/reconciliation - Reconciles metadata against storage and reports audit logs",
+      "test_scenario": "GET /api/storage/adapter/reconciliation - Reconciles metadata against storage and reports audit logs",
+      "scenario_number": 47,
+      "category": "Storage Subsystem",
+      "method": "GET",
+      "url": "/api/storage/adapter/reconciliation",
+      "normalized_route": "/api/storage/adapter/reconciliation",
+      "source_line": 1740,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.949Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.949Z"
+        },
+        {
+          "assertion_name": "Recent Operation Logs is Array",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.949Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.949Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/supabase/work-orders - Supabase proxy retrieves work orders list",
+      "test_scenario": "GET /api/supabase/work-orders - Supabase proxy retrieves work orders list",
+      "scenario_number": 48,
+      "category": "Supabase Proxy",
+      "method": "GET",
+      "url": "/api/supabase/work-orders",
+      "normalized_route": "/api/supabase/work-orders",
+      "source_line": 1763,
+      "token_role": "dispatch",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.951Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.951Z"
+        },
+        {
+          "assertion_name": "Data is Array",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.951Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.950Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/supabase/work-orders - Dispatch creates new work order in Supabase (HTTP 201)",
+      "test_scenario": "POST /api/supabase/work-orders - Dispatch creates new work order in Supabase (HTTP 201)",
+      "scenario_number": 49,
+      "category": "Supabase Proxy",
+      "method": "POST",
+      "url": "/api/supabase/work-orders",
+      "normalized_route": "/api/supabase/work-orders",
+      "source_line": 1792,
+      "token_role": "dispatch",
+      "expected_status": 201,
+      "actual_status": 201,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (201)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.953Z"
+        },
+        {
+          "assertion_name": "Status is 201",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.953Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.953Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.953Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PATCH /api/supabase/work-orders/:id - Mutation on Protected WO rejected (HTTP 403)",
+      "test_scenario": "PATCH /api/supabase/work-orders/:id - Mutation on Protected WO rejected (HTTP 403)",
+      "scenario_number": 50,
+      "category": "Supabase Proxy",
+      "method": "PATCH",
+      "url": "/api/supabase/work-orders/wo_1793825457141_u4bnht",
+      "normalized_route": "/api/supabase/work-orders/wo_1793825457141_u4bnht",
+      "source_line": 1810,
+      "token_role": "super_admin",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.955Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.955Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.955Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "PROTECTED_RECORD"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "DELETE /api/supabase/work-orders/:id - Deletion on Protected WO rejected (HTTP 403)",
+      "test_scenario": "DELETE /api/supabase/work-orders/:id - Deletion on Protected WO rejected (HTTP 403)",
+      "scenario_number": 51,
+      "category": "Supabase Proxy",
+      "method": "DELETE",
+      "url": "/api/supabase/work-orders/wo_imp_1793825458959_4i4f1h",
+      "normalized_route": "/api/supabase/work-orders/wo_imp_1793825458959_4i4f1h",
+      "source_line": 1829,
+      "token_role": "management_data",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.956Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.956Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.956Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "PROTECTED_RECORD"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "DELETE /api/supabase/work-orders/:id - Soft deletes work order via Supabase proxy (HTTP 200)",
+      "test_scenario": "DELETE /api/supabase/work-orders/:id - Soft deletes work order via Supabase proxy (HTTP 200)",
+      "scenario_number": 52,
+      "category": "Supabase Proxy",
+      "method": "DELETE",
+      "url": "/api/supabase/work-orders/wo_test_mock_202",
+      "normalized_route": "/api/supabase/work-orders/wo_test_mock_202",
+      "source_line": 1848,
+      "token_role": "management_data",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.957Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.957Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.957Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Work Order wo_test_mock_202 berhasil ditandai terhapus (soft delete)."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/supabase/users - Supabase proxy retrieves users without password hashes",
+      "test_scenario": "GET /api/supabase/users - Supabase proxy retrieves users without password hashes",
+      "scenario_number": 53,
+      "category": "Supabase Proxy",
+      "method": "GET",
+      "url": "/api/supabase/users",
+      "normalized_route": "/api/supabase/users",
+      "source_line": 1867,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 4,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.959Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.959Z"
+        },
+        {
+          "assertion_name": "Data is Array",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.959Z"
+        },
+        {
+          "assertion_name": "passwordHash stripped from all users",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.959Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.959Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/supabase/users/:id - Supabase proxy retrieves single user profile",
+      "test_scenario": "GET /api/supabase/users/:id - Supabase proxy retrieves single user profile",
+      "scenario_number": 54,
+      "category": "Supabase Proxy",
+      "method": "GET",
+      "url": "/api/supabase/users/u_leader_01",
+      "normalized_route": "/api/supabase/users/u_leader_01",
+      "source_line": 1886,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.960Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.960Z"
+        },
+        {
+          "assertion_name": "ID matches target",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.960Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.960Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/supabase/users - Super Admin creates new staff user in Supabase (HTTP 201)",
+      "test_scenario": "POST /api/supabase/users - Super Admin creates new staff user in Supabase (HTTP 201)",
+      "scenario_number": 55,
+      "category": "Supabase Proxy",
+      "method": "POST",
+      "url": "/api/supabase/users",
+      "normalized_route": "/api/supabase/users",
+      "source_line": 1912,
+      "token_role": "super_admin",
+      "expected_status": 201,
+      "actual_status": 201,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (201)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.971Z"
+        },
+        {
+          "assertion_name": "Status is 201",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.971Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.971Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.971Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PATCH /api/supabase/users/:id - Super Admin patches user profile in Supabase (HTTP 200)",
+      "test_scenario": "PATCH /api/supabase/users/:id - Super Admin patches user profile in Supabase (HTTP 200)",
+      "scenario_number": 56,
+      "category": "Supabase Proxy",
+      "method": "PATCH",
+      "url": "/api/supabase/users/u_leader_01",
+      "normalized_route": "/api/supabase/users/u_leader_01",
+      "source_line": 1930,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.978Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.978Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.978Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "DELETE /api/supabase/users/:id - Super Admin deletes user record via Supabase proxy (HTTP 200)",
+      "test_scenario": "DELETE /api/supabase/users/:id - Super Admin deletes user record via Supabase proxy (HTTP 200)",
+      "scenario_number": 57,
+      "category": "Supabase Proxy",
+      "method": "DELETE",
+      "url": "/api/supabase/users/u_to_delete_99",
+      "normalized_route": "/api/supabase/users/u_to_delete_99",
+      "source_line": 1949,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.983Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.983Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.983Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_summary": "Pengguna berhasil dihapus."
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/supabase/contractors - Retrieves contractors directory from Supabase",
+      "test_scenario": "GET /api/supabase/contractors - Retrieves contractors directory from Supabase",
+      "scenario_number": 58,
+      "category": "Supabase Proxy",
+      "method": "GET",
+      "url": "/api/supabase/contractors",
+      "normalized_route": "/api/supabase/contractors",
+      "source_line": 1968,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.985Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.985Z"
+        },
+        {
+          "assertion_name": "Data is Array",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.985Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.985Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/supabase/contractors - Super Admin creates contractor in Supabase (HTTP 201)",
+      "test_scenario": "POST /api/supabase/contractors - Super Admin creates contractor in Supabase (HTTP 201)",
+      "scenario_number": 59,
+      "category": "Supabase Proxy",
+      "method": "POST",
+      "url": "/api/supabase/contractors",
+      "normalized_route": "/api/supabase/contractors",
+      "source_line": 1992,
+      "token_role": "super_admin",
+      "expected_status": 201,
+      "actual_status": 201,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (201)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.986Z"
+        },
+        {
+          "assertion_name": "Status is 201",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.986Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.986Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.986Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "PATCH /api/supabase/contractors/:id - Super Admin patches contractor via Supabase proxy",
+      "test_scenario": "PATCH /api/supabase/contractors/:id - Super Admin patches contractor via Supabase proxy",
+      "scenario_number": 60,
+      "category": "Supabase Proxy",
+      "method": "PATCH",
+      "url": "/api/supabase/contractors/c-test-01",
+      "normalized_route": "/api/supabase/contractors/c-test-01",
+      "source_line": 2010,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.988Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.988Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.987Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/supabase/coverage-areas - Retrieves coverage areas from Supabase",
+      "test_scenario": "GET /api/supabase/coverage-areas - Retrieves coverage areas from Supabase",
+      "scenario_number": 61,
+      "category": "Supabase Proxy",
+      "method": "GET",
+      "url": "/api/supabase/coverage-areas",
+      "normalized_route": "/api/supabase/coverage-areas",
+      "source_line": 2029,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.989Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.989Z"
+        },
+        {
+          "assertion_name": "Data is Array",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.989Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.989Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/supabase/coverage-areas - Super Admin creates coverage area in Supabase (HTTP 201)",
+      "test_scenario": "POST /api/supabase/coverage-areas - Super Admin creates coverage area in Supabase (HTTP 201)",
+      "scenario_number": 62,
+      "category": "Supabase Proxy",
+      "method": "POST",
+      "url": "/api/supabase/coverage-areas",
+      "normalized_route": "/api/supabase/coverage-areas",
+      "source_line": 2052,
+      "token_role": "super_admin",
+      "expected_status": 201,
+      "actual_status": 201,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (201)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.990Z"
+        },
+        {
+          "assertion_name": "Status is 201",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.990Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.990Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.990Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/supabase/settings/:key - Retrieves authoritative application setting from Supabase",
+      "test_scenario": "GET /api/supabase/settings/:key - Retrieves authoritative application setting from Supabase",
+      "scenario_number": 63,
+      "category": "Supabase Proxy",
+      "method": "GET",
+      "url": "/api/supabase/settings/global_config",
+      "normalized_route": "/api/supabase/settings/global_config",
+      "source_line": 2070,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.992Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.992Z"
+        },
+        {
+          "assertion_name": "Data object present",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.992Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.992Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/supabase/settings/:key - Settings manager updates application setting",
+      "test_scenario": "POST /api/supabase/settings/:key - Settings manager updates application setting",
+      "scenario_number": 64,
+      "category": "Supabase Proxy",
+      "method": "POST",
+      "url": "/api/supabase/settings/global_config",
+      "normalized_route": "/api/supabase/settings/global_config",
+      "source_line": 2088,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 2,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.993Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.993Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.993Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/supabase/audit-logs - Authorized auditor retrieves audit trail logs from Supabase",
+      "test_scenario": "GET /api/supabase/audit-logs - Authorized auditor retrieves audit trail logs from Supabase",
+      "scenario_number": 65,
+      "category": "Supabase Proxy",
+      "method": "GET",
+      "url": "/api/supabase/audit-logs",
+      "normalized_route": "/api/supabase/audit-logs",
+      "source_line": 2108,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.995Z"
+        },
+        {
+          "assertion_name": "Success is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.995Z"
+        },
+        {
+          "assertion_name": "Data is Array",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.995Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.995Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/supabase/realtime/stream - Authenticated user initiates Supabase Realtime SSE stream",
+      "test_scenario": "GET /api/supabase/realtime/stream - Authenticated user initiates Supabase Realtime SSE stream",
+      "scenario_number": 66,
+      "category": "Supabase Proxy",
+      "method": "GET",
+      "url": "/api/supabase/realtime/stream",
+      "normalized_route": "/api/supabase/realtime/stream",
+      "source_line": 2126,
+      "token_role": "super_admin",
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.996Z"
+        },
+        {
+          "assertion_name": "Status is 200",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.996Z"
+        },
+        {
+          "assertion_name": "SSE Flag is True",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:05.996Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:05.996Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/realtime/sandbox-status - Sandbox status strictly locked in production (HTTP 403)",
+      "test_scenario": "GET /api/realtime/sandbox-status - Sandbox status strictly locked in production (HTTP 403)",
+      "scenario_number": 67,
+      "category": "Sandbox & Realtime",
+      "method": "GET",
+      "url": "/api/realtime/sandbox-status",
+      "normalized_route": "/api/realtime/sandbox-status",
+      "source_line": 2151,
+      "token_role": "super_admin",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.000Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.000Z"
+        },
+        {
+          "assertion_name": "Code is FIREBASE_TOKEN_REQUIRED",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.000Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:06.000Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "FIREBASE_TOKEN_REQUIRED"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/sandbox/journal/import-chunked - Sandbox chunked import strictly locked in production (HTTP 403)",
+      "test_scenario": "POST /api/sandbox/journal/import-chunked - Sandbox chunked import strictly locked in production (HTTP 403)",
+      "scenario_number": 68,
+      "category": "Sandbox & Realtime",
+      "method": "POST",
+      "url": "/api/sandbox/journal/import-chunked",
+      "normalized_route": "/api/sandbox/journal/import-chunked",
+      "source_line": 2177,
+      "token_role": "super_admin",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.002Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.002Z"
+        },
+        {
+          "assertion_name": "Code is FIREBASE_TOKEN_REQUIRED",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.002Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:06.002Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "FIREBASE_TOKEN_REQUIRED"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/sandbox/outbox/query - Sandbox outbox query strictly locked in production (HTTP 403)",
+      "test_scenario": "GET /api/sandbox/outbox/query - Sandbox outbox query strictly locked in production (HTTP 403)",
+      "scenario_number": 69,
+      "category": "Sandbox & Realtime",
+      "method": "GET",
+      "url": "/api/sandbox/outbox/query?sinceSeq=0&limit=10",
+      "normalized_route": "/api/sandbox/outbox/query",
+      "source_line": 2197,
+      "token_role": "super_admin",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.003Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.003Z"
+        },
+        {
+          "assertion_name": "Code is FIREBASE_TOKEN_REQUIRED",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.003Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:06.003Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "FIREBASE_TOKEN_REQUIRED"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "POST /api/sandbox/recovery/drain - Sandbox recovery drain strictly locked in production (HTTP 403)",
+      "test_scenario": "POST /api/sandbox/recovery/drain - Sandbox recovery drain strictly locked in production (HTTP 403)",
+      "scenario_number": 70,
+      "category": "Sandbox & Realtime",
+      "method": "POST",
+      "url": "/api/sandbox/recovery/drain",
+      "normalized_route": "/api/sandbox/recovery/drain",
+      "source_line": 2215,
+      "token_role": "super_admin",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.004Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.004Z"
+        },
+        {
+          "assertion_name": "Code is FIREBASE_TOKEN_REQUIRED",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.004Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:06.004Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "FIREBASE_TOKEN_REQUIRED"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET /api/sandbox/realtime/stream - Sandbox SSE stream strictly locked in production (HTTP 403)",
+      "test_scenario": "GET /api/sandbox/realtime/stream - Sandbox SSE stream strictly locked in production (HTTP 403)",
+      "scenario_number": 71,
+      "category": "Sandbox & Realtime",
+      "method": "GET",
+      "url": "/api/sandbox/realtime/stream",
+      "normalized_route": "/api/sandbox/realtime/stream",
+      "source_line": 2236,
+      "token_role": "super_admin",
+      "expected_status": 403,
+      "actual_status": 403,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (403)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.005Z"
+        },
+        {
+          "assertion_name": "Status is 403",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.005Z"
+        },
+        {
+          "assertion_name": "Code is FIREBASE_TOKEN_REQUIRED",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.005Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:06.005Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "FIREBASE_TOKEN_REQUIRED"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "ALL /morajaws_production_firestore_backup.json - Direct HTTP access strictly blocked (HTTP 404)",
+      "test_scenario": "ALL /morajaws_production_firestore_backup.json - Direct HTTP access strictly blocked (HTTP 404)",
+      "scenario_number": 72,
+      "category": "Security & Protection",
+      "method": "GET",
+      "url": "/morajaws_production_firestore_backup.json",
+      "normalized_route": "/morajaws_production_firestore_backup.json",
+      "source_line": 2259,
+      "token_role": null,
+      "expected_status": 404,
+      "actual_status": 404,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (404)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.007Z"
+        },
+        {
+          "assertion_name": "Status is 404",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.007Z"
+        },
+        {
+          "assertion_name": "Code is NOT_FOUND",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.007Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:06.007Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "NOT_FOUND"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "ALL /data/morajaws_production_firestore_backup.json - Direct HTTP access strictly blocked (HTTP 404)",
+      "test_scenario": "ALL /data/morajaws_production_firestore_backup.json - Direct HTTP access strictly blocked (HTTP 404)",
+      "scenario_number": 73,
+      "category": "Security & Protection",
+      "method": "GET",
+      "url": "/data/morajaws_production_firestore_backup.json",
+      "normalized_route": "/data/morajaws_production_firestore_backup.json",
+      "source_line": 2277,
+      "token_role": null,
+      "expected_status": 404,
+      "actual_status": 404,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (404)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.009Z"
+        },
+        {
+          "assertion_name": "Status is 404",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.009Z"
+        },
+        {
+          "assertion_name": "Code is NOT_FOUND",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.009Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:06.009Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback",
+      "response_code": "NOT_FOUND"
+    },
+    {
+      "suite": "Phase14C.3",
+      "scenario": "GET * - Production SPA route serves index.html entrypoint for web client",
+      "test_scenario": "GET * - Production SPA route serves index.html entrypoint for web client",
+      "scenario_number": 74,
+      "category": "Frontend SPA Routing",
+      "method": "GET",
+      "url": "/",
+      "normalized_route": "/",
+      "source_line": 2295,
+      "token_role": null,
+      "expected_status": 200,
+      "actual_status": 200,
+      "status_assertion_passed": true,
+      "functional_assertion_passed": true,
+      "assertion_count": 3,
+      "failed_assertion_count": 0,
+      "assertion_results": [
+        {
+          "assertion_name": "HTTP Status Code matches expected (200)",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.024Z"
+        },
+        {
+          "assertion_name": "Status is 200",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.024Z"
+        },
+        {
+          "assertion_name": "Response is valid HTML entrypoint",
+          "assertion_passed": true,
+          "assertion_timestamp": "2026-11-07T14:07:06.024Z"
+        }
+      ],
+      "result": "PASS",
+      "timestamp": "2026-11-07T14:07:06.024Z",
+      "test_run_id": "run_phase14c3_1794060425788_gjsjr5",
+      "environment": "isolated_mock_staging_loopback"
+    }
+  ]
+}

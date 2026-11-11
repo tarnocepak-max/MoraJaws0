@@ -1,0 +1,164 @@
+{
+  "suite": "MORAJAWS PHASE 2.4.4 API & FRONTEND INTEGRATION TEST",
+  "timestamp": "2026-11-11T16:53:49.193Z",
+  "total": 22,
+  "passed": 22,
+  "failed": 0,
+  "overallStatus": "SUCCESS",
+  "results": [
+    {
+      "id": "INT-01",
+      "name": "AppContext single assignment API call sends installerId",
+      "component": "AppContext",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-02",
+      "name": "AppContext bulk assignment API call sends installerId",
+      "component": "AppContext",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-03",
+      "name": "AppContext reassign API call sends newInstallerId",
+      "component": "AppContext",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-04",
+      "name": "AppContext resolves installerId with strict length===1 check (fail-closed)",
+      "component": "AppContext",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-05",
+      "name": "AppContext scopedTickets uses t.installerUserId === myId only",
+      "component": "AppContext",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-06",
+      "name": "AppContext startWorkOnTicket checks ticket.installerUserId === myId",
+      "component": "AppContext",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-07",
+      "name": "AppContext saveProgressReport checks ticket.installerUserId === myId",
+      "component": "AppContext",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-08",
+      "name": "AppContext sendTicketMessage checks ticket.installerUserId === myId",
+      "component": "AppContext",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-09",
+      "name": "AppContext updateTicket enforces existing.installerUserId === myId",
+      "component": "AppContext",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-10",
+      "name": "server.ts /api/tickets/assign requires installerId and Leader role",
+      "component": "Assignment API",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-11",
+      "name": "server.ts /api/tickets/reassign requires newInstallerId and Leader role",
+      "component": "Reassignment API",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-12",
+      "name": "server.ts /api/tickets/assign passes installerId in loop for bulk tickets",
+      "component": "Bulk Assignment",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-13",
+      "name": "InstallerDashboardView filters myTickets by t.installerUserId === myId",
+      "component": "Installer Dashboard",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-14",
+      "name": "InstallerPortal filters myTickets for current installer by t.installerUserId === myId",
+      "component": "Installer Portal",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-15",
+      "name": "supabaseAdapter resolveInstallerAccountInSupabase checks id, role, and active status",
+      "component": "Supabase Adapter",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-16",
+      "name": "supabaseStorage checkTicketMediaAuthorization uses assignedUserId === currentUserId",
+      "component": "Storage Authorization",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-17",
+      "name": "TicketsTable installer scoping uses t.installerUserId === myId (no name/phone matching)",
+      "component": "Tickets Table",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-18",
+      "name": "ContactCentreView installer scoping uses t.installerUserId === myUid (no name/phone matching)",
+      "component": "Contact Centre",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-19",
+      "name": "ScheduleCalendarView installer scoping uses t.installerUserId === myId (no name matching)",
+      "component": "Schedule Calendar",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-20",
+      "name": "InstallerWhatsAppCenter installer scoping uses t.installerUserId === myId (no name matching)",
+      "component": "WhatsApp Center",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-21",
+      "name": "App.tsx installer ticket actions use ticket.installerUserId === myId",
+      "component": "App Entry",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    },
+    {
+      "id": "INT-22",
+      "name": "Zero presence of name or phone number matching in installer authorization pathways",
+      "component": "Zero-Slop Security Audit",
+      "status": "PASS",
+      "assertion": "Assertion passed."
+    }
+  ]
+}

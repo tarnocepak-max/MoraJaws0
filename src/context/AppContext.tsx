@@ -1473,6 +1473,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       toast.error('Pengguna tidak ditemukan.', 'Error');
       return { success: false, error: 'Pengguna tidak ditemukan.' };
     }
+    if (target.role === 'installer') {
+      const err = 'Superadmin tidak memiliki kewenangan menghapus akun Installer.';
+      toast.error(err, 'Akses Ditolak');
+      return { success: false, error: err };
+    }
     if (!reason || reason.trim().length < 5) {
       toast.error('Alasan penghapusan akun wajib diisi minimal 5 karakter.', 'Validasi Gagal');
       return { success: false, error: 'Alasan penghapusan akun wajib diisi minimal 5 karakter.' };
@@ -1526,6 +1531,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetUser = users.find(u => u.id === userId);
     if (!targetUser) {
       return { success: false, error: 'Pengguna tidak ditemukan.' };
+    }
+    if (currentUser.role === 'super_admin' && (targetUser.role === 'installer' || updates.role === 'installer')) {
+      const err = 'Superadmin tidak memiliki kewenangan mengedit akun Installer.';
+      toast.error(err, 'Akses Ditolak');
+      return { success: false, error: err };
     }
 
     // Name and Username uniqueness validation
@@ -1858,10 +1868,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const registerInstallerAccount = (data: { name: string; username: string; phone: string; email?: string }) => {
-    // Both Leader (for their contractor/area) and Super Admin can register installers
-    if (currentUser.role !== 'leader' && currentUser.role !== 'super_admin') {
-      toast.error('Hanya Leader / Korlap atau Super Admin yang berwenang mendaftarkan Installer.', 'Akses Ditolak');
-      return { success: false, error: 'Hanya Leader / Korlap atau Super Admin yang berwenang mendaftarkan Installer.' };
+    // Installer account creation is exclusively reserved for Leader / Korlap.
+    if (currentUser.role !== 'leader') {
+      const err = 'Hanya Leader / Korlap yang berwenang mendaftarkan akun Installer.';
+      toast.error(err, 'Akses Ditolak');
+      return { success: false, error: err };
+    }
+    if (!String(currentUser.contractor || '').trim() || !String(currentUser.area || '').trim()) {
+      const err = 'Akun Leader belum memiliki kontraktor dan area kerja. Hubungi administrator untuk memperbaiki cakupan akun.';
+      toast.error(err, 'Akses Ditolak');
+      return { success: false, error: err };
     }
 
     const cleanName = data.name.trim().replace(/\s+/g, ' ');
@@ -1881,13 +1897,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Contractor and Area strictly locked to Leader's authorized scope
-    const contractorName = currentUser.role === 'leader'
-      ? (currentUser.contractor || 'PT Mitra Jaringan Solusi')
-      : (contractors[0]?.name || 'PT Mitra Jaringan Solusi');
-    const contractorObj = contractors.find(c => c.name === contractorName);
-    const assignedArea = currentUser.role === 'leader'
-      ? (currentUser.area || contractorObj?.coverageAreas[0] || 'Jakarta Selatan')
-      : (contractorObj?.coverageAreas[0] || 'Jakarta Selatan');
+    const contractorName = String(currentUser.contractor || '').trim();
+    const contractorObj = contractors.find(c => c.name.trim().toLowerCase() === contractorName.toLowerCase());
+    const assignedArea = String(currentUser.area || contractorObj?.coverageAreas[0] || '').trim();
 
     const newUser: User = {
       id: 'u-' + Date.now(),
@@ -1924,6 +1936,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Akses Ditolak: Hanya Super Admin yang berwenang mengubah status aktif akun pengguna.' };
     }
     const targetUser = users.find(u => u.id === userId);
+    if (targetUser?.role === 'installer') {
+      const err = 'Superadmin tidak berwenang mengubah status akun Installer.';
+      toast.error(err, 'Akses Ditolak');
+      return { success: false, error: err };
+    }
     if (targetUser) {
       saveUserToFirestore({ ...targetUser, active: !targetUser.active }).catch(e => console.warn('[Firestore] Error toggling user status:', e));
     }

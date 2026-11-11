@@ -202,7 +202,7 @@ export const UserManagementView: React.FC = () => {
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const [editName, setEditName] = useState('');
   const [editUsername, setEditUsername] = useState('');
-  const [editRole, setEditRole] = useState<UserRole>('installer');
+  const [editRole, setEditRole] = useState<UserRole>('dispatch');
   const [editContractor, setEditContractor] = useState('');
   const [editArea, setEditArea] = useState('');
   const [editPhone, setEditPhone] = useState('');
@@ -241,6 +241,10 @@ export const UserManagementView: React.FC = () => {
   };
 
   const handleOpenEdit = (user: UserType) => {
+    if (user.role === 'installer') {
+      toast.error('Superadmin hanya dapat mereset password akun Installer.', 'Akses Ditolak');
+      return;
+    }
     setEditingUser(user);
     setEditName(user.name);
     setEditUsername(user.username);
@@ -418,6 +422,10 @@ export const UserManagementView: React.FC = () => {
     const cleanUsername = createUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
     const cleanEmail = createEmail.trim().toLowerCase();
 
+    if (createRole === 'installer') {
+      setCreateError('Akun Installer hanya boleh dibuat oleh Leader / Korlap melalui Portal Leader.');
+      return;
+    }
     if (!cleanName || !cleanUsername || !cleanEmail) {
       setCreateError('Nama lengkap, username, dan email wajib diisi.');
       return;
@@ -572,7 +580,7 @@ export const UserManagementView: React.FC = () => {
               </span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Superadmin berwenang mendaftarkan akun internal, reset password dengan bcrypt, rotasi sesi, serta aktivasi/deaktivasi akun staf.
+              Superadmin mengelola akun staf non-Installer. Untuk akun Installer, kewenangan Superadmin dibatasi pada reset password. Pembuatan akun Installer dilakukan oleh Leader / Korlap.
             </p>
           </div>
         </div>
@@ -628,7 +636,7 @@ export const UserManagementView: React.FC = () => {
           }`}
         >
           <UserPlus className="w-3.5 h-3.5" />
-          <span>Pendaftaran Akun Internal (6 Role)</span>
+          <span>Pendaftaran Akun Internal (tanpa Installer)</span>
         </button>
       </div>
 
@@ -799,15 +807,17 @@ export const UserManagementView: React.FC = () => {
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                            {/* Edit Button */}
-                            <button
-                              onClick={() => handleOpenEdit(u)}
-                              className="px-2 py-1 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-200 dark:border-indigo-800 text-[11px] flex items-center gap-1 cursor-pointer font-medium"
-                              title="Edit Profil Pengguna"
-                            >
-                              <Edit2 className="w-3 h-3 text-indigo-600" />
-                              <span>Edit</span>
-                            </button>
+                            {/* Superadmin may only reset Installer passwords; profile/status/delete controls are hidden. */}
+                            {u.role !== 'installer' && (
+                              <button
+                                onClick={() => handleOpenEdit(u)}
+                                className="px-2 py-1 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-200 dark:border-indigo-800 text-[11px] flex items-center gap-1 cursor-pointer font-medium"
+                                title="Edit Profil Pengguna"
+                              >
+                                <Edit2 className="w-3 h-3 text-indigo-600" />
+                                <span>Edit</span>
+                              </button>
+                            )}
 
                             {/* Reset Password Button */}
                             <button
@@ -819,8 +829,8 @@ export const UserManagementView: React.FC = () => {
                               <span>Reset Password</span>
                             </button>
 
-                            {/* Status Toggle / Unlock Button */}
-                            {u.id !== currentUser.id && (
+                            {/* Status, session and delete controls are unavailable for Installer accounts. */}
+                            {u.role !== 'installer' && u.id !== currentUser.id && (
                               <>
                                 {isLocked ? (
                                   <button
@@ -890,7 +900,7 @@ export const UserManagementView: React.FC = () => {
                 Pendaftaran Akun Internal MoraJaws
               </h4>
               <p className="text-[11px] text-slate-500">
-                Pendaftaran akun internal hanya dapat dilakukan oleh Superadmin. Seluruh akun disimpan langsung ke Supabase PostgreSQL dengan hashing bcrypt.
+                Superadmin hanya membuat akun staf non-Installer. Akun Installer dibuat secara eksklusif oleh Leader / Korlap melalui Portal Leader.
               </p>
             </div>
           </div>
@@ -983,7 +993,6 @@ export const UserManagementView: React.FC = () => {
                 <option value="super_admin">1. Superadmin (Akses Penuh Sistem)</option>
                 <option value="dispatch">2. Dispatch (Distribusi &amp; Monitoring WO)</option>
                 <option value="leader">3. Leader / Korlap (Supervisor Mitra Kontraktor)</option>
-                <option value="installer">4. Installer / Teknisi (Pelaksana Lapangan)</option>
                 <option value="management_data">5. Management Data (Import &amp; Master Data)</option>
                 <option value="it_support">6. IT Support Application (Audit Log &amp; Monitoring)</option>
               </select>
@@ -1322,7 +1331,6 @@ export const UserManagementView: React.FC = () => {
                     <option value="super_admin">1. Superadmin</option>
                     <option value="dispatch">2. Dispatch</option>
                     <option value="leader">3. Leader</option>
-                    <option value="installer">4. Installer</option>
                     <option value="management_data">5. Management Data</option>
                     <option value="it_support">6. IT Support Application</option>
                   </select>

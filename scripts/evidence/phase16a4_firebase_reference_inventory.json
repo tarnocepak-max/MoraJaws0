@@ -1,0 +1,182 @@
+{
+  "active_source_files_with_firebase_references": 44,
+  "textual_reference_count": 964,
+  "files": [
+    {
+      "path": "server/firebaseAdmin.ts",
+      "reference_count": 82
+    },
+    {
+      "path": "server/realtimeHub.ts",
+      "reference_count": 13
+    },
+    {
+      "path": "server/sandbox/sandboxAccessControl.ts",
+      "reference_count": 4
+    },
+    {
+      "path": "server/sandbox/sandboxJournal.ts",
+      "reference_count": 2
+    },
+    {
+      "path": "server/sandbox/sandboxOutbox.ts",
+      "reference_count": 1
+    },
+    {
+      "path": "server/sandbox/sandboxRecoveryWorker.ts",
+      "reference_count": 4
+    },
+    {
+      "path": "server/sandbox/sandboxTestRunner.ts",
+      "reference_count": 18
+    },
+    {
+      "path": "server/supabaseAdapter.ts",
+      "reference_count": 18
+    },
+    {
+      "path": "server/supabaseShadowService.ts",
+      "reference_count": 2
+    },
+    {
+      "path": "server/supabaseStorage.ts",
+      "reference_count": 22
+    },
+    {
+      "path": "src/components/common/GlobalErrorAlert.tsx",
+      "reference_count": 3
+    },
+    {
+      "path": "src/components/dashboard/DashboardOverview.tsx",
+      "reference_count": 3
+    },
+    {
+      "path": "src/components/database/DatabaseManagementView.tsx",
+      "reference_count": 4
+    },
+    {
+      "path": "src/components/layout/Header.tsx",
+      "reference_count": 5
+    },
+    {
+      "path": "src/components/portals/InstallerTicketFullview.tsx",
+      "reference_count": 12
+    },
+    {
+      "path": "src/components/portals/ManagementDataPortal.tsx",
+      "reference_count": 1
+    },
+    {
+      "path": "src/components/settings/DroplistManagementView.tsx",
+      "reference_count": 20
+    },
+    {
+      "path": "src/components/settings/NavigationManagementView.tsx",
+      "reference_count": 10
+    },
+    {
+      "path": "src/components/settings/ReportDropdownManager.tsx",
+      "reference_count": 1
+    },
+    {
+      "path": "src/components/settings/SoundSettingsView.tsx",
+      "reference_count": 1
+    },
+    {
+      "path": "src/components/setup/NavigationConfigView.tsx",
+      "reference_count": 11
+    },
+    {
+      "path": "src/components/setup/SetupHubView.tsx",
+      "reference_count": 1
+    },
+    {
+      "path": "src/components/sheets/GoogleSheetsSyncView.tsx",
+      "reference_count": 5
+    },
+    {
+      "path": "src/components/textToTable/TextToTableImporter.tsx",
+      "reference_count": 2
+    },
+    {
+      "path": "src/components/tickets/TicketsTable.tsx",
+      "reference_count": 1
+    },
+    {
+      "path": "src/components/uiBuilder/UIConfigurationBuilder.tsx",
+      "reference_count": 42
+    },
+    {
+      "path": "src/components/users/UserManagementView.tsx",
+      "reference_count": 7
+    },
+    {
+      "path": "src/components/whatsapp/TemplateBuilder.tsx",
+      "reference_count": 7
+    },
+    {
+      "path": "src/constants/defaultConfig.ts",
+      "reference_count": 2
+    },
+    {
+      "path": "src/context/AnimationContext.tsx",
+      "reference_count": 3
+    },
+    {
+      "path": "src/context/AppContext.tsx",
+      "reference_count": 272
+    },
+    {
+      "path": "src/context/NavigationContext.tsx",
+      "reference_count": 20
+    },
+    {
+      "path": "src/context/UIConfigContext.tsx",
+      "reference_count": 29
+    },
+    {
+      "path": "src/lib/firebase.ts",
+      "reference_count": 25
+    },
+    {
+      "path": "src/services/appointmentDateParser.ts",
+      "reference_count": 5
+    },
+    {
+      "path": "src/services/backupDownloadService.ts",
+      "reference_count": 4
+    },
+    {
+      "path": "src/services/errorSystem.ts",
+      "reference_count": 11
+    },
+    {
+      "path": "src/services/firestoreDb.ts",
+      "reference_count": 215
+    },
+    {
+      "path": "src/services/googleSheetsService.ts",
+      "reference_count": 33
+    },
+    {
+      "path": "src/services/navigationFirestore.ts",
+      "reference_count": 21
+    },
+    {
+      "path": "src/services/storageCompatibility.ts",
+      "reference_count": 16
+    },
+    {
+      "path": "src/services/woDeduplicationService.ts",
+      "reference_count": 3
+    },
+    {
+      "path": "src/services/woFieldMappingEngine.ts",
+      "reference_count": 1
+    },
+    {
+      "path": "src/types/index.ts",
+      "reference_count": 2
+    }
+  ]
+}

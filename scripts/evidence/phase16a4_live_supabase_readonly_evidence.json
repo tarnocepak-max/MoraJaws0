@@ -1,0 +1,35 @@
+{
+  "phase": "16A.4",
+  "project_ref": "wiahuupjgpadxqiiarzi",
+  "audit_type": "read-only",
+  "production_mutations": 0,
+  "schema": {
+    "public_tables": 21,
+    "rls_enabled_tables": 21,
+    "public_policies": 0
+  },
+  "row_counts": {
+    "work_orders": 17,
+    "users": 4,
+    "auth_sessions": 23,
+    "refresh_tokens": 23,
+    "login_attempts": 52,
+    "attachments": 0
+  },
+  "legacy_markers": {
+    "users.firebase_uid_present": true,
+    "attachments.storage_provider_default_firebase_storage": true,
+    "private_bucket_morajaws_reports_present": true
+  },
+  "migration_ledger": [
+    "20261104200712_lock_public_schema_to_express_backend",
+    "20261104200723_restrict_public_schema_usage_to_backend",
+    "20261111153915_add_missing_foreign_key_indexes"
+  ],
+  "notes": [
+    "No SQL migration deployed",
+    "No DDL/DML executed",
+    "RLS enabled on all public tables; no public policies",
+    "Custom authentication remains internal; do not use Supabase Auth"
+  ]
+}

@@ -29,7 +29,11 @@
     "test:phase2.4.4:runtime": "tsx scripts/execute_phase2_4_4_runtime_assignment_test.ts",
     "test:phase2.4.4:api": "tsx scripts/execute_phase2_4_4_api_integration_test.ts",
     "test:phase2.4.4:audit": "tsx scripts/audit_phase2_4_4_migration_014.ts",
-    "evidence:phase2.4.4": "tsx scripts/collect_phase2_4_4_build_evidence.ts"
+    "evidence:phase2.4.4": "tsx scripts/collect_phase2_4_4_build_evidence.ts",
+    "test:phase2.4.5": "node scripts/execute_phase2_4_5_rbac_test.mjs",
+    "audit:phase2.4.6": "node scripts/execute_phase2_4_6_pre_cutover_audit.mjs && node scripts/verify_phase2_4_6_audit.mjs",
+    "test:phase2.4.6": "node scripts/verify_phase2_4_6_audit.mjs",
+    "test:phase16a4": "node scripts/execute_phase16a4_supabase_fail_closed_test.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.16",

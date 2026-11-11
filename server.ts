@@ -2379,7 +2379,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   // Synchronize user profile from Cloud Firestore to server (Dev/Local JSON mode only)
-  app.post('/api/users/sync-profile', (req: Request, res: Response) => {
+  app.post('/api/users/sync-profile', requireAuth, (req: AuthenticatedRequest, res: Response) => {
     if (!isLocalJsonModeAllowed()) {
       return res.status(403).json({
         success: false,
@@ -2394,6 +2394,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     }
     const cleanU = String(incomingUser.username).trim().toLowerCase();
     const existing = db.users.find(u => u.id === incomingUser.id || u.username.toLowerCase() === cleanU);
+    if (req.user!.role === 'super_admin' && (existing?.role === 'installer' || incomingUser.role === 'installer')) {
+      return res.status(403).json({
+        success: false,
+        error: 'Superadmin tidak berwenang membuat atau mengedit akun Installer melalui sinkronisasi profil.',
+        code: 'SUPERADMIN_INSTALLER_PROFILE_EDIT_FORBIDDEN'
+      });
+    }
     if (existing) {
       Object.assign(existing, {
         name: incomingUser.name || existing.name,
@@ -2843,6 +2850,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     }
 
     const VALID_ROLES = ['super_admin', 'dispatch', 'leader', 'installer', 'management_data', 'it_support'];
+    if (role === 'installer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Superadmin tidak memiliki kewenangan membuat akun Installer. Pembuatan akun Installer hanya melalui Leader / Korlap.',
+        code: 'SUPERADMIN_INSTALLER_CREATION_FORBIDDEN'
+      });
+    }
     if (!VALID_ROLES.includes(role)) {
       return res.status(400).json({
         success: false,
@@ -3019,6 +3033,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     if (!existingUser || existingUser.isDeleted) {
       return res.status(404).json({ success: false, error: 'Pengguna tidak ditemukan.', code: 'USER_NOT_FOUND' });
     }
+    if (existingUser.role === 'installer' || role === 'installer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Superadmin tidak memiliki kewenangan mengedit profil atau menetapkan role Installer.',
+        code: 'SUPERADMIN_INSTALLER_PROFILE_EDIT_FORBIDDEN'
+      });
+    }
 
     const updates: Partial<ServerUser> = {};
     if (name) updates.name = String(name).trim();
@@ -3093,6 +3114,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     if (!existingUser || existingUser.isDeleted) {
       return res.status(404).json({ success: false, error: 'Pengguna tidak ditemukan.', code: 'USER_NOT_FOUND' });
     }
+    if (existingUser.role === 'installer') {
+      return res.status(403).json({ success: false, error: 'Superadmin tidak berwenang mengubah status akun Installer.', code: 'SUPERADMIN_INSTALLER_STATUS_FORBIDDEN' });
+    }
 
     const nowIso = new Date().toISOString();
     const willBeActive = status === 'active' || status === 'unlocked';
@@ -3144,6 +3168,12 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
   app.post('/api/admin/users/:id/revoke-sessions', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
+    const revokeTarget = isSupabaseMode()
+      ? (await getUserByIdFromSupabase(id)).data || null
+      : db.users.find(u => u.id === id) || null;
+    if (revokeTarget?.role === 'installer') {
+      return res.status(403).json({ success: false, error: 'Superadmin hanya dapat mencabut sesi akun Installer melalui proses Reset Password.', code: 'SUPERADMIN_INSTALLER_SESSION_REVOCATION_FORBIDDEN' });
+    }
     if (!id || typeof id !== 'string' || !id.trim()) {
       return res.status(400).json({ success: false, error: 'User ID wajib diisi.', code: 'INVALID_ID' });
     }
@@ -3576,16 +3606,18 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         const supaByWo = await getWorkOrderByWoNumberFromSupabase(cleanId);
         if (supaByWo.success && supaByWo.data) {
           currentTicket = supaByWo.data;
-        } else if (!isLocalJsonModeAllowed() && !supaGet.error?.isNotFound && !supaByWo.error?.isNotFound) {
+        } else if (!supaGet.error?.isNotFound && !supaByWo.error?.isNotFound) {
           return res.status(503).json({
             error: 'Database authoritative Supabase tidak dapat diakses.',
             code: 'DATABASE_UNAVAILABLE'
           });
+        } else {
+          return res.status(404).json({ error: 'Work Order tidak ditemukan.', code: 'WORK_ORDER_NOT_FOUND' });
         }
       }
     }
 
-    if (!currentTicket && isLocalJsonModeAllowed()) {
+    if (!currentTicket && !isSupabaseMode() && isLocalJsonModeAllowed()) {
       ticketIndex = db.tickets.findIndex(t => t.id === cleanId || t.woNumber === cleanId);
       if (ticketIndex !== -1) {
         currentTicket = db.tickets[ticketIndex];
@@ -3644,16 +3676,18 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     if (isSupabaseMode()) {
       const supaRes = await updateWorkOrderInSupabase(currentTicket.id, updates);
       if (!supaRes.success) {
-        const statusCode = !isLocalJsonModeAllowed() ? 503 : 500;
-        return res.status(statusCode).json({
+        return res.status(supaRes.error?.isUnavailable ? 503 : 500).json({
           error: supaRes.error?.message || 'Gagal memperbarui Work Order di database utama Supabase.',
           code: supaRes.error?.code || 'SUPABASE_ERROR'
         });
       }
       updatedTicket = supaRes.data;
+      broadcastSupabaseChange('work_orders', 'UPDATE', updatedTicket);
+      await logServerAuditAsync('Work Order Updated', 'work_order', currentTicket.woNumber, `WO ${currentTicket.woNumber} diperbarui oleh ${req.user!.name}`, req.user);
+      return res.json({ success: true, ticket: updatedTicket });
     }
 
-    if (isLocalJsonModeAllowed()) {
+    if (!isSupabaseMode() && isLocalJsonModeAllowed()) {
       if (ticketIndex !== -1) {
         db.tickets[ticketIndex] = updatedTicket;
       }
@@ -3729,7 +3763,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
       // If single ticket assignment failed, return specific status with no false success
       if (assignedIds.length === 1 && errors.length > 0) {
-        if (!isLocalJsonModeAllowed()) {
           const err = errors[0];
           const status = err.isUnavailable ? 503
             : (err.code === 'SCOPE_MISMATCH' || err.code === 'PROTECTED_RECORD' || err.code === 'PROTECTED_PRODUCTION_RECORD') ? 403
@@ -3743,11 +3776,10 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
             code: err.code || 'ASSIGNMENT_ERROR',
             details: err.details
           });
-        }
       }
 
       // If all failed in batch assignment
-      if (results.length === 0 && errors.length > 0 && !isLocalJsonModeAllowed()) {
+      if (results.length === 0 && errors.length > 0) {
         const hasUnavailable = errors.some(e => e.isUnavailable);
         const hasPartialFailure = errors.some(e => e.code === 'ASSIGNMENT_PARTIAL_FAILURE_INCONSISTENT');
         return res.status(hasUnavailable ? 503 : 500).json({
@@ -3771,8 +3803,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         );
       }
 
-      if (!isLocalJsonModeAllowed()) {
-        if (errors.length > 0) {
+      if (errors.length > 0) {
           const hasUnavailable = errors.some(e => e.isUnavailable);
           const hasPartialFailure = errors.some(e => e.code === 'ASSIGNMENT_PARTIAL_FAILURE_INCONSISTENT');
           const statusCode = hasUnavailable ? 503 : (hasPartialFailure ? 500 : 422);
@@ -3795,10 +3826,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
           slotTime,
           assignedAt: now
         });
-      }
     }
 
-    if (isLocalJsonModeAllowed()) {
+    if (!isSupabaseMode() && isLocalJsonModeAllowed()) {
       const idSet = new Set(assignedIds);
       db.tickets = db.tickets.map(t => {
         if (!idSet.has(t.id) && t.woNumber !== woNumber && !idSet.has(t.woNumber)) return t;
@@ -3901,7 +3931,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       });
 
       if (!reassignRes.success) {
-        if (!isLocalJsonModeAllowed()) {
           const errCode = reassignRes.error?.code;
           const status = reassignRes.error?.isUnavailable ? 503
             : (errCode === 'SCOPE_MISMATCH' || errCode === 'PROTECTED_RECORD' || errCode === 'PROTECTED_PRODUCTION_RECORD') ? 403
@@ -3915,7 +3944,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
             code: errCode || 'REASSIGN_ERROR',
             details: reassignRes.error?.details
           });
-        }
       } else {
         const assignedWoNumber = reassignRes.data?.workOrder?.woNumber || woNumber || ticketId;
         await logServerAuditAsync(
@@ -3939,7 +3967,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       }
     }
 
-    if (isLocalJsonModeAllowed()) {
+    if (!isSupabaseMode() && isLocalJsonModeAllowed()) {
       const targetTicket = db.tickets.find(t => t.id === ticketId || t.woNumber === woNumber);
       if (!targetTicket) {
         return res.status(404).json({ error: 'Work Order tidak ditemukan.' });
@@ -4363,7 +4391,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       }
     }
 
-    if (!target && isLocalJsonModeAllowed()) {
+    if (!isSupabaseMode() && isLocalJsonModeAllowed()) {
       idx = db.tickets.findIndex(t => t.id === cleanId || t.woNumber === cleanId);
       if (idx !== -1) target = db.tickets[idx];
     }
@@ -4381,15 +4409,18 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
     if (isSupabaseMode()) {
       const delRes = await deleteWorkOrderFromSupabase(target.id, reason, req.user!.name);
-      if (!delRes.success && !isLocalJsonModeAllowed()) {
+      if (!delRes.success) {
         return res.status(503).json({
           error: 'Gagal melakukan penghapusan Work Order di Supabase.',
           code: 'DATABASE_UNAVAILABLE'
         });
       }
+      broadcastSupabaseChange('work_orders', 'DELETE', target);
+      await logServerAuditAsync('WO Soft Deleted', 'ticket', target.woNumber, `Management Data ${req.user!.name} menandai terhapus (soft delete) WO ${target.woNumber}. Alasan: ${reason}`, req.user);
+      return res.json({ success: true, message: `Work Order ${target.woNumber} berhasil dihapus.` });
     }
 
-    if (isLocalJsonModeAllowed()) {
+    if (!isSupabaseMode() && isLocalJsonModeAllowed()) {
       if (idx !== -1) {
         if (permanent) {
           db.tickets.splice(idx, 1);
@@ -4978,22 +5009,39 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       return res.status(503).json({ success: false, error: 'Supabase belum dikonfigurasi pada mode produksi.', code: 'SUPABASE_NOT_CONFIGURED' });
     }
 
-    // Role creation security check
-    if (req.user!.role !== 'super_admin') {
-      if (req.user!.role === 'leader' && role === 'installer') {
-        // Leader allowed to create installer strictly for their contractor & area
-      } else {
-        return res.status(403).json({ error: 'Akses Ditolak: Anda tidak memiliki wewenang untuk membuat akun ini.' });
-      }
+    // Installer account creation is exclusively delegated to Leader / Korlap.
+    if (role === 'installer' && req.user!.role !== 'leader') {
+      return res.status(403).json({
+        success: false,
+        error: 'Akses Ditolak: Hanya Leader / Korlap yang boleh membuat akun Installer.',
+        code: 'LEADER_ONLY_INSTALLER_CREATION'
+      });
+    }
+    if (req.user!.role === 'leader' && role !== 'installer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Leader / Korlap hanya boleh membuat akun Installer.',
+        code: 'LEADER_INSTALLER_ONLY'
+      });
+    }
+    if (req.user!.role !== 'super_admin' && req.user!.role !== 'leader') {
+      return res.status(403).json({ error: 'Akses Ditolak: Anda tidak memiliki wewenang untuk membuat akun ini.', code: 'USER_CREATION_FORBIDDEN' });
+    }
+    if (role === 'installer' && req.user!.role === 'leader' && (!String(req.user!.contractor || '').trim() || !String(req.user!.area || '').trim())) {
+      return res.status(403).json({
+        success: false,
+        error: 'Akun Leader belum memiliki kontraktor dan area kerja terdaftar. Pembuatan Installer ditolak.',
+        code: 'LEADER_CONTRACTOR_SCOPE_MISSING'
+      });
     }
 
     // Normalization & strict uniqueness validation across all non-deleted users
     const cleanName = String(name).trim().replace(/\s+/g, ' ');
     const cleanUsername = String(username).trim().toLowerCase().replace(/\s+/g, '');
 
-    const assignedContractor = req.user!.role === 'leader' ? (req.user!.contractor || contractor) : contractor;
-    const assignedArea = req.user!.role === 'leader' ? (req.user!.area || area) : area;
-    const assignedContractorId = req.user!.role === 'leader' ? (req.user!.contractorId || contractorId) : contractorId;
+    const assignedContractor = req.user!.role === 'leader' ? String(req.user!.contractor || '').trim() : contractor;
+    const assignedArea = req.user!.role === 'leader' ? (req.user!.area || undefined) : area;
+    const assignedContractorId = req.user!.role === 'leader' ? (req.user!.contractorId || undefined) : contractorId;
 
     const newUser: ServerUser = {
       id: 'u-' + Date.now(),
@@ -5094,6 +5142,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
     if (!user || user.isDeleted) {
       return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
+    }
+    if (req.user!.role === 'super_admin' && (user.role === 'installer' || role === 'installer')) {
+      return res.status(403).json({
+        success: false,
+        error: 'Superadmin tidak memiliki kewenangan mengedit atau mengubah role akun Installer. Gunakan fitur Reset Password jika diperlukan.',
+        code: 'SUPERADMIN_INSTALLER_PROFILE_EDIT_FORBIDDEN'
+      });
     }
 
     // Role permissions check
@@ -5257,6 +5312,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     }
     if (!user && isLocalJsonModeAllowed()) user = db.users.find(u => u.id === id);
     if (!user) return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
+    if (user.role === 'installer') {
+      return res.status(403).json({ success: false, error: 'Superadmin tidak berwenang mengubah status akun Installer.', code: 'SUPERADMIN_INSTALLER_STATUS_FORBIDDEN' });
+    }
 
     const newActive = !user.active;
     const newSessionVersion = (user.sessionVersion || 1) + 1;
@@ -5389,6 +5447,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     if (!targetUser) {
       return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
     }
+    if (targetUser.role === 'installer') {
+      return res.status(403).json({ success: false, error: 'Superadmin tidak berwenang menghapus akun Installer.', code: 'SUPERADMIN_INSTALLER_DELETE_FORBIDDEN' });
+    }
 
     // Revoke all sessions for target user immediately
     SERVER_SESSIONS.forEach(s => {
@@ -5447,10 +5508,23 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     res.json({ sessions: safeSessions });
   });
 
-  app.post('/api/sessions/revoke', requireAuth, (req: AuthenticatedRequest, res) => {
+  app.post('/api/sessions/revoke', requireAuth, async (req: AuthenticatedRequest, res) => {
     const { sessionId, reason } = req.body;
     const session = SERVER_SESSIONS.find(s => s.sessionId === sessionId);
     if (!session) return res.status(404).json({ error: 'Sesi tidak ditemukan.' });
+
+    if (req.user!.role === 'super_admin') {
+      const sessionOwner = isSupabaseMode()
+        ? (await getUserByIdFromSupabase(session.userId)).data || null
+        : db.users.find(u => u.id === session.userId) || null;
+      if (sessionOwner?.role === 'installer') {
+        return res.status(403).json({
+          success: false,
+          error: 'Superadmin hanya dapat mencabut sesi akun Installer melalui proses Reset Password.',
+          code: 'SUPERADMIN_INSTALLER_SESSION_REVOCATION_FORBIDDEN'
+        });
+      }
+    }
 
     if (session.userId !== req.user!.id && req.user!.role !== 'super_admin') {
       return res.status(403).json({ error: 'Akses Ditolak: Anda hanya dapat mencabut sesi Anda sendiri.' });
@@ -7595,7 +7669,19 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       if (user.role !== 'super_admin' && user.role !== 'leader') {
         return res.status(403).json({
           success: false,
-          error: { code: 'FORBIDDEN_ROLE', message: 'Akses Ditolak: Hanya Super Admin dan Leader yang dapat membuat akun pengguna.' }
+          error: { code: 'FORBIDDEN_ROLE', message: 'Akses Ditolak: Hanya Superadmin (akun non-Installer) dan Leader (akun Installer) yang dapat membuat akun.' }
+        });
+      }
+      if ((user.role === 'super_admin' && body.role === 'installer') || (user.role === 'leader' && body.role && body.role !== 'installer')) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'INSTALLER_CREATION_AUTHORITY_VIOLATION', message: 'Akun Installer hanya boleh dibuat oleh Leader / Korlap.' }
+        });
+      }
+      if (user.role === 'leader' && (!String(user.contractor || '').trim() || !String(user.area || '').trim())) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'LEADER_CONTRACTOR_SCOPE_MISSING', message: 'Akun Leader belum memiliki kontraktor dan area kerja. Pembuatan Installer ditolak.' }
         });
       }
 
@@ -7609,7 +7695,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const assignedRole = user.role === 'leader' ? 'installer' : (body.role || 'installer');
       const assignedContractor = user.role === 'leader' ? (user.contractor || '') : (body.contractor || '');
       const assignedContractorId = user.role === 'leader' ? (resolveUserContractorId(user) || user.contractorId || '') : (body.contractorId || body.contractor || '');
-      const assignedArea = user.role === 'leader' ? (user.area || body.area || '') : (body.area || '');
+      const assignedArea = user.role === 'leader' ? String(user.area || '').trim() : (body.area || '');
 
       const newUser: ServerUser = {
         id: body.id || `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
@@ -7670,6 +7756,12 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         return res.status(404).json({
           success: false,
           error: { code: 'NOT_FOUND', message: 'Pengguna tidak ditemukan.' }
+        });
+      }
+      if (user.role === 'super_admin' && (existingUser.role === 'installer' || updates.role === 'installer')) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'SUPERADMIN_INSTALLER_PROFILE_EDIT_FORBIDDEN', message: 'Superadmin tidak berwenang mengedit akun Installer.' }
         });
       }
 
@@ -7749,6 +7841,12 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         return res.status(404).json({
           success: false,
           error: { code: 'NOT_FOUND', message: 'Pengguna tidak ditemukan.' }
+        });
+      }
+      if (user.role === 'super_admin' && existingUser.role === 'installer') {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'SUPERADMIN_INSTALLER_DELETE_FORBIDDEN', message: 'Superadmin tidak berwenang menghapus akun Installer.' }
         });
       }
 
@@ -8371,10 +8469,10 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         const supaRes = await getWorkOrdersFromSupabase();
         if (supaRes.success && supaRes.data) {
           tickets = supaRes.data;
-        } else if (!isLocalJsonModeAllowed()) {
+        } else {
           return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
         }
-      } else {
+      } else if (isLocalJsonModeAllowed()) {
         tickets = db.tickets;
       }
       const scopedTickets = scopeTicketsForUser(tickets, req.user!);
@@ -8394,11 +8492,12 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const supaRes = await getWorkOrderByIdFromSupabase(id);
       if (supaRes.success && supaRes.data) {
         ticket = supaRes.data;
-      } else if (!isLocalJsonModeAllowed() && !supaRes.success) {
+      } else if (!supaRes.success) {
         return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
+      } else {
+        return res.status(404).json({ success: false, error: 'Work Order tidak ditemukan.', code: 'WORK_ORDER_NOT_FOUND' });
       }
-    }
-    if (!ticket) {
+    } else if (isLocalJsonModeAllowed()) {
       ticket = db.tickets.find(t => t.id === id || t.woNumber === id);
     }
     if (!ticket) return res.status(404).json({ error: 'Work Order tidak ditemukan.' });
@@ -8445,7 +8544,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       });
 
       if (!assignRes.success) {
-        if (!isLocalJsonModeAllowed()) {
           const errCode = assignRes.error?.code;
           const status = assignRes.error?.isUnavailable ? 503
             : (errCode === 'SCOPE_MISMATCH' || errCode === 'PROTECTED_RECORD' || errCode === 'PROTECTED_PRODUCTION_RECORD') ? 403
@@ -8457,22 +8555,19 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
             code: errCode || 'ASSIGNMENT_ERROR',
             details: assignRes.error?.details
           });
-        }
       } else {
         const woNumber = assignRes.data?.workOrder?.woNumber || id;
         await logServerAuditAsync('Work Order Assigned', 'work_order', woNumber, `WO ${woNumber} ditugaskan ke teknisi ${installerName.trim()}`, req.user);
-        if (!isLocalJsonModeAllowed()) {
-          return res.json({
-            success: true,
-            message: `Work Order berhasil ditugaskan ke teknisi ${installerName.trim()}`,
-            workOrder: assignRes.data?.workOrder,
-            history: assignRes.data?.history
-          });
-        }
+        return res.json({
+          success: true,
+          message: `Work Order berhasil ditugaskan ke teknisi ${installerName.trim()}`,
+          workOrder: assignRes.data?.workOrder,
+          history: assignRes.data?.history
+        });
       }
     }
 
-    if (isLocalJsonModeAllowed()) {
+    if (!isSupabaseMode() && isLocalJsonModeAllowed()) {
       const target = db.tickets.find(t => t.id === id || t.woNumber === id);
       if (!target) return res.status(404).json({ error: 'Work Order tidak ditemukan.' });
 
@@ -8541,7 +8636,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       });
 
       if (!reassignRes.success) {
-        if (!isLocalJsonModeAllowed()) {
           const errCode = reassignRes.error?.code;
           const status = reassignRes.error?.isUnavailable ? 503
             : (errCode === 'SCOPE_MISMATCH' || errCode === 'PROTECTED_RECORD' || errCode === 'PROTECTED_PRODUCTION_RECORD') ? 403
@@ -8553,22 +8647,19 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
             code: errCode || 'REASSIGN_ERROR',
             details: reassignRes.error?.details
           });
-        }
       } else {
         const woNumber = reassignRes.data?.workOrder?.woNumber || id;
         await logServerAuditAsync('Work Order Reassigned', 'work_order', woNumber, `WO ${woNumber} dialihkan ke ${newInstallerName.trim()}. Alasan: ${reason.trim()}`, req.user);
-        if (!isLocalJsonModeAllowed()) {
-          return res.json({
-            success: true,
-            message: `Work Order berhasil dialihkan ke ${newInstallerName.trim()}`,
-            workOrder: reassignRes.data?.workOrder,
-            history: reassignRes.data?.history
-          });
-        }
+        return res.json({
+          success: true,
+          message: `Work Order berhasil dialihkan ke ${newInstallerName.trim()}`,
+          workOrder: reassignRes.data?.workOrder,
+          history: reassignRes.data?.history
+        });
       }
     }
 
-    if (isLocalJsonModeAllowed()) {
+    if (!isSupabaseMode() && isLocalJsonModeAllowed()) {
       const target = db.tickets.find(t => t.id === id || t.woNumber === id);
       if (!target) return res.status(404).json({ error: 'Work Order tidak ditemukan.' });
 
@@ -8713,10 +8804,10 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const supaRes = await getWorkOrdersFromSupabase();
       if (supaRes.success && supaRes.data) {
         tickets = supaRes.data;
-      } else if (!isLocalJsonModeAllowed()) {
+      } else {
         return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
       }
-    } else {
+    } else if (isLocalJsonModeAllowed()) {
       tickets = db.tickets;
     }
     const scopedTickets = scopeTicketsForUser(tickets, req.user!);
@@ -8899,6 +8990,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         // Enforce leader contractor/area scope using authoritative database
         if (req.user!.role === 'leader') {
           const tRes = await getWorkOrderByIdOrWoNumberFromSupabase(id);
+          if (!tRes.success || !tRes.data) {
+            return res.status(503).json({ success: false, error: 'Work Order tidak dapat diverifikasi melalui Supabase.', code: 'DATABASE_UNAVAILABLE' });
+          }
           if (tRes.success && tRes.data) {
             const ticket = tRes.data;
             const ticketContractor = (ticket.contractorName || '').toLowerCase().trim();
@@ -8918,7 +9012,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         const msgRes = await getTicketMessagesFromSupabase(id);
         if (msgRes.success && msgRes.data) {
           return res.json({ success: true, messages: msgRes.data });
-        } else if (!isLocalJsonModeAllowed()) {
+        } else {
           return res.status(503).json({
             success: false,
             error: 'Database authoritative Supabase tidak tersedia.',
@@ -8926,16 +9020,18 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
           });
         }
       } catch {
-        if (!isLocalJsonModeAllowed()) {
-          return res.status(503).json({
-            success: false,
-            error: 'Database authoritative Supabase tidak tersedia.',
-            code: 'DATABASE_UNAVAILABLE'
-          });
-        }
+        return res.status(503).json({
+          success: false,
+          error: 'Database authoritative Supabase tidak tersedia.',
+          code: 'DATABASE_UNAVAILABLE'
+        });
       }
+      return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
     }
 
+    if (!isLocalJsonModeAllowed()) {
+      return res.status(503).json({ success: false, error: 'Mode lokal JSON tidak diizinkan.', code: 'LOCAL_JSON_DISABLED' });
+    }
     const ticket = db.tickets.find(t => t.id === id || t.woNumber === id);
     if (ticket && req.user!.role === 'leader') {
       const ticketContractor = (ticket.contactorName || ticket.contractorName || '').toLowerCase().trim();

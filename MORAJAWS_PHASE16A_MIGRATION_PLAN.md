@@ -1,12 +1,12 @@
 # MORAJAWS — RENCANA AKSI MIGRASI SUPABASE (PHASE 16A)
 **Status**: DRAF RENCANA / USULAN TEKNIS (BELUM DIEKSEKUSI KE PRODUKSI)  
-**Target Arsitektur**: React SPA → Express Backend (Satu-satunya Akses Layer) → Supabase PostgreSQL & Auth  
+**Target Arsitektur**: React SPA → Express Backend (Satu-satunya Akses Layer) → Supabase PostgreSQL + Supabase Storage  
 **Prinsip Keamanan**: Fail-Closed, Zero Production Mutation Tanpa Izin, Immutability 3 Protected WO.
 
 ---
 
 ## 1. TUJUAN DAN RUANG LINGKUP MIGRASI
-Rencana ini mengatur transisi terstruktur dan terisolasi dari sistem penyimpanan data lama (Firebase Firestore / file JSON lokal) menuju basis data relasional **Supabase PostgreSQL** dan sistem autentikasi **Supabase Auth**.
+Rencana ini mengatur transisi terstruktur dan terisolasi dari sistem penyimpanan data lama (Firebase Firestore / file JSON lokal) menuju basis data relasional **Supabase PostgreSQL**. Autentikasi tetap menggunakan **Custom Authentication MoraJaws** yang berjalan di Express dan menyimpan identitas/sesi di tabel PostgreSQL. Supabase Auth tidak digunakan.
 
 ### Batasan Kritis (Safety Guardrails):
 1. **Tidak Ada Rebuild**: Seluruh kode frontend, navigasi 3 accordion, visual identity ungu-gelap (purple gloss/lilac), dan alur bisnis MoraJaws tetap utuh.
@@ -49,20 +49,26 @@ Data dari legacy sistem harus divalidasi ketat sebelum dimasukkan ke PostgreSQL:
 
 ---
 
-## 4. TAHAP 3: MIGRASI AKUN PENGGUNA KE SUPABASE AUTH & POSTGRESQL
-Prosedur migrasi akun staf tanpa mengekspos kata sandi mentah:
-1. **Penyediaan Akun di auth.users (Server-Side via Service Role)**:
-   - Backend Express membaca email kanonikal dari `public.users`.
-   - Memanggil `supabase.auth.admin.createUser({ email, password, email_confirm: true })`.
-   - Mendapatkan `auth_user_id` (UUID) hasil generate Supabase Auth.
-2. **Pemetaan Fisik di public.users**:
-   - Melakukan update pada kolom fisik `public.users.auth_user_id = auth.users.id`.
-   - Memastikan partial unique index `idx_users_auth_user_id_unique` aktif untuk mencegah 1 Auth UID terhubung ke lebih dari 1 profil staf.
-3. **Integritas Sesi**:
-   - Seluruh sesi aktif di-reset versi sesinya (`session_version = session_version + 1`) untuk memaksa login baru melalui alur Supabase Auth yang terotentikasi.
+## 4. TAHAP 3: REKONSILIASI CUSTOM AUTH MORAJAWS KE POSTGRESQL
+Autentikasi aplikasi tetap merupakan sistem internal MoraJaws. Jangan membuat, menghubungkan, atau mewajibkan akun pada `auth.users`.
+
+1. **Identitas Akun Staf di `public.users`**:
+   - Pertahankan ID internal user yang sudah dipakai relasi `work_orders`, `assignment_history`, dan audit.
+   - Pastikan username/email kanonikal memiliki unique constraint sesuai aturan aplikasi.
+   - Password hanya disimpan sebagai hash bcrypt/algoritma password hash yang sudah disetujui; tidak pernah menyimpan plaintext atau mengembalikan hash ke frontend.
+2. **Sesi Internal di PostgreSQL**:
+   - Gunakan tabel `public.auth_sessions`, `public.refresh_tokens`, `public.user_sessions`, dan `public.login_attempts` sesuai implementasi/migration yang benar-benar tersedia.
+   - Validasi access token, refresh token, expiry, session version, status akun, dan role dilakukan oleh Express.
+   - Reset password dan deactivation harus mencabut sesi/token terkait secara atomik atau melalui urutan operasi yang dapat diverifikasi.
+3. **Tidak Menggunakan Supabase Auth**:
+   - Jangan memanggil `supabase.auth.admin.createUser`, `supabase.auth.signInWithPassword`, atau `supabase.auth.getUser`.
+   - Jangan menambahkan foreign key ke `auth.users` atau mewajibkan `auth_user_id` untuk login internal.
+   - `SUPABASE_SERVICE_ROLE_KEY` hanya digunakan server-side oleh Express untuk akses PostgreSQL/Storage; bukan sebagai token autentikasi pengguna.
+4. **Verifikasi Keamanan**:
+   - Uji login valid/invalid, lockout/rate limit, refresh rotation, logout, reset password, revoke-all-sessions, inactive user, dan RBAC untuk seluruh role.
+   - Pastikan cookie HttpOnly/Secure/SameSite sesuai environment dan token tidak disimpan di localStorage/sessionStorage.
 
 ---
-
 ## 5. TAHAP 4: MIGRASI WORK ORDERS, ASSIGNMENTS, DAN CHAT HISTORY
 1. **Batch Upsert Work Orders**:
    - Memasukkan data WO secara bertahap (batch size 50 record) via `client.from('work_orders').upsert(...)`.
