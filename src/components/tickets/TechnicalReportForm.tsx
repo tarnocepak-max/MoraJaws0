@@ -70,7 +70,7 @@ export const TechnicalReportForm: React.FC<TechnicalReportFormProps> = ({ ticket
   );
 
   const [zoomImage, setZoomImage] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
@@ -137,11 +137,17 @@ export const TechnicalReportForm: React.FC<TechnicalReportFormProps> = ({ ticket
         additionalNotes: additionalNotes.trim()
       });
 
-      if (result.success) {
+      if (result.success && !(result as any).pendingSync) {
         playReportSavedSound();
         setIsEditing(false);
-        setNotice({ type: 'success', text: 'Laporan teknis pekerjaan & root cause berhasil disimpan!' });
+        setNotice({ type: 'success', text: 'Laporan teknis berhasil disimpan dan terverifikasi di PostgreSQL (SAVED)!' });
         setTimeout(() => setNotice(null), 3500);
+        onSuccess?.();
+      } else if ((result as any).pendingSync || (result as any).status === 'PENDING_SYNC') {
+        playReportSavedSound();
+        setIsEditing(false);
+        setNotice({ type: 'warning', text: 'Laporan tersimpan di antrean offline (PENDING_SYNC). Akan dikirim ke PostgreSQL saat koneksi kembali.' });
+        setTimeout(() => setNotice(null), 4000);
         onSuccess?.();
       } else {
         playErrorSound();
@@ -164,10 +170,18 @@ export const TechnicalReportForm: React.FC<TechnicalReportFormProps> = ({ ticket
           className={`p-3 rounded-lg border flex items-center gap-2 ${
             notice.type === 'success'
               ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+              : notice.type === 'warning'
+              ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
               : 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
           }`}
         >
-          {notice.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+          {notice.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+          ) : notice.type === 'warning' ? (
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+          )}
           <span className="font-medium">{notice.text}</span>
         </div>
       )}

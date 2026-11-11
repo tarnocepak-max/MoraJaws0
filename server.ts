@@ -73,7 +73,8 @@ import {
   reassignTicketInSupabase,
   getTechnicalReportByWorkOrderIdFromSupabase,
   insertTechnicalReportToSupabase,
-  verifyTechnicalReportInSupabase
+  verifyTechnicalReportInSupabase,
+  submitTechnicalReportAtomic
 } from './server/supabaseAdapter.ts';
 import { runPhase8ShadowDryRunSuite } from './server/supabaseShadowService.ts';
 import { realtimeSandboxHub, requireSandboxSuperAdmin, getSandboxSuperAdminAllowlist } from './server/realtimeHub.ts';
@@ -1372,6 +1373,11 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
         return res.status(401).json({
           error: customRes.error.message || 'Token sesi login telah kedaluwarsa.',
           code: 'TOKEN_EXPIRED'
+        });
+      } else if (customRes.error?.code === 'DATABASE_UNAVAILABLE' && !isLocalJsonModeAllowed()) {
+        return res.status(503).json({
+          error: 'Database authoritative tidak tersedia saat verifikasi sesi login.',
+          code: 'DATABASE_UNAVAILABLE'
         });
       }
     } catch (customErr) {
@@ -3987,145 +3993,151 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     });
   });
 
-  // Save Technical Report
-  app.post('/api/tickets/:id/report', requireAuth, async (req: AuthenticatedRequest, res) => {
+  // Save Technical Report (Atomic PostgreSQL Transaction via submitTechnicalReportAtomic)
+  app.post(['/api/tickets/:id/report', '/api/work-orders/:id/report'], requireAuth, async (req: AuthenticatedRequest, res) => {
     const { id } = req.params;
     const { report } = req.body;
 
     const cleanId = (id || '').trim();
-    if (!isSupabaseMode() && !isLocalJsonModeAllowed()) {
-      return res.status(503).json({
-        error: 'Supabase belum dikonfigurasi dan mode lokal JSON dilarang di lingkungan produksi.',
-        code: 'SUPABASE_NOT_CONFIGURED'
+    if (!cleanId) {
+      return res.status(400).json({
+        success: false,
+        error: 'ID atau nomor Work Order wajib diisi.',
+        code: 'INVALID_INPUT'
       });
     }
 
-    let ticket: any = null;
+    if (!report || typeof report !== 'object') {
+      return res.status(400).json({
+        success: false,
+        error: 'Payload laporan teknis (report) wajib disertakan.',
+        code: 'INVALID_REPORT_DATA'
+      });
+    }
+
+    // Role verification: only authorized staff roles can submit technical reports
+    const userRole = (req.user?.role || '').toLowerCase();
+    const allowedRoles = ['installer', 'super_admin', 'superadmin', 'admin', 'dispatch', 'leader', 'management_data'];
+    if (!allowedRoles.includes(userRole)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Akses Ditolak: Anda tidak memiliki wewenang untuk menyimpan laporan teknis.',
+        code: 'FORBIDDEN_SCOPE'
+      });
+    }
+
+    // Fail-closed verification
+    if (!isSupabaseMode() && !isLocalJsonModeAllowed()) {
+      return res.status(503).json({
+        success: false,
+        error: 'Database authoritative Supabase tidak tersedia.',
+        code: 'DATABASE_UNAVAILABLE'
+      });
+    }
+
+    // Primary Execution: Single Atomic PostgreSQL Transaction
     if (isSupabaseMode()) {
-      const supaGet = await getWorkOrderByIdFromSupabase(cleanId);
-      if (supaGet.success && supaGet.data) {
-        ticket = supaGet.data;
-      } else {
-        const supaByWo = await getWorkOrderByWoNumberFromSupabase(cleanId);
-        if (supaByWo.success && supaByWo.data) ticket = supaByWo.data;
-      }
-    }
+      const atomicRes = await submitTechnicalReportAtomic(cleanId, report, {
+        id: req.user!.id,
+        name: req.user!.name,
+        role: req.user!.role
+      });
 
-    if (!ticket && isLocalJsonModeAllowed()) {
-      ticket = db.tickets.find(t => t.id === cleanId || t.woNumber === cleanId);
-    }
+      if (!atomicRes.success) {
+        const err = atomicRes.error;
+        let statusCode = 500;
+        let errCode = err?.code || 'SERVER_ERROR';
 
-    if (!ticket) {
-      return res.status(404).json({ error: 'Work Order tidak ditemukan.' });
-    }
-
-    if (!checkTicketAccess(ticket, req.user!)) {
-      return res.status(403).json({ error: 'Akses Ditolak: Anda tidak memiliki wewenang untuk menyimpan laporan untuk tiket ini.' });
-    }
-
-    const now = new Date().toISOString();
-    const technicalReport = {
-      ...report,
-      id: 'rep_' + Date.now(),
-      ticketId: ticket.id,
-      submittedAt: now,
-      submittedBy: req.user!.name
-    };
-
-    let checkOutAt = ticket.checkOutAt;
-    let workSessionStatus = ticket.workSessionStatus;
-    let workDurationMinutes = ticket.workDurationMinutes;
-    let workDurationFormatted = ticket.workDurationFormatted;
-    let workSessions = ticket.workSessions;
-
-    // Requirement 3.B: Automatic check-out on valid technical report save
-    if (ticket.checkInAt && (!ticket.checkOutAt || ticket.workSessionStatus === 'Sedang Dikerjakan')) {
-      checkOutAt = now;
-      workSessionStatus = 'Selesai';
-      const checkInMs = new Date(ticket.checkInAt).getTime();
-      const checkOutMs = new Date(now).getTime();
-      const diffMs = Math.max(0, checkOutMs - checkInMs);
-      const minutes = Math.max(1, Math.round(diffMs / 60000));
-      workDurationMinutes = minutes;
-
-      const hours = Math.floor(minutes / 60);
-      const remMins = minutes % 60;
-      if (hours > 0 && remMins > 0) {
-        workDurationFormatted = `${hours} jam ${remMins} menit`;
-      } else if (hours > 0) {
-        workDurationFormatted = `${hours} jam`;
-      } else {
-        workDurationFormatted = `${remMins} menit`;
-      }
-
-      if (Array.isArray(ticket.workSessions) && ticket.workSessions.length > 0) {
-        const clonedSessions = [...ticket.workSessions];
-        const lastSession = clonedSessions[clonedSessions.length - 1];
-        if (lastSession && (lastSession.status === 'Sedang Dikerjakan' || !lastSession.checkOutAt)) {
-          lastSession.checkOutAt = now;
-          lastSession.status = 'Selesai';
-          lastSession.durationMinutes = minutes;
-          lastSession.durationFormatted = workDurationFormatted;
+        if (err?.isNotFound || err?.code === 'P0002' || err?.code === 'WORK_ORDER_NOT_FOUND' || err?.message?.includes('tidak ditemukan')) {
+          statusCode = 404;
+          errCode = 'WORK_ORDER_NOT_FOUND';
+        } else if (err?.isForbidden || err?.code === '42501' || err?.code === 'FORBIDDEN_SCOPE' || err?.message?.includes('tidak ditugaskan') || err?.message?.includes('tidak memiliki wewenang')) {
+          statusCode = 403;
+          errCode = 'FORBIDDEN_SCOPE';
+        } else if (err?.isInvalidInput || err?.code === '22023' || err?.code === 'INVALID_INPUT' || err?.code === 'INVALID_REPORT_DATA' || err?.message?.includes('wajib diisi')) {
+          statusCode = 400;
+          errCode = 'INVALID_REPORT_DATA';
+        } else if (err?.isDuplicate || err?.code === '23505') {
+          statusCode = 409;
+          errCode = 'CONFLICT';
+        } else if (err?.isUnavailable || err?.isConnectionError || err?.code === 'NOT_CONFIGURED') {
+          statusCode = 503;
+          errCode = 'DATABASE_UNAVAILABLE';
         }
-        workSessions = clonedSessions;
-      } else {
-        workSessions = [
-          {
-            sessionId: 'ws_' + Date.now(),
-            checkInAt: ticket.checkInAt,
-            checkOutAt: now,
-            durationMinutes: minutes,
-            durationFormatted: workDurationFormatted,
-            status: 'Selesai'
-          }
-        ];
-      }
-    }
 
-    const reportUpdates = {
-      technicalReport,
-      statusWOInstaller: 'Completed',
-      checkOutAt,
-      workSessionStatus,
-      workDurationMinutes,
-      workDurationFormatted,
-      workSessions,
-      updatedAt: now,
-      updatedBy: req.user!.name
-    };
-
-    let updatedTicket = { ...ticket, ...reportUpdates };
-
-    if (isSupabaseMode()) {
-      const supaRes = await updateWorkOrderInSupabase(ticket.id, reportUpdates);
-      if (!supaRes.success && !isLocalJsonModeAllowed()) {
-        return res.status(503).json({
-          error: 'Gagal menyimpan laporan teknis ke database authoritative Supabase.',
-          code: 'DATABASE_UNAVAILABLE'
+        return res.status(statusCode).json({
+          success: false,
+          error: err?.message || 'Gagal menyimpan laporan teknis ke database.',
+          code: errCode,
+          details: err?.details
         });
       }
-      if (supaRes.success && supaRes.data) updatedTicket = supaRes.data;
 
-      const repRes = await insertTechnicalReportToSupabase(technicalReport, ticket.woNumber);
-      if (!repRes.success && !isLocalJsonModeAllowed()) {
-        return res.status(503).json({
-          error: 'Gagal mencatat laporan teknis ke tabel kanonis Supabase.',
-          code: 'DATABASE_UNAVAILABLE'
-        });
-      }
+      // Realtime event broadcast
+      broadcastSupabaseChange('technical_reports', 'INSERT', atomicRes.data!.report);
+      broadcastSupabaseChange('work_orders', 'UPDATE', atomicRes.data!.workOrder);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Laporan teknis pekerjaan berhasil disimpan secara atomik ke PostgreSQL.',
+        technicalReport: atomicRes.data!.report,
+        ticket: atomicRes.data!.workOrder,
+        workOrder: atomicRes.data!.workOrder
+      });
     }
 
+    // Local Development Fallback (Permitted only in non-production local development)
     if (isLocalJsonModeAllowed()) {
+      const ticket = db.tickets.find(t => t.id === cleanId || t.woNumber === cleanId);
+      if (!ticket) {
+        return res.status(404).json({ success: false, error: 'Work Order tidak ditemukan.', code: 'WORK_ORDER_NOT_FOUND' });
+      }
+
+      if (!checkTicketAccess(ticket, req.user!)) {
+        return res.status(403).json({ success: false, error: 'Akses Ditolak: Anda tidak memiliki wewenang untuk menyimpan laporan untuk tiket ini.', code: 'FORBIDDEN_SCOPE' });
+      }
+
+      const now = new Date().toISOString();
+      const technicalReport = {
+        ...report,
+        id: report?.id || ('rep_' + Date.now()),
+        ticketId: ticket.id,
+        woNumber: ticket.woNumber,
+        submittedAt: now,
+        submittedBy: req.user!.name
+      };
+
+      const updatedTicket = {
+        ...ticket,
+        technicalReport,
+        statusWOInstaller: report.workResult === 'Tidak Berhasil' ? 'Failed / Cancelled' : report.workResult === 'Pekerjaan Tertunda' ? 'Pending Technical' : 'Completed',
+        statusWOAgent: report.workResult === 'Tidak Berhasil' ? ticket.statusWOAgent : 'Resolved',
+        updatedAt: now,
+        updatedBy: req.user!.name
+      };
+
       const localIdx = db.tickets.findIndex(t => t.id === cleanId || t.woNumber === cleanId);
       if (localIdx !== -1) {
         db.tickets[localIdx] = updatedTicket;
       }
       saveDatabaseToDisk();
+
+      await logServerAuditAsync('Technical Report Submitted', 'report', ticket.woNumber, `Laporan teknis diserahkan oleh ${req.user!.name} untuk WO ${ticket.woNumber}`, req.user);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Laporan teknis berhasil disimpan (mode lokal).',
+        technicalReport,
+        ticket: updatedTicket,
+        workOrder: updatedTicket
+      });
     }
 
-    await logServerAuditAsync('Technical Report Submitted', 'report', ticket.woNumber, `Laporan teknis diserahkan oleh ${req.user!.name} untuk WO ${ticket.woNumber}`, req.user);
-
-    res.json({ success: true, technicalReport, ticket: updatedTicket });
+    return res.status(503).json({
+      success: false,
+      error: 'Database authoritative Supabase tidak tersedia.',
+      code: 'DATABASE_UNAVAILABLE'
+    });
   });
 
   // Save Progress Report
@@ -7050,6 +7062,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const { id } = req.params;
       const user = req.user!;
 
+      if (!isSupabaseMode() && !isLocalJsonModeAllowed()) {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' }
+        });
+      }
+
       let ticket: any = null;
 
       if (isSupabaseMode()) {
@@ -7457,6 +7476,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     try {
       const user = req.user!;
       const includeDeleted = req.query.includeDeleted === 'true';
+
+      if (!isSupabaseMode() && !isLocalJsonModeAllowed()) {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' }
+        });
+      }
 
       const result = await getUsersFromSupabase(includeDeleted);
       if (!result.success && !isLocalJsonModeAllowed()) {

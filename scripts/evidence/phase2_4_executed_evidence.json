@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-11T13:50:23.530Z",
+  "timestamp": "2026-11-11T15:34:44.710Z",
   "phase": "MORAJAWS PHASE 2.4 — APPLICATION & SUPABASE SCHEMA RECONCILIATION",
   "engine": {
     "name": "PostgreSQL (Isolated In-Memory via PGlite)",
@@ -149,7 +149,7 @@
       "status": "PASS",
       "details": "Canonical technical_reports table stores submitted_by, work_result, and handles dispatch verification accurately without missing column errors.",
       "evidence": {
-        "insertedId": "rep_test_1794405023495",
+        "insertedId": "rep_test_1794411284671",
         "submittedBy": "Teknisi Budi Pratama",
         "verifiedBy": "Super Admin Rays"
       }
@@ -166,8 +166,8 @@
           "fn_rotate_refresh_token_atomic": {
             "success": true,
             "user_id": "usr_token_test_1",
-            "expires_at": "2026-11-12T13:50:23.508+00:00",
-            "session_id": "sess_init_1794405023501"
+            "expires_at": "2026-11-12T15:34:44.685+00:00",
+            "session_id": "sess_init_1794411284677"
           }
         },
         "oldTokenRevoked": true,

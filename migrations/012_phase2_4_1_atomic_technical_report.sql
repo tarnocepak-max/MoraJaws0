@@ -110,7 +110,7 @@ BEGIN
   FOR UPDATE;
 
   IF v_wo.id IS NULL THEN
-    RAISE EXCEPTION 'WORK_ORDER_NOT_FOUND: Work Order % tidak ditemukan di database' USING ERRCODE = 'P0002';
+    RAISE EXCEPTION 'WORK_ORDER_NOT_FOUND: Work Order % tidak ditemukan di database', p_work_order_id USING ERRCODE = 'P0002';
   END IF;
 
   -- C. Validate Role and Installer Assignment Scoping
@@ -125,7 +125,7 @@ BEGIN
     END IF;
 
     IF NOT v_is_assigned THEN
-      RAISE EXCEPTION 'FORBIDDEN_SCOPE: Teknisi % tidak ditugaskan pada Work Order %' USING ERRCODE = '42501';
+      RAISE EXCEPTION 'FORBIDDEN_SCOPE: Teknisi % tidak ditugaskan pada Work Order %', p_submitted_by, v_wo.wo_number USING ERRCODE = '42501';
     END IF;
   END IF;
 

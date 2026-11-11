@@ -1,6 +1,6 @@
 export type UserRole = 'super_admin' | 'dispatch' | 'leader' | 'installer' | 'management_data' | 'it_support';
 
-export type DataSyncStatus = 'LOADING' | 'SYNCING' | 'SAVED' | 'OFFLINE' | 'ERROR';
+export type DataSyncStatus = 'LOADING' | 'SYNCING' | 'SAVED' | 'PENDING_SYNC' | 'OFFLINE' | 'ERROR';
 
 export interface User {
   id: string;
@@ -105,6 +105,7 @@ export interface RootCauseCategory {
 export interface TechnicalReport {
   id: string;
   ticketId: string;
+  woNumber?: string;
   mainCategory: string;
   rootCause: string;
   subCategory?: string;

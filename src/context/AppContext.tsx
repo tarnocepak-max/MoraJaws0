@@ -175,7 +175,7 @@ interface AppContextType {
   saveTechnicalReport: (
     ticketId: string,
     reportData: Omit<TechnicalReport, 'id' | 'ticketId' | 'submittedAt' | 'submittedBy'>
-  ) => Promise<{ success: boolean; error?: string; code?: string }>;
+  ) => Promise<{ success: boolean; error?: string; code?: string; status?: string; pendingSync?: boolean; message?: string; report?: TechnicalReport }>;
   saveProgressReport: (
     ticketId: string,
     data: {
@@ -1065,18 +1065,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return t;
             }));
           } else if (item.action === 'REPORT') {
-            const { ticketId, report } = item.payload;
+            const { ticketId, report, payloadForServer } = item.payload;
+            const payload = payloadForServer || { report };
+            setSyncStatus('SYNCING');
+            const resp = await fetch(`/api/tickets/${encodeURIComponent(ticketId)}/report`, {
+              method: 'POST',
+              headers: getAuthHeaders(),
+              body: JSON.stringify(payload)
+            });
+            const resJson = await resp.json().catch(() => null);
+            if (!resp.ok || !resJson?.success) {
+              const errMsg = resJson?.error?.message || resJson?.error || `HTTP ${resp.status}`;
+              throw new Error(`Gagal menyinkronkan laporan WO ${ticketId}: ${errMsg}`);
+            }
+            const committedReport = resJson.technicalReport || report;
+            const committedTicket = resJson.ticket || resJson.workOrder;
             setTickets(prev => prev.map(t => {
-              if (t.id === ticketId) {
-                return {
-                  ...t,
-                  technicalReport: report,
-                  _offlineSyncStatus: 'synced',
-                  updatedAt: new Date().toISOString()
-                };
+              if (t.id === ticketId || t.woNumber === ticketId) {
+                return committedTicket ? { ...committedTicket, technicalReport: committedReport } : { ...t, technicalReport: committedReport, _offlineSyncStatus: 'synced', updatedAt: new Date().toISOString() };
               }
               return t;
             }));
+            setSyncStatus('SAVED');
+            setLastSyncTime(new Date().toISOString());
           } else if (item.action === 'ASSIGN') {
             const { ticketId, leaderName, installerName } = item.payload;
             setTickets(prev => prev.map(t => {
@@ -2161,7 +2172,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveTechnicalReport = async (
     ticketId: string,
     reportData: Omit<TechnicalReport, 'id' | 'ticketId' | 'submittedAt' | 'submittedBy'>
-  ): Promise<{ success: boolean; error?: string; code?: string }> => {
+  ): Promise<{ success: boolean; error?: string; code?: string; status?: string; pendingSync?: boolean; message?: string; report?: TechnicalReport }> => {
     const ticket = getTicketById(ticketId);
     if (!ticket) return { success: false, error: 'Tiket tidak ditemukan.' };
 
@@ -2307,37 +2318,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSyncStatus('SAVED');
       setLastSyncTime(new Date().toISOString());
 
-      // 3. Secondary fire-and-forget sync to Firestore (preserves dual-read compatibility without blocking)
-      saveTicketToFirestore({
-        ...ticket,
-        technicalReport: committedReport,
-        statusWOInstaller: reportData.workResult === 'Tidak Berhasil' ? 'Failed / Cancelled' : reportData.workResult === 'Pekerjaan Tertunda' ? 'Pending Technical' : 'Completed',
-        statusWOAgent: reportData.workResult === 'Tidak Berhasil' ? ticket.statusWOAgent : 'Resolved',
-        approvalStatus: 'BUTUH APPROVAL',
-        checkOutAt: checkOutAtVal,
-        workDurationMinutes: workDurationMinVal,
-        workDurationFormatted: workDurationStrVal,
-        workSessionStatus: workSessionStatusVal,
-        workSessions: updatedSessions,
-        updatedAt: now,
-        updatedBy: currentUser.name
-      }).catch(e => console.warn('[Firestore] Secondary sync background warning:', e));
-
-      return { success: true };
+      return { success: true, status: 'SAVED', report: committedReport };
     } catch (networkErr: any) {
-      setSyncStatus('ERROR');
       if (!isOnline) {
         await enqueueChange({
           entity: 'technical_report',
           entityId: ticketId,
           action: 'REPORT',
           summary: `Laporan Teknis WO ${ticket.woNumber} (${report.workResult})`,
-          payload: { ticketId, report },
+          payload: { ticketId, report, payloadForServer },
           user: { id: currentUser.id, name: currentUser.name, role: currentUser.role }
         }).catch(e => console.warn('Offline report enqueue error', e));
-        toast.warning(`Laporan teknis WO ${ticket.woNumber} tersimpan offline di IndexedDB lokal.`, 'Laporan Offline');
-        return { success: true };
+        setSyncStatus('PENDING_SYNC');
+        toast.warning(`Laporan teknis WO ${ticket.woNumber} tersimpan di antrean offline (PENDING_SYNC). Akan dikirim ke PostgreSQL saat online.`, 'Laporan Offline');
+        return { success: false, pendingSync: true, status: 'PENDING_SYNC', message: 'Tersimpan dalam antrean offline (PENDING_SYNC).' };
       }
+      setSyncStatus('ERROR');
       toast.error('Gagal menghubungi server database: ' + (networkErr?.message || networkErr), 'Koneksi Gagal');
       return { success: false, code: 'NETWORK_ERROR', error: networkErr?.message || 'Gagal menghubungi server.' };
     }

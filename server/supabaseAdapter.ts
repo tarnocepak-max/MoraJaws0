@@ -1,6 +1,6 @@
 import { getSupabaseBackendClient } from './supabaseClient.ts';
 import type { ServerUser } from '../server.ts';
-import type { TechnicalReport } from '../src/types/index.ts';
+import type { TechnicalReport, Ticket } from '../src/types/index.ts';
 
 // ==============================================================================
 // MORAJAWS SUPABASE DATA ACCESS LAYER & HARDENED ADAPTER
@@ -22,6 +22,8 @@ export interface SupabaseOpError {
   isSchemaError?: boolean;
   isDuplicate?: boolean;
   isNotFound?: boolean;
+  isForbidden?: boolean;
+  isInvalidInput?: boolean;
   isUnavailable?: boolean;
 }
 
@@ -71,10 +73,30 @@ export function classifySupabaseError(error: any): SupabaseOpError {
     msg.includes('unique constraint') ||
     msg.includes('already exists');
 
+  const isForbidden =
+    code === '42501' ||
+    code === 'FORBIDDEN_SCOPE' ||
+    msg.includes('forbidden') ||
+    msg.includes('tidak ditugaskan') ||
+    msg.includes('tidak memiliki wewenang') ||
+    msg.includes('permission denied') ||
+    msg.includes('insufficient_privilege');
+
+  const isInvalidInput =
+    code === '22023' ||
+    code === 'INVALID_INPUT' ||
+    code === 'INVALID_REPORT_DATA' ||
+    msg.includes('invalid_input') ||
+    msg.includes('invalid_report_data') ||
+    msg.includes('wajib diisi');
+
   const isNotFound =
     code === 'PGRST116' ||
+    code === 'P0002' ||
+    code === 'WORK_ORDER_NOT_FOUND' ||
     msg.includes('no rows') ||
-    msg.includes('not found');
+    msg.includes('work_order_not_found') ||
+    msg.includes('tidak ditemukan');
 
   const isConnectionError =
     msg.includes('fetch failed') ||
@@ -95,6 +117,8 @@ export function classifySupabaseError(error: any): SupabaseOpError {
     isSchemaError,
     isDuplicate,
     isNotFound,
+    isForbidden,
+    isInvalidInput,
     isUnavailable
   };
 }
@@ -4054,11 +4078,32 @@ export async function submitTechnicalReportAtomic(
       const woRes = await getWorkOrderByIdOrWoNumberFromSupabase(rpcRes.work_order_id || cleanId);
       const repRes = await getTechnicalReportByWorkOrderIdFromSupabase(rpcRes.work_order_id || cleanId);
 
+      const returnedReport: TechnicalReport = repRes.data || {
+        id: rpcRes.report_id || 'rep_' + Date.now(),
+        ticketId: rpcRes.work_order_id || cleanId,
+        woNumber: rpcRes.wo_number || cleanId,
+        mainCategory: reportData.mainCategory || '',
+        rootCause: reportData.rootCause || '',
+        workResult: rpcRes.work_result || reportData.workResult || 'COMPLETED',
+        technicalDescription: reportData.technicalDescription || '',
+        correctiveAction: reportData.correctiveAction || '',
+        submittedBy: user.name,
+        submittedAt: rpcRes.submitted_at || new Date().toISOString()
+      };
+
+      const returnedWo: any = woRes.data || {
+        id: rpcRes.work_order_id || cleanId,
+        woNumber: rpcRes.wo_number || cleanId,
+        statusWOInstaller: rpcRes.status_wo_installer || 'Completed',
+        statusWOAgent: rpcRes.status_wo_agent || 'Resolved',
+        technicalReport: returnedReport
+      };
+
       return {
         success: true,
         data: {
-          report: repRes.data || (reportData as TechnicalReport),
-          workOrder: woRes.data!
+          report: returnedReport,
+          workOrder: returnedWo
         }
       };
     }
