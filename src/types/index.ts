@@ -855,6 +855,8 @@ export interface TextToTableResult {
   parsedRows: ParsedRowData[];
   detectedContractors?: DetectedImportContractor[];
   newCoverageAreas?: string[];
+  sheetNames?: string[];
+  selectedSheetName?: string;
 }
 
 export interface AuditLog {

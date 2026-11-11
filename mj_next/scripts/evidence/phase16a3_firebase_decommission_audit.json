@@ -2,148 +2,112 @@
   "phase": "16A.3",
   "auditType": "static_source_audit_only",
   "productionMutation": false,
-  "checkCount": 23,
-  "passed": 23,
+  "checkCount": 17,
+  "passed": 17,
   "failed": 0,
-  "verdict": "AUDIT_ASSERTIONS_PASS_BUT_FIREBASE_REMOVAL_NOT_READY",
+  "verdict": "PASS",
   "checks": [
     {
-      "id": "firebase_web_dependency_present",
+      "id": "firebase_runtime_imports_removed",
       "pass": true,
       "severity": "BLOCKER",
-      "evidence": "package.json still includes firebase"
+      "evidence": "No Firebase SDK import remains in the production runtime graph."
     },
     {
-      "id": "firebase_admin_dependency_present",
+      "id": "firebase_packages_not_runtime_dependencies",
       "pass": true,
       "severity": "BLOCKER",
-      "evidence": "package.json still includes firebase-admin"
+      "evidence": "Firebase packages are retained only for archival/backup tooling."
     },
     {
-      "id": "firebase_client_initializes_app",
+      "id": "firestore_compat_layer_is_provider_neutral",
       "pass": true,
       "severity": "BLOCKER",
-      "evidence": "src/lib/firebase.ts initializes Firebase App"
+      "evidence": "Legacy firestoreDb filename is now an Express/Supabase compatibility layer."
     },
     {
-      "id": "firestore_data_layer_imports_sdk",
+      "id": "navigation_provider_neutral",
       "pass": true,
       "severity": "BLOCKER",
-      "evidence": "firestoreDb.ts imports Firebase Firestore SDK"
+      "evidence": "Navigation persistence uses Supabase-backed app_settings."
     },
     {
-      "id": "app_context_imports_firestore",
-      "pass": true,
-      "severity": "BLOCKER",
-      "evidence": "AppContext imports Firestore data methods"
-    },
-    {
-      "id": "app_context_has_supabase_production_branch",
-      "pass": true,
-      "severity": "INFO",
-      "evidence": "AppContext has Supabase SSE branch in production"
-    },
-    {
-      "id": "navigation_service_imports_firestore",
-      "pass": true,
-      "severity": "BLOCKER",
-      "evidence": "navigationFirestore.ts imports Firestore SDK"
-    },
-    {
-      "id": "navigation_context_calls_firestore",
-      "pass": true,
-      "severity": "BLOCKER",
-      "evidence": "NavigationContext calls Firestore persistence"
-    },
-    {
-      "id": "ui_context_calls_firestore",
-      "pass": true,
-      "severity": "BLOCKER",
-      "evidence": "UIConfigContext calls Firestore persistence"
-    },
-    {
-      "id": "error_system_writes_firestore",
+      "id": "error_logging_provider_neutral",
       "pass": true,
       "severity": "HIGH",
-      "evidence": "errorSystem.ts writes system errors to Firestore"
+      "evidence": "System error reporting no longer writes to Firestore."
     },
     {
-      "id": "backup_service_has_firebase_token_fallback",
+      "id": "backup_has_no_firebase_token_fallback",
       "pass": true,
       "severity": "HIGH",
-      "evidence": "backupDownloadService.ts retains Firebase ID-token fallback"
+      "evidence": "Backup download uses MoraJaws session credentials only."
     },
     {
-      "id": "server_imports_firebase_admin",
+      "id": "server_has_no_firebase_admin_import",
       "pass": true,
       "severity": "BLOCKER",
-      "evidence": "server.ts imports Firebase Admin"
+      "evidence": "server.ts no longer imports Firebase Admin."
     },
     {
-      "id": "server_has_firebase_auth_compat_route",
+      "id": "server_has_no_firebase_auth_route",
       "pass": true,
       "severity": "HIGH",
-      "evidence": "server.ts contains Firebase login compatibility route"
+      "evidence": "Firebase login route removed."
     },
     {
-      "id": "server_has_supabase_auth_jwt_fallback",
+      "id": "server_has_no_supabase_auth_jwt_fallback",
       "pass": true,
       "severity": "BLOCKER",
-      "evidence": "resolveUserFromHeader accepts Supabase Auth JWT fallback; user requires custom login only"
+      "evidence": "Only MoraJaws internal session tokens are accepted."
     },
     {
       "id": "custom_auth_uses_bcrypt",
       "pass": true,
       "severity": "INFO",
-      "evidence": "customAuthService contains password verification"
+      "evidence": "Custom auth verifies bcrypt/legacy hashes server-side."
     },
     {
       "id": "custom_auth_uses_postgres_tables",
       "pass": true,
       "severity": "INFO",
-      "evidence": "customAuthService persists custom sessions/tokens/attempts"
+      "evidence": "Custom auth persists sessions, refresh tokens and login attempts in PostgreSQL."
     },
     {
       "id": "supabase_backend_requires_server_secret",
       "pass": true,
       "severity": "INFO",
-      "evidence": "Supabase backend client requires server secret key"
+      "evidence": "Supabase backend client requires a server secret."
     },
     {
-      "id": "supabase_storage_private_bucket_target",
+      "id": "supabase_storage_target_present",
       "pass": true,
       "severity": "INFO",
-      "evidence": "Supabase Storage target bucket is defined in server storage service"
+      "evidence": "Supabase Storage remains the application storage target."
     },
     {
-      "id": "firebase_storage_legacy_support_present",
+      "id": "google_sheets_service_no_firebase",
       "pass": true,
       "severity": "HIGH",
-      "evidence": "Legacy Firebase Storage provider compatibility remains"
-    },
-    {
-      "id": "google_sheets_service_present",
-      "pass": true,
-      "severity": "HIGH",
-      "evidence": "Google Sheets service still exists and is coupled to Firebase Auth"
+      "evidence": "Google Sheets OAuth uses Google Identity Services directly."
     },
     {
       "id": "google_sheets_ui_present",
       "pass": true,
-      "severity": "HIGH",
-      "evidence": "Google Sheets UI imports Firebase-coupled service"
+      "severity": "INFO",
+      "evidence": "Google Sheets feature remains available."
     },
     {
-      "id": "firebase_project_config_present",
+      "id": "legacy_firebase_config_archived_only",
       "pass": true,
-      "severity": "HIGH",
-      "evidence": "Firebase app config remains in repository"
+      "severity": "INFO",
+      "evidence": "Legacy Firebase config remains for archival/backup tooling and is not imported by runtime code."
     },
     {
       "id": "custom_login_endpoint_is_primary",
       "pass": true,
       "severity": "INFO",
-      "evidence": "AppContext calls internal login endpoint and server imports customAuthService"
+      "evidence": "Frontend and backend use MoraJaws internal authentication."
     }
   ]
 }

@@ -150,7 +150,7 @@ interface AppContextType {
   // User Management (Super Admin Exclusive)
   registerDispatchAccount: (data: { name: string; username: string; phone?: string; email?: string }) => { success: boolean; user?: User; error?: string };
   registerLeaderAccount: (data: { name: string; username: string; phone?: string; contractor: string; area: string; email?: string }) => { success: boolean; user?: User; error?: string };
-  registerInstallerAccount: (data: { name: string; username: string; phone: string; email?: string }) => { success: boolean; user?: User; error?: string };
+  registerInstallerAccount: (data: { name: string; username: string; phone: string; email?: string }) => Promise<{ success: boolean; user?: User; error?: string; temporaryPassword?: string }>;
   toggleUserStatus: (userId: string) => { success: boolean; error?: string };
   resetUserPassword: (userId: string) => { success: boolean; newPassword?: string; error?: string };
   deleteUser: (userId: string, reason: string, permanent?: boolean) => { success: boolean; error?: string };
@@ -224,8 +224,24 @@ interface AppContextType {
   deleteCustomerData: (customerId: string, reason: string) => { success: boolean; error?: string };
   bulkImportTickets: (
     imported: Partial<Ticket>[],
-    options?: { duplicatePolicy?: 'skip' | 'update_allowed' | 'review' }
-  ) => { importedCount: number; updatedCount?: number; duplicatesIgnored: number; rejectedDuplicates?: string[] };
+    options?: {
+      duplicatePolicy?: 'skip' | 'update_allowed' | 'review';
+      fileName?: string;
+      sheetName?: string;
+    }
+  ) => Promise<{
+    success: boolean;
+    importId?: string;
+    status?: string;
+    importedCount: number;
+    updatedCount: number;
+    duplicatesIgnored: number;
+    failedCount: number;
+    rejectedDuplicates?: string[];
+    error?: string;
+    summary?: any;
+  }>;
+  refreshTicketsFromServer: () => Promise<Ticket[] | null>;
   deleteImportedTicketsByDate: (importDate: string, reason: string) => { success: boolean; count: number; error?: string };
 
   // Live Chat
@@ -412,8 +428,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (sessionStr) {
         const sess = JSON.parse(sessionStr);
         if (sess.token) headers['Authorization'] = `Bearer ${sess.token}`;
-        if (sess.userId) headers['x-user-id'] = sess.userId;
-        if (sess.username) headers['x-username'] = sess.username;
       }
     } catch (e) {}
     return headers;
@@ -429,21 +443,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
 
-  const [users, setUsers] = useState<User[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.USERS);
-      if (saved) {
-        const parsed: User[] = JSON.parse(saved);
-        DEFAULT_USERS.forEach(defU => {
-          if (!parsed.some(u => u.id === defU.id || u.username.toLowerCase() === defU.username.toLowerCase())) {
-            parsed.push(defU);
-          }
-        });
-        return parsed;
-      }
-    } catch (e) {}
-    return DEFAULT_USERS;
-  });
+  // Operational data is loaded from the authenticated backend/Supabase only.
+  const [users, setUsers] = useState<User[]>([]);
 
   const [currentUser, setCurrentUser] = useState<User>(() => {
     try {
@@ -473,223 +474,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return UNAUTHENTICATED_USER;
   });
 
-  const [contractors, setContractors] = useState<Contractor[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.CONTRACTORS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return deduplicateContractors(parsed);
-        }
-      }
-    } catch (e) {}
-    return deduplicateContractors(DEFAULT_CONTRACTORS);
-  });
+  const [contractors, setContractors] = useState<Contractor[]>([]);
 
-  const [coverageAreas, setCoverageAreas] = useState<CoverageArea[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.COVERAGE_AREAS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return DEFAULT_COVERAGE_AREAS;
-  });
+  const [coverageAreas, setCoverageAreas] = useState<CoverageArea[]>([]);
 
-  const [rootCauseCategories, setRootCauseCategories] = useState<RootCauseCategory[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.ROOT_CAUSES);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return DEFAULT_ROOT_CAUSE_CATEGORIES;
-  });
+  const [rootCauseCategories, setRootCauseCategories] = useState<RootCauseCategory[]>([]);
 
   const workResultsList = DEFAULT_WORK_RESULTS;
 
-  const [tickets, setTickets] = useState<Ticket[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.TICKETS);
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.warn('Failed loading tickets from storage', e);
-    }
-    return [];
-  });
+  const [tickets, setTickets] = useState<Ticket[]>([]);
 
-  const [ticketMessages, setTicketMessages] = useState<TicketMessage[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.MESSAGES);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [];
-  });
+  const [ticketMessages, setTicketMessages] = useState<TicketMessage[]>([]);
 
-  const [templates, setTemplates] = useState<WhatsAppTemplate[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.TEMPLATES);
-      if (saved) {
-        const parsed: WhatsAppTemplate[] = JSON.parse(saved);
-        const existingIds = new Set(parsed.map(t => t.id));
-        const missing = DEFAULT_WHATSAPP_TEMPLATES.filter(t => !existingIds.has(t.id));
-        return missing.length > 0 ? [...parsed, ...missing] : parsed;
-      }
-    } catch (e) {}
-    return DEFAULT_WHATSAPP_TEMPLATES;
-  });
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
 
-  const [workflowRules, setWorkflowRules] = useState<WorkflowRule[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.WORKFLOWS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return DEFAULT_WORKFLOW_RULES;
-  });
+  const [workflowRules, setWorkflowRules] = useState<WorkflowRule[]>([]);
 
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.AUDIT);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [
-      {
-        id: 'audit-1',
-        action: 'MoraJaws System Initialized',
-        entity: 'auth',
-        entityId: 'sys-0',
-        details: 'MoraJaws operational with Contractors, Wi-Fi Root Cause Catalog, and Live Chat Engine',
-        performedBy: 'System',
-        userRole: 'super_admin',
-        timestamp: new Date().toISOString()
-      }
-    ];
-  });
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   const [ticketActivities, setTicketActivities] = useState<TicketActivity[]>([]);
 
-  const [waLogs, setWaLogs] = useState<WhatsAppMessageLog[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.WA_LOGS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [];
-  });
+  const [waLogs, setWaLogs] = useState<WhatsAppMessageLog[]>([]);
 
-  const [headerMappings, setHeaderMappings] = useState<HeaderMapping[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.MAPPINGS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return STANDARD_HEADER_MAPPINGS;
-  });
+  const [headerMappings, setHeaderMappings] = useState<HeaderMapping[]>(STANDARD_HEADER_MAPPINGS);
 
-  const [reportDropdownCategories, setReportDropdownCategories] = useState<ReportDropdownCategory[]>(() => {
-    try {
-      const saved = localStorage.getItem('morajaws_report_dropdown_categories');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_REPORT_DROPDOWN_CATEGORIES;
-  });
+  const [reportDropdownCategories, setReportDropdownCategories] = useState<ReportDropdownCategory[]>([]);
 
   const [isDropdownCategoriesLoading, setIsDropdownCategoriesLoading] = useState(true);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('morajaws_report_dropdown_categories', JSON.stringify(reportDropdownCategories));
-    } catch (e) {}
-  }, [reportDropdownCategories]);
-
   // Contact Center Chat Categories state
-  const [chatCategories, setChatCategories] = useState<ChatCategoryConfig[]>(() => {
-    try {
-      const saved = localStorage.getItem('morajaws_chat_categories');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_CHAT_CATEGORIES;
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('morajaws_chat_categories', JSON.stringify(chatCategories));
-    } catch (e) {}
-  }, [chatCategories]);
+  const [chatCategories, setChatCategories] = useState<ChatCategoryConfig[]>([]);
 
   // Hierarchical Droplists (Status -> Reason -> Remarks) state
-  const [hierarchicalStatuses, setHierarchicalStatuses] = useState<HierarchicalStatus[]>(() => {
-    try {
-      const saved = localStorage.getItem('morajaws_hierarchical_droplists');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_HIERARCHICAL_DROPLISTS;
-  });
+  const [hierarchicalStatuses, setHierarchicalStatuses] = useState<HierarchicalStatus[]>([]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('morajaws_hierarchical_droplists', JSON.stringify(hierarchicalStatuses));
-    } catch (e) {}
-  }, [hierarchicalStatuses]);
+  const [canonicalFields, setCanonicalFields] = useState<CanonicalFieldConfig[]>(MASTER_CANONICAL_FIELDS);
 
-  const [canonicalFields, setCanonicalFields] = useState<CanonicalFieldConfig[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.CANONICAL_FIELDS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return MASTER_CANONICAL_FIELDS;
-  });
-
-  // Persistent storage sync
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CANONICAL_FIELDS, JSON.stringify(canonicalFields));
-  }, [canonicalFields]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-  }, [users]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CONTRACTORS, JSON.stringify(contractors));
-  }, [contractors]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.COVERAGE_AREAS, JSON.stringify(coverageAreas));
-  }, [coverageAreas]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ROOT_CAUSES, JSON.stringify(rootCauseCategories));
-  }, [rootCauseCategories]);
-
-  // Persistent storage sync (localStorage & IndexedDB offline cache)
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TICKETS, JSON.stringify(tickets));
-    saveTicketsOffline(tickets).catch(e => console.warn('Failed saving tickets to IndexedDB', e));
-  }, [tickets]);
-
-  // Mirror master data catalogs into IndexedDB for offline access
-  useEffect(() => {
-    cacheMasterData({
-      contractors,
-      users,
-      coverageAreas,
-      rootCauses: rootCauseCategories
-    }).catch(e => console.warn('Failed caching master data to IndexedDB', e));
-  }, [contractors, users, coverageAreas, rootCauseCategories]);
-
-  // Load offline tickets from IndexedDB on startup if available
-  useEffect(() => {
-    async function loadFromIndexedDb() {
-      try {
-        const offlineList = await getOfflineTickets();
-        if (offlineList && offlineList.length > 0) {
-          setTickets(prev => {
-            const existingMap = new Map(prev.map(t => [t.id, t]));
-            offlineList.forEach(t => existingMap.set(t.id, t));
-            return Array.from(existingMap.values());
-          });
-        }
-      } catch (e) {
-        console.warn('Failed loading offline tickets from IndexedDB', e);
-      }
-    }
-    loadFromIndexedDb();
-  }, []);
+  // Operational data is not persisted to browser storage; Supabase is authoritative.
 
   // Cloud Firestore Real-Time Subscriptions & Master Sync
   useEffect(() => {
@@ -1178,26 +999,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, [registerAppSyncHandler]);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(ticketMessages));
-  }, [ticketMessages]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TEMPLATES, JSON.stringify(templates));
-  }, [templates]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.WORKFLOWS, JSON.stringify(workflowRules));
-  }, [workflowRules]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.AUDIT, JSON.stringify(auditLogs));
-  }, [auditLogs]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.WA_LOGS, JSON.stringify(waLogs));
-  }, [waLogs]);
-
   const [googleSheetsConfig, setGoogleSheetsConfig] = useState<GoogleSheetsConfig>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.SHEETS_CONFIG);
@@ -1254,19 +1055,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
 
   // Operational schedule reference date (Asia/Jakarta WIB)
-  const [operationalDate, setOperationalDateState] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('morajaws_operational_date');
-      if (saved) return saved;
-    } catch (e) {}
-    return getJakartaDateString(0);
-  });
+  const [operationalDate, setOperationalDateState] = useState<string>(() => getJakartaDateString(0));
 
   const setOperationalDate = (date: string) => {
     setOperationalDateState(date);
-    try {
-      localStorage.setItem('morajaws_operational_date', date);
-    } catch (e) {}
     saveGlobalAppSettingsToFirestore({ operationalDate: date }).catch(() => {});
     fetch('/api/system/operational-date', {
       method: 'POST',
@@ -1284,7 +1076,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(data => {
         if (data && data.success && data.operationalDate) {
           setOperationalDateState(data.operationalDate);
-          localStorage.setItem('morajaws_operational_date', data.operationalDate);
         }
       })
       .catch(() => {});
@@ -1463,7 +1254,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const hasPermission = (permission: Permission) => checkPermission(currentUser.role, permission);
-  const canDelete = currentUser.role === 'super_admin';
+  const canDelete = currentUser.role === 'management_data' && checkPermission(currentUser.role, 'delete_wo_data');
   const canImport = currentUser.role === 'super_admin' || currentUser.role === 'dispatch' || currentUser.role === 'management_data';
   const canEditWOData = currentUser.role === 'super_admin' || currentUser.role === 'dispatch' || currentUser.role === 'management_data';
 
@@ -1918,67 +1709,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, user: newUser };
   };
 
-  const registerInstallerAccount = (data: { name: string; username: string; phone: string; email?: string }) => {
-    // Installer account creation is exclusively reserved for Leader / Korlap.
+  const registerInstallerAccount = async (data: { name: string; username: string; phone: string; email?: string }): Promise<{ success: boolean; user?: User; error?: string; temporaryPassword?: string }> => {
     if (currentUser.role !== 'leader') {
-      const err = 'Hanya Leader / Korlap yang berwenang mendaftarkan akun Installer.';
-      toast.error(err, 'Akses Ditolak');
-      return { success: false, error: err };
-    }
-    if (!String(currentUser.contractor || '').trim() || !String(currentUser.area || '').trim()) {
-      const err = 'Akun Leader belum memiliki kontraktor dan area kerja. Hubungi administrator untuk memperbaiki cakupan akun.';
+      const err = 'Akses Ditolak: Hanya Leader yang berwenang mendaftarkan akun Installer untuk mitra kontraktor terkait.';
+      addAuditLog('Unauthorized Staff Registration Blocked', 'auth', 'installer', `Ditolak: User ${currentUser.name} (${currentUser.role}) mencoba mendaftarkan akun Installer.`);
       toast.error(err, 'Akses Ditolak');
       return { success: false, error: err };
     }
 
-    const cleanName = data.name.trim().replace(/\s+/g, ' ');
-    const cleanUsername = data.username.trim().toLowerCase().replace(/\s+/g, '');
-    if (!cleanName || !cleanUsername) {
-      return { success: false, error: 'Nama lengkap dan username login wajib diisi.' };
-    }
-
-    // Check uniqueness of both name and username across all registered users
-    const isNameTaken = users.some(u => !u.isDeleted && u.name.trim().replace(/\s+/g, ' ').toLowerCase() === cleanName.toLowerCase());
-    const isUsernameTaken = users.some(u => !u.isDeleted && u.username.trim().toLowerCase() === cleanUsername);
-
-    if (isNameTaken || isUsernameTaken) {
-      const err = 'AKUN SUDAH TERDAFTAR – Nama atau username sudah digunakan.';
-      toast.error(err, 'Registrasi Ditolak');
+    const leaderContractor = String(currentUser.contractor || '').trim();
+    if (!leaderContractor) {
+      const err = 'Akses Ditolak: Akun Leader tidak memiliki asosiasi mitra kontraktor yang valid.';
+      toast.error(err, 'Validasi Gagal');
       return { success: false, error: err };
     }
 
-    // Contractor and Area strictly locked to Leader's authorized scope
-    const contractorName = String(currentUser.contractor || '').trim();
-    const contractorObj = contractors.find(c => c.name.trim().toLowerCase() === contractorName.toLowerCase());
-    const assignedArea = String(currentUser.area || contractorObj?.coverageAreas[0] || '').trim();
+    if (!data.name?.trim() || !data.username?.trim() || !data.phone?.trim()) {
+      const err = 'Nama, username, dan nomor telepon wajib diisi.';
+      toast.error(err, 'Validasi Gagal');
+      return { success: false, error: err };
+    }
 
+    const cleanUsername = data.username.trim().toLowerCase();
+    const existing = users.find(u => u.username?.toLowerCase() === cleanUsername);
+    if (existing) {
+      const err = `Username "${data.username}" sudah digunakan.`;
+      toast.error(err, 'Validasi Gagal');
+      return { success: false, error: err };
+    }
+
+    const temporaryPassword = Math.random().toString(36).slice(-8) + 'A1!';
     const newUser: User = {
-      id: 'u-' + Date.now(),
-      name: cleanName,
+      id: 'usr-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      name: data.name.trim(),
       username: cleanUsername,
       email: data.email?.trim() || `${cleanUsername}@installer.morajaws.net`,
       phone: data.phone.trim(),
       role: 'installer',
-      contractor: contractorName,
-      contractorId: contractorObj?.id,
-      area: assignedArea,
+      contractor: leaderContractor,
+      contractorId: currentUser.contractorId,
+      area: currentUser.area || '',
       active: true,
       mustChangePassword: true,
       createdAt: new Date().toISOString()
     };
 
     setUsers(prev => [...prev, newUser]);
-    saveUserToFirestore(newUser).catch(e => console.warn('[Firestore] Error saving installer user:', e));
-    addAuditLog('Installer Account Registered', 'auth', newUser.id, `${currentUser.name} registered Installer: ${newUser.name} under ${contractorName} (${assignedArea})`);
+    addAuditLog('Installer Account Registered', 'auth', newUser.id, `Leader ${currentUser.name} mendaftarkan akun Installer: ${newUser.name} untuk kontraktor ${leaderContractor}`);
 
-    fetch('/api/users', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(newUser)
-    }).catch(e => console.error('Error syncing installer account to server:', e));
+    try {
+      await fetch('/api/users', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ ...newUser, password: temporaryPassword })
+      });
+    } catch (e) {
+      console.error('Error syncing installer user to server:', e);
+    }
 
-    toast.success('BERHASIL – Akun Installer berhasil dibuat.', 'Registrasi Sukses');
-    return { success: true, user: newUser };
+    toast.success(`Akun Installer ${newUser.name} berhasil didaftarkan untuk kontraktor ${leaderContractor}! Password sementara: ${temporaryPassword}`, 'Registrasi Sukses');
+    return { success: true, user: newUser, temporaryPassword };
   };
 
   const toggleUserStatus = (userId: string): { success: boolean; error?: string } => {
@@ -4043,311 +3833,174 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  const bulkImportTickets = (
+  const refreshTicketsFromServer = async (): Promise<Ticket[] | null> => {
+    try {
+      const headers = getAuthHeaders();
+      const res = await fetch('/api/work-orders', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success && Array.isArray(data.workOrders)) {
+          setTickets(data.workOrders);
+          setSyncStatus('SAVED');
+          setLastSyncTime(new Date().toISOString());
+          return data.workOrders;
+        }
+      }
+    } catch (err) {
+      console.warn('[AppContext] Gagal menyegarkan data WO dari server:', err);
+    }
+    return null;
+  };
+
+  const bulkImportTickets = async (
     imported: Partial<Ticket>[],
-    options?: { duplicatePolicy?: 'skip' | 'update_allowed' | 'review' }
-  ) => {
+    options?: {
+      duplicatePolicy?: 'skip' | 'update_allowed' | 'review';
+      fileName?: string;
+      sheetName?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    importId?: string;
+    status?: string;
+    importedCount: number;
+    updatedCount: number;
+    duplicatesIgnored: number;
+    failedCount: number;
+    rejectedDuplicates?: string[];
+    error?: string;
+    summary?: any;
+  }> => {
     // Strict RBAC: Leader and Installer MUST be rejected
-    if (currentUser.role !== 'super_admin' && currentUser.role !== 'dispatch') {
-      addAuditLog('Unauthorized Import Blocked', 'import_batch', 'import-denied', `Akses import ditolak untuk peran ${currentUser.role}`);
-      toast.error('Akses Ditolak: Hanya Super Admin atau Dispatch yang berwenang import tiket.', 'Akses Ditolak');
-      return { importedCount: 0, updatedCount: 0, duplicatesIgnored: 0 };
+    if (currentUser.role !== 'super_admin' && currentUser.role !== 'dispatch' && currentUser.role !== 'management_data') {
+      const deniedMsg = `Akses Ditolak: Peran ${currentUser.role} tidak berwenang melakukan import Work Order.`;
+      addAuditLog('Unauthorized Import Blocked', 'import_batch', 'import-denied', deniedMsg);
+      toast.error(deniedMsg, 'Akses Ditolak');
+      return {
+        success: false,
+        importedCount: 0,
+        updatedCount: 0,
+        duplicatesIgnored: 0,
+        failedCount: imported.length,
+        error: deniedMsg
+      };
+    }
+
+    if (!Array.isArray(imported) || imported.length === 0) {
+      return {
+        success: false,
+        importedCount: 0,
+        updatedCount: 0,
+        duplicatesIgnored: 0,
+        failedCount: 0,
+        error: 'Tidak ada baris data tiket yang diberikan.'
+      };
     }
 
     const policy = options?.duplicatePolicy || 'skip';
-    let importedCount = 0;
-    let updatedCount = 0;
-    let duplicatesIgnored = 0;
-    const existingWos = new Set(tickets.map(t => t.woNumber.toUpperCase().trim()));
+    const importId = `WOIMP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    const idempotencyKey = `IDEM-${importId}`;
+    const fileName = options?.fileName || 'Imported_Data.xlsx';
+    const sheetName = options?.sheetName || 'Data_WO';
 
-    // Automatic Contractor & Coverage Area Registration from Import Results
-    const { newContractors, updatedContractors, newCoverageAreas: extractedNewAreas } = extractContractorsFromTickets(
-      imported,
-      contractors,
-      coverageAreas
-    );
+    setSyncStatus('SYNCING');
 
-    let activeContractors = [...contractors];
-    if (newContractors.length > 0 || updatedContractors.length > 0) {
-      setContractors(prev => {
-        let updated = [...prev];
-        updatedContractors.forEach(up => {
-          const idx = updated.findIndex(c => c.id === up.id);
-          if (idx >= 0) updated[idx] = up;
-        });
-        newContractors.forEach(nc => {
-          if (!updated.some(c => c.id === nc.id || c.name.toLowerCase().trim() === nc.name.toLowerCase().trim())) {
-            updated.push(nc);
-          }
-        });
-        return updated;
-      });
-
-      updatedContractors.forEach(up => {
-        const idx = activeContractors.findIndex(c => c.id === up.id);
-        if (idx >= 0) activeContractors[idx] = up;
-      });
-      newContractors.forEach(nc => {
-        if (!activeContractors.some(c => c.id === nc.id || c.name.toLowerCase().trim() === nc.name.toLowerCase().trim())) {
-          activeContractors.push(nc);
-        }
-      });
-      if (newContractors.length > 0) {
-        addAuditLog(
-          'Contractors Auto-Registered',
-          'ui_config',
-          'import_contractors',
-          `${newContractors.length} Kategori Kontraktor baru terdaftar otomatis dari hasil import/text converter: ${newContractors.map(c => `${c.name} [${c.code}]`).join(', ')}`
-        );
-      }
-    }
-
-    let activeCoverageAreas = [...coverageAreas];
-    if (extractedNewAreas.length > 0) {
-      setCoverageAreas(prev => {
-        const merged = [...prev];
-        extractedNewAreas.forEach(na => {
-          if (!merged.some(a => a.name.toLowerCase().trim() === na.name.toLowerCase().trim())) {
-            merged.push(na);
-          }
-        });
-        return merged;
-      });
-      extractedNewAreas.forEach(na => {
-        if (!activeCoverageAreas.some(a => a.name.toLowerCase().trim() === na.name.toLowerCase().trim())) {
-          activeCoverageAreas.push(na);
-        }
-      });
-      addAuditLog(
-        'Coverage Areas Auto-Registered',
-        'ui_config',
-        'import_areas',
-        `${extractedNewAreas.length} Cakupan Area baru terdaftar dari hasil import: ${extractedNewAreas.map(a => a.name).join(', ')}`
-      );
-    }
-
-    const newItems: Ticket[] = [];
-    const updatedTicketsMap = new Map<string, Partial<Ticket>>();
-    const importTimestamp = new Date().toISOString();
-    const importDateStr = importTimestamp.split('T')[0];
-    const batchId = 'batch_' + Date.now();
-    const rejectedDuplicates: string[] = [];
-    const batchAcceptedWos = new Set<string>();
-
-    imported.forEach(item => {
-      const woNum = (item.woNumber || item.workOrderNumber || '').trim();
-      const upperWo = woNum.toUpperCase();
-
-      // Check for empty or invalid WO
-      if (!woNum) {
-        duplicatesIgnored++;
-        return;
-      }
-
-      // Check duplicate within the incoming import batch
-      if (batchAcceptedWos.has(upperWo)) {
-        duplicatesIgnored++;
-        if (!rejectedDuplicates.includes(woNum)) {
-          rejectedDuplicates.push(woNum);
-        }
-        return;
-      }
-
-      // Check duplicate against existing database
-      if (existingWos.has(upperWo)) {
-        if (policy === 'update_allowed') {
-          // Update allowed fields on existing ticket without overwriting existing technician or technical reports
-          const updates: Partial<Ticket> = {};
-          if (item.appointmentDate) updates.appointmentDate = item.appointmentDate;
-          if (item.slotTime) updates.slotTime = item.slotTime;
-          if (item.remarksAgent) updates.remarksAgent = item.remarksAgent;
-          if (item.ticketCategory) updates.ticketCategory = item.ticketCategory;
-          if (item.customerPhone) updates.customerPhone = item.customerPhone;
-          updates.updatedAt = importTimestamp;
-          updates.updatedBy = currentUser.name;
-
-          updatedTicketsMap.set(upperWo, updates);
-          updatedCount++;
-          batchAcceptedWos.add(upperWo);
-          return;
-        } else {
-          // Skip / Reject policy
-          duplicatesIgnored++;
-          if (!rejectedDuplicates.includes(woNum)) {
-            rejectedDuplicates.push(woNum);
-          }
-          return;
-        }
-      }
-
-      batchAcceptedWos.add(upperWo);
-
-      // Run central WODistributionEngine with dynamically recognized contractors
-      const { ticket: distributed, status: distStatus, reason: distReason } = runWODistributionEngine(
-        item,
-        activeContractors,
-        activeCoverageAreas,
-        currentUser.role
-      );
-
-      // Customer ID validation (exact 7 digits)
-      const rawCustId = (distributed.idCustomer || distributed.customerId || '').trim();
-      const custDigits = rawCustId.replace(/\D/g, '');
-      const validCustId = custDigits.length === 7 ? custDigits : (rawCustId || '');
-
-      const ticket: Ticket = {
-        id: getDeterministicTicketId(woNum),
-        woNumber: woNum,
-        workOrderNumber: woNum,
-        idCustomer: validCustId,
-        customerId: validCustId,
-        ticketNumber: distributed.ticketNumber,
-        ticketDate: distributed.ticketDate,
-        date: distributed.date || importDateStr,
-        dateUpload: distributed.dateUpload || new Date().toISOString().replace('T', ' ').substring(0, 16),
-        fileName: distributed.fileName || 'Imported_Data.xlsx',
-        agentId: distributed.agentId || currentUser.username,
-        customerName: distributed.customerName || distributed.endUserName || '-',
-        endUserName: distributed.customerName || distributed.endUserName || '-',
-        customerPhone: distributed.customerPhone || '',
-        customerContact1: distributed.customerPhone || '',
-        customerPhoneNormalized: distributed.customerPhoneNormalized,
-        customerContact2: distributed.customerContact2,
-        customerContact3: distributed.customerContact3,
-        appointmentDate: distributed.appointmentDate || '',
-        appointmentType: distributed.appointmentType,
-        dateAssignAgent: distributed.dateAssignAgent,
-        dateAssignTechnician: distributed.dateAssignTechnician,
-        streetName: distributed.streetName || '',
-        streetAlternatif: distributed.streetAlternatif || '',
-        clusterName: distributed.clusterName || '',
-        area: distributed.area || '',
-        fdtCode: distributed.fdtCode,
-        fatCode: distributed.fatCode,
-        oltCode: distributed.oltCode,
-        installationType: distributed.installationType,
-        serviceType: distributed.serviceType,
-        homepassType: distributed.homepassType,
-        homepassDetailId: distributed.homepassDetailId,
-        plan: distributed.plan,
-        serviceAgingMaintenance: distributed.serviceAgingMaintenance,
-        vendorName: distributed.vendorName,
-        router: distributed.router,
-        stb1Sn: distributed.stb1Sn,
-        stb1Mac: distributed.stb1Mac,
-        stb2Sn: distributed.stb2Sn,
-        stb2Mac: distributed.stb2Mac,
-        stb3Sn: distributed.stb3Sn,
-        stb3Mac: distributed.stb3Mac,
-        ontSerialNumber: distributed.ontSerialNumber,
-        ontMacAddress: distributed.ontMacAddress,
-        rgSerialNumber: distributed.rgSerialNumber,
-        rgMacAddress: distributed.rgMacAddress,
-        slotTime: distributed.slotTime || '',
-        ticketCategory: distributed.ticketCategory || distributed.initialTicketCategory || 'New Installation FTTH',
-        initialTicketCategory: distributed.ticketCategory || distributed.initialTicketCategory || 'New Installation FTTH',
-        contactorName: distributed.contactorName || distributed.contractorName || '',
-        contractorName: distributed.contactorName || distributed.contractorName || '',
-        contractorId: distributed.contractorId,
-        leaderName: distributed.leaderName || distributed.corlapName,
-        corlapName: distributed.corlapName || distributed.leaderName,
-        corlapContact: distributed.corlapContact,
-        installerName: distributed.installerName,
-        installerContact: distributed.installerContact,
-        installerContact2: distributed.installerContact2,
-        distributionStatus: distStatus,
-        distributionNotes: distReason,
-        statusWOAgent: distributed.statusWOAgent || 'Pending',
-        statusWOInstaller: distributed.statusWOInstaller || (distributed.installerName ? 'Assigned' : 'Unassigned'),
-        statusWhatsApp: distributed.statusWhatsApp || 'not_prepared',
-        remarksWOInstaller: distributed.remarksWOInstaller,
-        remarksAgent: distributed.remarksAgent,
-        isArchived: false,
-        importedAt: importTimestamp,
-        importDate: importDateStr,
-        importBatchId: batchId,
-        createdAt: importTimestamp,
-        updatedAt: importTimestamp,
-        updatedBy: currentUser.name,
-        unmappedHeaders: distributed.unmappedHeaders || [],
-        additionalFields: distributed.additionalFields || {}
-      };
-
-      const res = executeWorkflowsOnTicket(ticket, 'ticket_imported', workflowRules, templates, currentUser.name, currentUser.role);
-      newItems.push(res.ticket);
-      existingWos.add(upperWo);
-      importedCount++;
-    });
-
-    // Apply updates and additions to database
-    setTickets(prev => {
-      let result = prev;
-      if (updatedTicketsMap.size > 0) {
-        result = result.map(t => {
-          const upper = (t.woNumber || '').toUpperCase().trim();
-          if (updatedTicketsMap.has(upper)) {
-            return { ...t, ...updatedTicketsMap.get(upper)! };
-          }
-          return t;
-        });
-      }
-      return deduplicateTicketsInMemory([...newItems, ...result]);
-    });
-
-    // Persist imported and updated tickets to Cloud Firestore (Confirmed Write)
-    const itemsToSave = [...newItems];
-    if (updatedTicketsMap.size > 0) {
-      updatedTicketsMap.forEach((updates, upperWo) => {
-        const found = tickets.find(t => (t.woNumber || '').toUpperCase().trim() === upperWo);
-        if (found) {
-          itemsToSave.push({ ...found, ...updates });
-        }
-      });
-    }
-
-    if (itemsToSave.length > 0) {
-      setSyncStatus('SYNCING');
-      batchSaveTicketsToFirestore(itemsToSave)
-        .then(({ saved }) => {
-          setSyncStatus('SAVED');
-          setLastSyncTime(new Date().toISOString());
-          toast.success(
-            `Berhasil menyimpan ${saved} tiket ke Cloud Firestore${updatedCount > 0 ? ` (${newItems.length} baru, ${updatedCount} diperbarui)` : ''}.${duplicatesIgnored > 0 ? ` (${duplicatesIgnored} nomor WO duplikat ditolak)` : ''}`,
-            'Import Selesai'
-          );
-        })
-        .catch(err => {
-          setSyncStatus('ERROR');
-          toast.error('Gagal menyimpan import tiket ke Cloud Firestore: ' + (err?.message || err), 'Import Gagal');
-        });
-    } else if (duplicatesIgnored > 0) {
-      toast.error(`Semua (${duplicatesIgnored}) nomor WO ditolak karena nomor WO sudah terdaftar dalam sistem.`, 'Nomor WO Duplikat Ditolak');
-    }
-
-    // Persist imported tickets to central backend database
-    if (newItems.length > 0) {
-      fetch('/api/tickets/bulk-import', {
+    try {
+      // Send directly to the canonical backend import endpoint (Supabase Single Source of Truth)
+      const res = await fetch('/api/supabase/work-orders/import', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify({
-          tickets: newItems,
-          options: { duplicatePolicy: policy }
+          tickets: imported,
+          importId,
+          idempotencyKey,
+          fileName,
+          sheetName,
+          options: {
+            duplicatePolicy: policy,
+            autoRegisterContractors: true
+          }
         })
-      }).catch(e => console.error('Error syncing imported tickets to server:', e));
-    }
+      });
 
-    addAuditLog('Bulk Import Completed', 'import_batch', batchId, `Imported ${importedCount} tiket baru, diperbarui ${updatedCount} tiket. Ditolak ${duplicatesIgnored} nomor WO duplikat.`);
+      const payload = await res.json().catch(() => null);
 
-    if (duplicatesIgnored > 0) {
-      addAuditLog(
-        'Duplicate WOs Rejected on Import',
-        'import_batch',
-        batchId,
-        `Ditolak ${duplicatesIgnored} nomor WO karena nomor WO sudah terdaftar di sistem: ${rejectedDuplicates.slice(0, 10).join(', ')}${rejectedDuplicates.length > 10 ? ` (+${rejectedDuplicates.length - 10} lainnya)` : ''}`
+      if (!res.ok || !payload || payload.success === false) {
+        setSyncStatus('ERROR');
+        const errorMsg = payload?.error?.message || payload?.error || `Gagal melakukan import (HTTP ${res.status}). Data belum tersimpan.`;
+        toast.error(`Import gagal: ${errorMsg} (Import ID: ${importId})`, 'Import Ditolak');
+        addAuditLog(
+          'WO_IMPORT_FAILED',
+          'import_batch',
+          importId,
+          `Import gagal untuk file ${fileName}: ${errorMsg}`
+        );
+        return {
+          success: false,
+          importId,
+          status: 'FAILED',
+          importedCount: 0,
+          updatedCount: 0,
+          duplicatesIgnored: payload?.summary?.duplicate || 0,
+          failedCount: payload?.summary?.failed || imported.length,
+          error: errorMsg,
+          summary: payload?.summary
+        };
+      }
+
+      // Backend confirmed persistence in Supabase!
+      // Immediately refresh authoritative tickets from the server
+      await refreshTicketsFromServer();
+
+      const summary = payload.summary || {};
+      const inserted = summary.inserted || 0;
+      const updated = summary.updated || 0;
+      const duplicates = summary.duplicate || 0;
+      const failed = summary.failed || 0;
+
+      setSyncStatus('SAVED');
+      setLastSyncTime(new Date().toISOString());
+
+      toast.success(
+        `Import selesai (ID: ${importId}): ${inserted} WO berhasil disimpan ke Supabase${updated > 0 ? `, ${updated} diperbarui` : ''}.${duplicates > 0 ? ` (${duplicates} duplikat diabaikan)` : ''}`,
+        'Import Berhasil'
       );
-    }
 
-    return { importedCount, updatedCount, duplicatesIgnored, rejectedDuplicates };
+      addAuditLog(
+        'WO_IMPORT_SUCCESS',
+        'import_batch',
+        importId,
+        `Berhasil mengimpor ${inserted} WO baru, ${updated} diperbarui, ${duplicates} duplikat dari berkas ${fileName}. Status: ${payload.status || 'SUCCESS'}`
+      );
+
+      return {
+        success: true,
+        importId,
+        status: payload.status || 'SUCCESS',
+        importedCount: inserted,
+        updatedCount: updated,
+        duplicatesIgnored: duplicates,
+        failedCount: failed,
+        summary
+      };
+    } catch (networkErr: any) {
+      setSyncStatus('ERROR');
+      const errMessage = networkErr?.message || 'Jaringan/koneksi terputus saat menghubungi backend Supabase.';
+      toast.error(`Import gagal: ${errMessage}. Data belum tersimpan. Silakan coba lagi.`, 'Koneksi Gagal');
+      return {
+        success: false,
+        importId,
+        status: 'FAILED',
+        importedCount: 0,
+        updatedCount: 0,
+        duplicatesIgnored: 0,
+        failedCount: imported.length,
+        error: errMessage
+      };
+    }
   };
 
   // Delete imported data filtered by import date within 7-day retention window
@@ -4585,7 +4238,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }));
 
           if (validRowsToImport.length > 0) {
-            const importRes = bulkImportTickets(validRowsToImport);
+            const importRes = await bulkImportTickets(validRowsToImport);
             pulledCount = importRes.importedCount;
           }
         }
@@ -5269,6 +4922,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         bulkDeleteTickets,
         deleteCustomerData,
         bulkImportTickets,
+        refreshTicketsFromServer,
         deleteImportedTicketsByDate,
         ticketMessages,
         sendTicketMessage,

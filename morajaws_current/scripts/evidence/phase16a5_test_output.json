@@ -1,0 +1,80 @@
+{
+  "suite": "PHASE16A5_FIRESTORE_SETTINGS_REPLACEMENT",
+  "total": 18,
+  "passed": 18,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "Firestore disabled in every runtime environment",
+      "passed": true
+    },
+    {
+      "name": "Authenticated Supabase settings GET helper exists",
+      "passed": true
+    },
+    {
+      "name": "Authenticated Supabase settings POST helper exists",
+      "passed": true
+    },
+    {
+      "name": "Settings writes fail visibly on HTTP/API errors",
+      "passed": true
+    },
+    {
+      "name": "Global settings preserve previously stored keys before update",
+      "passed": true
+    },
+    {
+      "name": "UI configuration saves through Supabase settings API",
+      "passed": true
+    },
+    {
+      "name": "UI configuration loads through Supabase settings API",
+      "passed": true
+    },
+    {
+      "name": "Navigation document writes through Supabase",
+      "passed": true
+    },
+    {
+      "name": "Navigation document reads through Supabase",
+      "passed": true
+    },
+    {
+      "name": "General droplists save through Supabase",
+      "passed": true
+    },
+    {
+      "name": "General droplists load through Supabase",
+      "passed": true
+    },
+    {
+      "name": "Hierarchical droplists save through Supabase",
+      "passed": true
+    },
+    {
+      "name": "Hierarchical droplists load through Supabase",
+      "passed": true
+    },
+    {
+      "name": "Report dropdown mutations use Supabase settings",
+      "passed": true
+    },
+    {
+      "name": "Chat category settings use Supabase settings",
+      "passed": true
+    },
+    {
+      "name": "Navigation frontend service has no Firebase imports",
+      "passed": true
+    },
+    {
+      "name": "Navigation saves surface API failure instead of false success",
+      "passed": true
+    },
+    {
+      "name": "Navigation subscription documents one-shot non-realtime behavior",
+      "passed": true
+    }
+  ]
+}

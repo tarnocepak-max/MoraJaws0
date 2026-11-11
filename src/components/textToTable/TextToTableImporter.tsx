@@ -81,9 +81,15 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
   const [editingRowData, setEditingRowData] = useState<Record<string, string>>({});
   const [importReport, setImportReport] = useState<{
     imported: number;
+    updated?: number;
     duplicates: number;
+    importId?: string;
     enrolledContractors?: number;
     newContractors?: number;
+  } | null>(null);
+  const [importError, setImportError] = useState<{
+    message: string;
+    importId?: string;
   } | null>(null);
   const [showMappingCatalog, setShowMappingCatalog] = useState(false);
   const [sourceFileName, setSourceFileName] = useState('Input_Text_Table.txt');
@@ -91,6 +97,7 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
   const [isExecutingImport, setIsExecutingImport] = useState(false);
   const [contractorEnrollNotice, setContractorEnrollNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastUploadedBufferRef = useRef<ArrayBuffer | null>(null);
 
   // Top Tab Switcher: Import vs Export vs Riwayat & Hapus
   const [mainTab, setMainTab] = useState<'import' | 'export' | 'history_delete'>('import');
@@ -425,17 +432,33 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
     setImportReport(null);
   };
 
+  const handleSheetChange = (sheetName: string) => {
+    if (!lastUploadedBufferRef.current) return;
+    const result = parseWorkOrderFile(lastUploadedBufferRef.current, {
+      customMappings: headerMappings,
+      existingWoNumbers: existingWos,
+      contractors,
+      coverageAreas,
+      manualSheetName: sheetName
+    });
+    setParseResult(result);
+    setImportReport(null);
+    setImportError(null);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setSourceFileName(file.name);
+    setImportError(null);
     const reader = new FileReader();
 
     if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
       reader.onload = (event) => {
         const buffer = event.target?.result as ArrayBuffer;
         if (buffer) {
+          lastUploadedBufferRef.current = buffer;
           const result = parseWorkOrderFile(buffer, {
             customMappings: headerMappings,
             existingWoNumbers: existingWos,
@@ -444,11 +467,13 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
           });
           setParseResult(result);
           setImportReport(null);
+          setImportError(null);
         }
       };
       reader.readAsArrayBuffer(file);
     } else {
       // Text or CSV
+      lastUploadedBufferRef.current = null;
       reader.onload = (event) => {
         const text = event.target?.result as string;
         if (text) {
@@ -590,7 +615,7 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
 
       if (isDup) {
         statusType = 'WO DUPLIKAT';
-        validationErrors.push(`Nomor WO ${woVal} sudah terdaftar di database Firestore`);
+        validationErrors.push(`Nomor WO ${woVal} sudah terdaftar di database Supabase`);
       } else if (emptyCols.length > 0) {
         statusType = 'DATA KOSONG';
         validationErrors.push(`Kolom wajib kosong: ${emptyCols.join(', ')}`);
@@ -624,19 +649,19 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
     setEditingRowIndex(null);
   };
 
-  const handleExecuteImport = () => {
+  const handleExecuteImport = async () => {
     if (!parseResult || parseResult.parsedRows.length === 0) return;
 
     if (parseResult.headerCheckPassed === false) {
-      alert(`Proses import dihentikan: Header wajib tidak ditemukan (${parseResult.missingMandatoryHeaders?.join(', ')}).`);
+      showToast(`Import Ditolak: Header wajib tidak ditemukan (${parseResult.missingMandatoryHeaders?.join(', ')}).`, 'error');
       return;
     }
 
-    // Only import valid rows that are not duplicates (BAGIAN 1 - C & E)
-    const rowsToImport = parseResult.parsedRows.filter(r => r.isValid && !r.isDuplicate);
+    // Only import valid rows that are not duplicates (unless update_allowed)
+    const rowsToImport = parseResult.parsedRows.filter(r => r.isValid && (duplicatePolicy === 'update_allowed' || !r.isDuplicate));
 
     if (rowsToImport.length === 0) {
-      alert('Tidak ada baris data valid yang siap diimpor. Semua baris ditolak karena data kosong, format tidak valid, atau nomor WO duplikat.');
+      showToast('Tidak ada baris data valid yang siap diimpor. Semua baris ditolak karena format tidak valid atau nomor WO duplikat.', 'warning');
       return;
     }
 
@@ -679,19 +704,49 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
       }
     }
 
-    const report = bulkImportTickets(validMapped, { duplicatePolicy });
-    setImportReport({
-      imported: report.importedCount,
-      duplicates: report.duplicatesIgnored,
-      enrolledContractors: enrolledNewCount,
-      newContractors: enrolledNewCount
-    });
-    setParseResult(null);
-    setRawText('');
-    setShowConfirmModal(false);
-    setTimeout(() => {
-      onImportSuccess();
-    }, 1500);
+    setIsExecutingImport(true);
+    setImportError(null);
+    try {
+      const report = await bulkImportTickets(validMapped, {
+        duplicatePolicy,
+        fileName: sourceFileName,
+        sheetName: parseResult.selectedSheetName
+      });
+
+      if (!report.success) {
+        setImportError({
+          message: report.error || 'Server menolak import data ke Supabase.',
+          importId: report.importId
+        });
+        showToast(`Import Ditolak Server: ${report.error || 'Gagal menyimpan ke database Supabase.'}`, 'error');
+        return;
+      }
+
+      setImportReport({
+        imported: report.importedCount,
+        updated: report.updatedCount || 0,
+        duplicates: report.duplicatesIgnored,
+        importId: report.importId,
+        enrolledContractors: enrolledNewCount,
+        newContractors: enrolledNewCount
+      });
+
+      showToast(`Import Berhasil: ${report.importedCount} WO berhasil disimpan ke Supabase (ID Import: ${report.importId || 'N/A'}).`, 'success');
+
+      setParseResult(null);
+      setRawText('');
+      setShowConfirmModal(false);
+      setTimeout(() => {
+        onImportSuccess();
+      }, 1500);
+    } catch (err: any) {
+      setImportError({
+        message: err?.message || 'Terjadi kesalahan sistem saat memproses import ke Supabase.'
+      });
+      showToast(`Kesalahan Sistem Import: ${err?.message || 'Gagal memproses import.'}`, 'error');
+    } finally {
+      setIsExecutingImport(false);
+    }
   };
 
   return (
@@ -919,25 +974,60 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
         </div>
       )}
 
+      {/* Import Error Banner (Fail-Closed) */}
+      {importError && (
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-lg text-rose-800 dark:text-rose-200 text-xs flex items-start gap-3">
+          <ShieldAlert className="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold text-sm text-rose-900 dark:text-rose-100">
+              Import Ditolak Server (Fail-Closed Policy)
+            </p>
+            <p className="text-slate-700 dark:text-slate-300">
+              {importError.message}
+            </p>
+            {importError.importId && (
+              <p className="font-mono text-[11px] text-slate-500">
+                Batch Import ID: <span className="font-bold">{importError.importId}</span>
+              </p>
+            )}
+            <p className="text-[11px] text-rose-700 dark:text-rose-300 font-medium">
+              Sesuai aturan ketat Single Source of Truth, tidak ada data yang disimpan ke penyimpanan lokal. Silakan periksa koneksi Supabase atau perbaiki file lalu coba lagi.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Import Success Banner */}
       {importReport && (
         <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-3">
           <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600" />
-          <div>
-            <p className="font-semibold text-sm">Proses Import Berhasil!</p>
-            <p className="mt-0.5">
-              {importReport.imported} tiket baru berhasil ditambahkan dan didistribusikan ke antrean mitra.
-              {importReport.enrolledContractors !== undefined && importReport.enrolledContractors > 0 && (
-                <span className="font-medium text-emerald-900 dark:text-emerald-200">
-                  {' '}{importReport.enrolledContractors} kategori kontraktor ({importReport.newContractors || 0} baru) telah terdaftar di Master Data.
-                </span>
+          <div className="space-y-1">
+            <p className="font-semibold text-sm">Proses Import Berhasil Dikonfirmasi Supabase!</p>
+            <div className="text-xs space-y-0.5">
+              <p>
+                <span className="font-bold text-emerald-900 dark:text-emerald-200">{importReport.imported}</span> tiket baru berhasil disimpan ke Supabase PostgreSQL.
+                {importReport.updated !== undefined && importReport.updated > 0 && (
+                  <span className="font-medium text-emerald-900 dark:text-emerald-200">
+                    {' '}{importReport.updated} tiket yang sudah ada berhasil diperbarui.
+                  </span>
+                )}
+                {importReport.enrolledContractors !== undefined && importReport.enrolledContractors > 0 && (
+                  <span className="font-medium text-emerald-900 dark:text-emerald-200">
+                    {' '}{importReport.enrolledContractors} kategori kontraktor ({importReport.newContractors || 0} baru) telah terdaftar di Master Data.
+                  </span>
+                )}
+              </p>
+              {importReport.importId && (
+                <p className="font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                  ID Batch Import: <strong className="text-indigo-600 dark:text-indigo-400">{importReport.importId}</strong>
+                </p>
               )}
               {importReport.duplicates > 0 && (
-                <span className="block mt-1 text-amber-700 dark:text-amber-300 font-medium">
-                  ⚠️ {importReport.duplicates} tiket dengan nomor WO yang sama (duplikat) otomatis ditolak dan tidak dimasukkan ke dalam sistem demi menjaga keunikan data.
-                </span>
+                <p className="text-amber-700 dark:text-amber-300 font-medium">
+                  ⚠️ {importReport.duplicates} tiket dengan nomor WO yang sama (duplikat) otomatis ditolak/dilewati demi menjaga keunikan data.
+                </p>
               )}
-            </p>
+            </div>
           </div>
         </div>
       )}
@@ -954,6 +1044,26 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 File Sumber: <strong className="font-mono text-indigo-600 dark:text-indigo-400">{sourceFileName}</strong>. Operator: <strong>{currentUser.name} ({currentUser.role})</strong>.
               </p>
+              {parseResult.sheetNames && parseResult.sheetNames.length > 1 && (
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Pilih Sheet Excel:</span>
+                  </span>
+                  <select
+                    value={parseResult.selectedSheetName || parseResult.sheetNames[0]}
+                    onChange={(e) => handleSheetChange(e.target.value)}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-md border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 focus:outline-hidden"
+                  >
+                    {parseResult.sheetNames.map((sheet) => (
+                      <option key={sheet} value={sheet}>{sheet}</option>
+                    ))}
+                  </select>
+                  <span className="text-[11px] text-slate-500">
+                    ({parseResult.sheetNames.length} sheet terdeteksi)
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
@@ -1441,7 +1551,7 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
           {/* Action Row - Sediakan 3 Tombol Mandat (Bagian 1 D) */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
             <div className="text-[11px] text-slate-500">
-              Kebijakan Keamanan: Baris tidak valid atau duplikat otomatis ditolak dan tidak akan disimpan ke Firestore.
+              Kebijakan Keamanan: Baris tidak valid atau duplikat (saat mode skip) otomatis ditolak dan tidak akan disimpan ke database Supabase.
             </div>
 
             <div className="flex items-center gap-2">
@@ -1471,16 +1581,17 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
               <button
                 type="button"
                 disabled={
+                  isExecutingImport ||
                   parseResult.headerCheckPassed === false ||
                   (parseResult.missingMandatoryHeaders && parseResult.missingMandatoryHeaders.length > 0) ||
-                  parseResult.parsedRows.filter(r => r.isValid && !r.isDuplicate).length === 0
+                  parseResult.parsedRows.filter(r => r.isValid && (duplicatePolicy === 'update_allowed' || !r.isDuplicate)).length === 0
                 }
                 onClick={() => setShowConfirmModal(true)}
                 className="px-5 py-2 font-bold text-white bg-[#6D28D9] hover:bg-[#5B21B6] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg shadow-sm transition-all text-xs flex items-center justify-center gap-2 cursor-pointer"
-                title="Import hanya baris data yang berstatus valid dan tidak duplikat"
+                title="Import hanya baris data yang berstatus valid dan memenuhi kebijakan duplikasi"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>2. Import Data Valid ({parseResult.parsedRows.filter(r => r.isValid && !r.isDuplicate).length} WO)</span>
+                <span>2. Import Data Valid ({parseResult.parsedRows.filter(r => r.isValid && (duplicatePolicy === 'update_allowed' || !r.isDuplicate)).length} WO)</span>
               </button>
             </div>
           </div>
@@ -1721,7 +1832,7 @@ export const TextToTableImporter: React.FC<TextToTableImporterProps> = ({ onImpo
                 ) : (
                   <>
                     <Check className="w-4 h-4 stroke-[3]" />
-                    <span>Konfirmasi & Simpan ({parseResult.parsedRows.filter(r => r.isValid && !r.isDuplicate).length} WO Valid)</span>
+                    <span>Konfirmasi & Simpan ({parseResult.parsedRows.filter(r => r.isValid && (duplicatePolicy === 'update_allowed' || !r.isDuplicate)).length} WO Valid)</span>
                   </>
                 )}
               </button>

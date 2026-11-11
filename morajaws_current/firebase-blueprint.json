@@ -1,0 +1,242 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with RBAC role and metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["super_admin", "dispatch", "leader", "installer", "management_data", "it_support"] },
+        "active": { "type": "boolean" },
+        "contractor": { "type": "string" },
+        "contractorId": { "type": "string" },
+        "area": { "type": "string" },
+        "phone": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "username", "role", "active"]
+    },
+    "Ticket": {
+      "title": "Ticket",
+      "description": "Work order ticket with dispatch and installer tracking fields",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "woNumber": { "type": "string" },
+        "workOrderNumber": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "appointmentDate": { "type": "string" },
+        "date": { "type": "string" },
+        "slotTime": { "type": "string" },
+        "area": { "type": "string" },
+        "clusterName": { "type": "string" },
+        "streetName": { "type": "string" },
+        "statusWOAgent": { "type": "string" },
+        "statusWOInstaller": { "type": "string" },
+        "statusWhatsApp": { "type": "string" },
+        "contractorName": { "type": "string" },
+        "installerName": { "type": "string" },
+        "leaderName": { "type": "string" },
+        "fdtCode": { "type": "string" },
+        "fatCode": { "type": "string" },
+        "ticketCategory": { "type": "string" },
+        "remarksWOInstaller": { "type": "string" },
+        "remarksAgent": { "type": "string" },
+        "isArchived": { "type": "boolean" },
+        "isDeleted": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "woNumber", "statusWOAgent", "statusWOInstaller"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "System audit trail record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "action": { "type": "string" },
+        "entity": { "type": "string" },
+        "entityId": { "type": "string" },
+        "details": { "type": "string" },
+        "performedBy": { "type": "string" },
+        "userRole": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "action", "timestamp"]
+    },
+    "Contractor": {
+      "title": "Contractor",
+      "description": "Contractor basecamp and partner profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "area": { "type": "string" },
+        "leaderName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "active"]
+    },
+    "CoverageArea": {
+      "title": "CoverageArea",
+      "description": "Telecom field coverage area and clusters",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["id", "name"]
+    },
+    "TicketMessage": {
+      "title": "TicketMessage",
+      "description": "Real-time communication message inside a Work Order channel",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ticketId": { "type": "string" },
+        "woNumber": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "ticketId", "senderId", "text", "timestamp"]
+    },
+    "WATemplate": {
+      "title": "WATemplate",
+      "description": "WhatsApp message template",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "body": { "type": "string" },
+        "category": { "type": "string" },
+        "isDefault": { "type": "boolean" }
+      },
+      "required": ["id", "name", "body"]
+    },
+    "SystemHealth": {
+      "title": "SystemHealth",
+      "description": "Heartbeat and health check document",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string" },
+        "lastPing": { "type": "string" }
+      },
+      "required": ["status"]
+    },
+    "AppSetting": {
+      "title": "AppSetting",
+      "description": "Global application configuration, dynamic UI builder settings, and database app state",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "config": { "type": "object" },
+        "navigationItems": { "type": "array" },
+        "menuCategories": { "type": "array" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "app": { "type": "string" },
+        "type": { "type": "string" }
+      },
+      "required": ["id"]
+    },
+    "SystemErrorLog": {
+      "title": "SystemErrorLog",
+      "description": "Standardized application and database error logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "errorCode": { "type": "string" },
+        "firebaseErrorCode": { "type": "string" },
+        "module": { "type": "string" },
+        "operation": { "type": "string" },
+        "message": { "type": "string" },
+        "technicalDetails": { "type": "string" },
+        "severity": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "timestamp": { "type": "string" },
+        "userId": { "type": "string" },
+        "requestId": { "type": "string" },
+        "status": { "type": "string", "enum": ["OPEN", "INVESTIGATING", "RESOLVED"] }
+      },
+      "required": ["id", "errorCode", "module", "message", "timestamp"]
+    },
+    "ReportDropdownCategory": {
+      "title": "ReportDropdownCategory",
+      "description": "Installer progress report dropdown choices (report_status, reason_report, rootcause)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "categoryType": { "type": "string", "enum": ["report_status", "reason_report", "rootcause"] },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "sortOrder": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "isDeleted": { "type": "boolean" }
+      },
+      "required": ["id", "categoryType", "name", "isActive"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles managed with access control"
+    },
+    "/tickets/{ticketId}": {
+      "schema": "Ticket",
+      "description": "Work orders for telecom field operations"
+    },
+    "/contractors/{contractorId}": {
+      "schema": "Contractor",
+      "description": "Mitra kontraktor list and locations"
+    },
+    "/coverage_areas/{areaId}": {
+      "schema": "CoverageArea",
+      "description": "Coverage area and cluster listings"
+    },
+    "/ticket_messages/{messageId}": {
+      "schema": "TicketMessage",
+      "description": "Real-time Live Chat messages tied to Work Orders"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Audit trail log records"
+    },
+    "/system_error_logs/{errorId}": {
+      "schema": "SystemErrorLog",
+      "description": "Standardized system error logs for observability"
+    },
+    "/wa_templates/{templateId}": {
+      "schema": "WATemplate",
+      "description": "WhatsApp notification templates"
+    },
+    "/system_health/{healthId}": {
+      "schema": "SystemHealth",
+      "description": "System health heartbeat ping"
+    },
+    "/appSettings/{settingId}": {
+      "schema": "AppSetting",
+      "description": "Global persistent application and UI builder configuration"
+    },
+    "/report_dropdown_categories/{categoryId}": {
+      "schema": "ReportDropdownCategory",
+      "description": "Installer progress report dropdown categories for status, reason, and rootcause"
+    }
+  }
+}

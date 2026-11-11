@@ -542,110 +542,36 @@ export function subscribeToAuditLogs(
 // -------------------------------------------------------------
 export async function saveTicketToFirestore(ticket: Ticket): Promise<void> {
   const targetId = ticket.id || getDeterministicTicketId(ticket.woNumber);
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      await fetch(`/api/supabase/work-orders/${encodeURIComponent(targetId)}`, {
-        method: 'PATCH',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(ticket)
-      });
-    } catch (err) {
-      console.warn('[Supabase Direct Sync] Update WO error:', err);
-    }
-    return;
-  }
-  const path = `${COLLECTIONS.TICKETS}/${targetId}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.TICKETS, targetId);
-    const sanitized = sanitizeForFirestore({ ...ticket, id: targetId });
-    await setDoc(docRef, sanitized, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  await requestAuthenticatedApi(`/api/supabase/work-orders/${encodeURIComponent(targetId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ...ticket, id: targetId })
+  });
 }
+
 
 export async function batchSaveTicketsToFirestore(tickets: Ticket[]): Promise<{ saved: number; failed: number }> {
   if (tickets.length === 0) return { saved: 0, failed: 0 };
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      const res = await fetch('/api/supabase/work-orders/bulk-import', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ tickets })
-      });
-      const data = await res.json();
-      return { saved: data.importedCount || tickets.length, failed: 0 };
-    } catch {
-      return { saved: 0, failed: tickets.length };
-    }
-  }
-  let saved = 0;
-  let failed = 0;
-
-  // Deduplicate before saving to avoid duplicate keys in the same batch
   const uniqueTickets = deduplicateTicketsInMemory(tickets);
-
-  // Process in batches of 450 (Firestore limit is 500 per batch)
-  const chunkSize = 450;
-  for (let i = 0; i < uniqueTickets.length; i += chunkSize) {
-    const chunk = uniqueTickets.slice(i, i + chunkSize);
-    const batch = writeBatch(db);
-
-    for (const t of chunk) {
-      const targetId = t.id || getDeterministicTicketId(t.woNumber);
-      const docRef = doc(db, COLLECTIONS.TICKETS, targetId);
-      batch.set(docRef, sanitizeForFirestore({ ...t, id: targetId }), { merge: true });
-    }
-
-    try {
-      await batch.commit();
-      saved += chunk.length;
-    } catch (err) {
-      console.error('[Firestore] Batch commit failed, falling back to individual writes:', err);
-      for (const t of chunk) {
-        try {
-          await saveTicketToFirestore(t);
-          saved++;
-        } catch {
-          failed++;
-        }
-      }
-    }
+  const data = await requestAuthenticatedApi<any>('/api/supabase/work-orders/bulk-import', {
+    method: 'POST',
+    body: JSON.stringify({ tickets: uniqueTickets })
+  });
+  const saved = Number(data.importedCount ?? data.saved ?? uniqueTickets.length);
+  const failed = Number(data.failedCount ?? 0);
+  if (failed > 0 || data.success === false) {
+    throw new Error(data.error?.message || data.error || `Sebagian data WO gagal disimpan (${failed}).`);
   }
-
-  if (saved === 0 && failed > 0) {
-    throw new Error(`Semua ${failed} tiket gagal disimpan ke Cloud Firestore.`);
-  }
-
   return { saved, failed };
 }
 
+
 export async function batchDeleteTicketsFromFirestore(ticketIds: string[]): Promise<void> {
-  if (!ticketIds || ticketIds.length === 0) return;
-  const chunkSize = 450;
-  for (let i = 0; i < ticketIds.length; i += chunkSize) {
-    const chunk = ticketIds.slice(i, i + chunkSize);
-    const batch = writeBatch(db);
-    chunk.forEach(id => {
-      const docRef = doc(db, COLLECTIONS.TICKETS, id);
-      batch.delete(docRef);
-    });
-    try {
-      await batch.commit();
-    } catch (err) {
-      console.warn('[Firestore] Batch delete error, falling back to individual deletes:', err);
-      for (const id of chunk) {
-        try {
-          await deleteDoc(doc(db, COLLECTIONS.TICKETS, id));
-        } catch {}
-      }
-    }
+  for (const id of ticketIds) {
+    await deleteTicketFromFirestore(id);
   }
 }
 
-// -------------------------------------------------------------
-// Global App Configuration & User Preferences (Permanent Storage)
-// -------------------------------------------------------------
+
 export async function saveGlobalAppSettingsToFirestore(settings: Record<string, any>): Promise<void> {
   const current = await readSupabaseAppSetting<Record<string, any>>('global');
   await writeSupabaseAppSetting('global', { ...(current || {}), ...settings, updatedAt: new Date().toISOString() }, 'MoraJaws Global Application Settings');
@@ -743,127 +669,38 @@ export function subscribeToUIConfiguration(callback: (data: CloudUIConfiguration
 
 
 export async function deleteTicketFromFirestore(ticketId: string, woNumber?: string): Promise<void> {
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      await fetch(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ reason: 'Penghapusan via aplikasi' })
-      });
-    } catch (err) {
-      console.warn('[Supabase Direct Sync] Delete WO error:', err);
-    }
-    return;
-  }
-  const path = `${COLLECTIONS.TICKETS}/${ticketId}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.TICKETS, ticketId);
-    await deleteDoc(docRef);
-
-    // Also remove by deterministic ID if different to prevent any resurrection
-    if (woNumber) {
-      const detId = getDeterministicTicketId(woNumber);
-      if (detId !== ticketId) {
-        try {
-          const detRef = doc(db, COLLECTIONS.TICKETS, detId);
-          await deleteDoc(detRef);
-        } catch {}
-      }
-    }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
-  }
+  await requestAuthenticatedApi(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ reason: 'Penghapusan via aplikasi', woNumber })
+  });
 }
 
-export async function softDeleteTicketInFirestore(ticketId: string, deletedBy: string, reason: string): Promise<void> {
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      await fetch(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ reason: reason || 'Soft delete via aplikasi' })
-      });
-    } catch (err) {
-      console.warn('[Supabase Direct Sync] Soft delete WO error:', err);
-    }
-    return;
-  }
-  const path = `${COLLECTIONS.TICKETS}/${ticketId}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.TICKETS, ticketId);
-    await updateDoc(docRef, {
-      isDeleted: true,
-      deletedAt: new Date().toISOString(),
-      deletedBy,
-      deletionReason: reason,
-      updatedAt: new Date().toISOString()
-    });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, path);
-  }
+
+export async function softDeleteTicketInFirestore(ticketId: string, operatorOrReason?: string, reason?: string): Promise<void> {
+  const finalReason = reason || operatorOrReason || 'Penghapusan via aplikasi';
+  await requestAuthenticatedApi(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isDeleted: true, deletionReason: finalReason, updatedBy: reason ? operatorOrReason : undefined })
+  });
 }
 
-export async function archiveTicketInFirestore(ticketId: string, archivedBy: string): Promise<void> {
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      await fetch(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}/archive`, {
-        method: 'POST',
-        headers: getAuthHeaders()
-      });
-    } catch (err) {
-      console.warn('[Supabase Direct Sync] Archive WO error:', err);
-    }
-    return;
-  }
-  const path = `${COLLECTIONS.TICKETS}/${ticketId}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.TICKETS, ticketId);
-    await setDoc(docRef, {
-      isArchived: true,
-      archivedAt: new Date().toISOString(),
-      archivedBy,
-      updatedAt: new Date().toISOString(),
-      updatedBy: archivedBy
-    }, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, path);
-  }
+
+export async function archiveTicketInFirestore(ticketId: string, operator?: string): Promise<void> {
+  await requestAuthenticatedApi(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isArchived: true, updatedBy: operator })
+  });
 }
 
-export async function restoreTicketInFirestore(ticketId: string, restoredBy: string): Promise<void> {
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      await fetch(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}/restore`, {
-        method: 'POST',
-        headers: getAuthHeaders()
-      });
-    } catch (err) {
-      console.warn('[Supabase Direct Sync] Restore WO error:', err);
-    }
-    return;
-  }
-  const path = `${COLLECTIONS.TICKETS}/${ticketId}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.TICKETS, ticketId);
-    await setDoc(docRef, {
-      isArchived: false,
-      isDeleted: false,
-      archivedAt: null,
-      archivedBy: null,
-      deletedAt: null,
-      deletedBy: null,
-      deletionReason: null,
-      updatedAt: new Date().toISOString(),
-      updatedBy: restoredBy
-    }, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, path);
-  }
+
+export async function restoreTicketInFirestore(ticketId: string, operator?: string): Promise<void> {
+  await requestAuthenticatedApi(`/api/supabase/work-orders/${encodeURIComponent(ticketId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isArchived: false, isDeleted: false, updatedBy: operator })
+  });
 }
 
-// -------------------------------------------------------------
-// Contractor & Coverage Area Mutations
-// -------------------------------------------------------------
+
 export async function saveContractorToFirestore(contractor: Contractor): Promise<void> {
   const listResult = await requestAuthenticatedApi<{ contractors?: Contractor[] }>('/api/contractors');
   const existing = (listResult.contractors || []).find(item => item.id === contractor.id || item.code === contractor.code);
@@ -908,110 +745,44 @@ export async function deleteCoverageAreaFromFirestore(areaId: string): Promise<v
 // Live Chat Message Mutations
 // -------------------------------------------------------------
 export async function sendChatMessageToFirestore(msg: TicketMessage): Promise<void> {
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      await fetch(`/api/tickets/${encodeURIComponent(msg.ticketId || msg.woNumber)}/messages`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(msg)
-      });
-    } catch (err) {
-      console.warn('[Supabase Sync] Chat message error:', err);
-    }
-    return;
-  }
-  const path = `${COLLECTIONS.MESSAGES}/${msg.id}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.MESSAGES, msg.id);
-    await setDoc(docRef, sanitizeForFirestore(msg));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, path);
-  }
+  await requestAuthenticatedApi(`/api/tickets/${encodeURIComponent(msg.ticketId || msg.woNumber)}/messages`, {
+    method: 'POST',
+    body: JSON.stringify(msg)
+  });
 }
 
-// -------------------------------------------------------------
-// Audit Log Mutations (Immutable Append)
-// -------------------------------------------------------------
-export async function addAuditLogToFirestore(log: AuditLog): Promise<void> {
-  if (!isFirestoreActiveForEnvironment()) {
-    return;
-  }
-  const path = `${COLLECTIONS.AUDIT_LOGS}/${log.id}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.AUDIT_LOGS, log.id);
-    await setDoc(docRef, sanitizeForFirestore(log));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, path);
-  }
+
+export async function addAuditLogToFirestore(_log: AuditLog): Promise<void> {
+  // Audit records are server-trusted only. Client-side audit writes are intentionally disabled.
+  // Mutating API endpoints call logServerAuditAsync() after successful authorization/persistence.
+  return;
 }
 
-// -------------------------------------------------------------
-// WhatsApp Template Mutations
-// -------------------------------------------------------------
+
 export async function saveTemplateToFirestore(template: WhatsAppTemplate): Promise<void> {
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      await fetch('/api/supabase/settings/whatsapp_templates', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ value: template, description: `WA Template: ${template.name}` })
-      });
-    } catch (err) {
-      console.warn('[Supabase Sync] saveTemplate error:', err);
-    }
-    return;
-  }
-  const path = `${COLLECTIONS.WA_TEMPLATES}/${template.id}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.WA_TEMPLATES, template.id);
-    await setDoc(docRef, sanitizeForFirestore(template), { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  await requestAuthenticatedApi('/api/supabase/settings/whatsapp_templates', {
+    method: 'POST',
+    body: JSON.stringify({ value: template, description: `WA Template: ${template.name}` })
+  });
 }
+
 
 export async function deleteTemplateFromFirestore(templateId: string): Promise<void> {
-  if (!isFirestoreActiveForEnvironment()) {
-    return;
-  }
-  const path = `${COLLECTIONS.WA_TEMPLATES}/${templateId}`;
-  try {
-    const docRef = doc(db, COLLECTIONS.WA_TEMPLATES, templateId);
-    await deleteDoc(docRef);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
-  }
+  await requestAuthenticatedApi('/api/supabase/settings/whatsapp_templates', {
+    method: 'POST',
+    body: JSON.stringify({ value: { id: templateId, isDeleted: true }, description: 'WhatsApp template deletion' })
+  });
 }
 
-// -------------------------------------------------------------
-// User Profile Mutations (Passwords are NEVER stored in Firestore)
-// -------------------------------------------------------------
+
 export async function saveUserToFirestore(user: User): Promise<void> {
-  if (!isFirestoreActiveForEnvironment()) {
-    try {
-      await fetch('/api/supabase/users', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(user)
-      });
-    } catch (err) {
-      console.warn('[Supabase Sync] saveUser error:', err);
-    }
-    return;
-  }
-  const path = `${COLLECTIONS.USERS}/${user.id}`;
-  try {
-    // Strip sensitive authentication secrets per MoraJaws Security Policy
-    const { passwordHash: _, ...safeUser } = user;
-    if ('password' in (safeUser as any)) {
-      delete (safeUser as any).password;
-    }
-    const docRef = doc(db, COLLECTIONS.USERS, user.id);
-    await setDoc(docRef, sanitizeForFirestore(safeUser), { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  const { passwordHash: _passwordHash, ...safeUser } = user as any;
+  await requestAuthenticatedApi('/api/supabase/users', {
+    method: 'POST',
+    body: JSON.stringify(safeUser)
+  });
 }
+
 
 export async function deleteUserFromFirestore(userId: string): Promise<void> {
   if (!isFirestoreActiveForEnvironment()) {
@@ -1261,74 +1032,23 @@ export async function seedFirestoreIfEmpty(initialData: {
 }
 
 export async function fetchAllTicketsFromFirestore(): Promise<Ticket[]> {
-  try {
-    const snap = await getDocs(collection(db, COLLECTIONS.TICKETS));
-    const raw: Ticket[] = [];
-    snap.forEach((docSnap) => {
-      const data = docSnap.data() as Ticket;
-      if (!data.id) data.id = docSnap.id;
-      raw.push(data);
-    });
-    return deduplicateTicketsInMemory(raw);
-  } catch (err) {
-    if (isQuotaExceededError(err)) {
-      console.warn('[Firestore] fetchAllTicketsFromFirestore: Quota limit reached on free tier database.');
-    } else {
-      console.warn('[Firestore] fetchAllTicketsFromFirestore notice:', (err as any)?.message || err);
-    }
-    throw err;
-  }
+  const payload = await requestAuthenticatedApi<any>('/api/work-orders');
+  const raw = Array.isArray(payload.workOrders) ? payload.workOrders : (Array.isArray(payload.data) ? payload.data : []);
+  return deduplicateTicketsInMemory(raw as Ticket[]);
 }
+
 
 export async function findUserInFirestore(identifier: string): Promise<User | null> {
   if (!identifier) return null;
-  const clean = String(identifier).trim().toLowerCase();
-  try {
-    const snap = await getDocs(collection(db, COLLECTIONS.USERS));
-    let foundUser: User | null = null;
-    snap.forEach((docSnap) => {
-      if (foundUser) return;
-      const u = docSnap.data() as User;
-      if (!u || (u as any).isDeleted) return;
-      if (u.username && u.username.toLowerCase() === clean) {
-        foundUser = { ...u, id: u.id || docSnap.id };
-        return;
-      }
-      if (u.email && u.email.toLowerCase() === clean) {
-        foundUser = { ...u, id: u.id || docSnap.id };
-        return;
-      }
-      if ((u as any).altEmail && (u as any).altEmail.toLowerCase().includes(clean)) {
-        foundUser = { ...u, id: u.id || docSnap.id };
-        return;
-      }
-      // Check prefix matching (e.g. "ray" matching "rayjs666@gmail.com")
-      const emailPrefix = (u.email || '').split('@')[0].toLowerCase();
-      if (emailPrefix === clean || (clean === 'ray' && (emailPrefix.startsWith('ray') || u.name.toLowerCase().includes('ray')))) {
-        foundUser = { ...u, id: u.id || docSnap.id };
-        return;
-      }
-    });
-    return foundUser;
-  } catch (err) {
-    console.warn('[Firestore] Error finding user in Firestore:', err);
-    return null;
-  }
+  const payload = await requestAuthenticatedApi<any>(`/api/users?search=${encodeURIComponent(identifier.trim())}`);
+  const users = Array.isArray(payload.users) ? payload.users : (Array.isArray(payload.data) ? payload.data : []);
+  const clean = identifier.trim().toLowerCase();
+  return (users as User[]).find((u: any) =>
+    !u?.isDeleted &&
+    (String(u.username || '').toLowerCase() === clean || String(u.email || '').toLowerCase() === clean)
+  ) || null;
 }
 
-// -------------------------------------------------------------
-// Contact Center Chat Category Mutations (appSettings/chat_categories)
-// -------------------------------------------------------------
-export const INITIAL_CHAT_CATEGORIES: ChatCategoryConfig[] = [
-  { id: 'cat-progress', name: 'PROGRESS', description: 'Update progress pengerjaan teknisi di lapangan', color: '#7C3AED', order: 1, active: true, createdAt: '2026-01-01T00:00:00Z' },
-  { id: 'cat-complaint', name: 'COMPLAINT', description: 'Keluhan pelanggan, gangguan redaman, atau komplain instalasi', color: '#EF4444', order: 2, active: true, createdAt: '2026-01-01T00:00:00Z' },
-  { id: 'cat-followup', name: 'FOLLOW UP', description: 'Tindak lanjut progress pengerjaan atau konfirmasi status', color: '#3B82F6', order: 3, active: true, createdAt: '2026-01-01T00:00:00Z' },
-  { id: 'cat-techsupport', name: 'TECHNICAL SUPPORT', description: 'Dukungan teknis OPM, konfigurasi OLT, dan kendala kabel', color: '#F59E0B', order: 4, active: true, createdAt: '2026-01-01T00:00:00Z' },
-  { id: 'cat-schedule', name: 'SCHEDULE / APPOINTMENT', description: 'Jadwal kunjungan, perubahan slot, dan waktu temu', color: '#8B5CF6', order: 5, active: true, createdAt: '2026-01-01T00:00:00Z' },
-  { id: 'cat-confirmation', name: 'CUSTOMER CONFIRMATION', description: 'Konfirmasi pelanggan via WhatsApp atau telepon', color: '#10B981', order: 6, active: true, createdAt: '2026-01-01T00:00:00Z' },
-  { id: 'cat-escalation', name: 'ESCALATION', description: 'Eskalasi kendala mendesak ke Supervisor / Management', color: '#EC4899', order: 7, active: true, createdAt: '2026-01-01T00:00:00Z' },
-  { id: 'cat-other', name: 'OTHER', description: 'Percakapan koordinasi operasional umum lainnya', color: '#6B7280', order: 8, active: true, createdAt: '2026-01-01T00:00:00Z' }
-];
 
 export async function saveChatCategoriesToFirestore(categories: ChatCategoryConfig[]): Promise<void> {
   await writeSupabaseAppSetting('chat_categories', categories, 'MoraJaws Chat Categories');
@@ -1347,6 +1067,14 @@ export function subscribeToChatCategories(callback: (categories: ChatCategoryCon
   return () => { active = false; };
 }
 
+
+export const INITIAL_CHAT_CATEGORIES: ChatCategoryConfig[] = [
+  { id: 'cat-koordinasi-lapangan', name: 'Koordinasi Lapangan', color: '#2563eb', order: 1, active: true, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-kendala-teknis', name: 'Kendala Teknis', color: '#dc2626', order: 2, active: true, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-konfirmasi-pelanggan', name: 'Konfirmasi Pelanggan', color: '#16a34a', order: 3, active: true, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-perubahan-jadwal', name: 'Perubahan Jadwal', color: '#d97706', order: 4, active: true, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-lain-lain', name: 'Lain-lain', color: '#64748b', order: 5, active: true, createdAt: '2026-01-01T00:00:00.000Z' }
+];
 
 export const INITIAL_HIERARCHICAL_DROPLISTS: HierarchicalStatus[] = [
   {

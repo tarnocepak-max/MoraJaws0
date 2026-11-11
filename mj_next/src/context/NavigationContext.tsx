@@ -132,11 +132,8 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setLastSyncTime(normalized.updatedAt);
           setCloudSyncStatus('synced');
         } else if (isMounted) {
-          // If not yet in Firestore, seed the default configuration automatically!
-          console.log('[NavigationContext] Firestore nav document not found. Seeding default...');
-          await saveNavigationConfigToFirestore(DEFAULT_NAVIGATION_CONFIG, 'System Init');
-          setCloudSyncStatus('synced');
-          setLastSyncTime(new Date().toISOString());
+          // No server setting exists yet. Keep UI defaults locally until an authorized operator explicitly saves them.
+          setCloudSyncStatus('local_only');
         }
 
         // Attach real-time listener

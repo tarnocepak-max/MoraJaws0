@@ -1,0 +1,793 @@
+PROJECT: MORAJAWS PRODUCTION INTEGRATION & DEPLOYMENT
+
+1. TUJUAN UTAMA
+
+Lakukan audit, perbaikan, integrasi, dan finalisasi aplikasi MoraJaws yang sudah ada agar menjadi aplikasi Full-Stack Production-Ready.
+
+Integrasikan aplikasi dengan layanan Google berikut:
+
+1. Google Sheets API sebagai sumber dan tujuan sinkronisasi data Work Order (WO).
+2. Google Cloud sebagai infrastruktur backend, API, pengelolaan kredensial, logging, dan deployment.
+3. Google Firebase sebagai layanan autentikasi, penyimpanan file, dan layanan pendukung aplikasi sesuai kebutuhan.
+
+Pertahankan seluruh fitur, halaman, komponen UI, konfigurasi, serta alur kerja MoraJaws yang sudah ada kecuali jika diperlukan perbaikan untuk keamanan, konsistensi data, atau kompatibilitas produksi.
+
+JANGAN membuat ulang aplikasi dari nol.
+JANGAN menghapus fitur yang sudah berfungsi.
+JANGAN menggunakan data simulasi sebagai data produksi.
+JANGAN membuat kredensial, API key, token, Project ID, Spreadsheet ID, atau konfigurasi palsu.
+JANGAN mengklaim aplikasi sudah terhubung atau berhasil dipublikasikan jika proses tersebut belum benar-benar diverifikasi.
+
+Semua konfigurasi harus dapat diselesaikan menggunakan akun Google milik administrator aplikasi.
+
+---
+
+2. AUDIT APLIKASI SEBELUM INTEGRASI
+
+Sebelum mengubah kode, periksa keseluruhan proyek MoraJaws.
+
+Audit komponen berikut:
+
+- Frontend React atau framework frontend yang sedang digunakan.
+- Backend Node.js atau framework backend yang sedang digunakan.
+- Struktur database dan sistem migrasi.
+- Sistem login, session, dan autentikasi setiap role.
+- Sistem import data WO.
+- Sistem sinkronisasi Google Sheets.
+- Sistem manajemen kontraktor.
+- Sistem akun Leader dan Installer.
+- Sistem distribusi WO dan assignment teknisi.
+- Dashboard monitoring.
+- Konfigurasi aplikasi dan pengaturan UI.
+- Sistem live chat dan lampiran foto.
+- Integrasi WhatsApp yang sudah tersedia.
+- Pengaturan environment variables.
+- Konfigurasi deployment dan domain.
+- Error log dan dependency yang bermasalah.
+
+Identifikasi semua bagian yang masih menggunakan:
+
+- Mock data.
+- Sample data.
+- Hardcoded credentials.
+- Local storage sebagai penyimpanan utama data bersama.
+- Data sementara yang tidak tersimpan ke server.
+- API endpoint yang belum terhubung.
+- Placeholder integrasi Google.
+- Firebase yang belum dikonfigurasi.
+- Backend yang belum mendukung akses dari aplikasi publik.
+- Konfigurasi yang hanya berfungsi di localhost.
+
+Buat daftar masalah dan perbaiki berdasarkan prioritas.
+
+Jangan menghapus data produksi yang sudah tersedia selama proses audit.
+
+---
+
+3. INTEGRASI GOOGLE CLOUD
+
+Gunakan Google Cloud Project milik administrator MoraJaws.
+
+Sediakan konfigurasi untuk:
+
+- Google Sheets API.
+- Google Drive API apabila diperlukan untuk akses file atau spreadsheet.
+- Cloud Run untuk deployment backend apabila sesuai dengan arsitektur aplikasi.
+- Secret Manager untuk menyimpan kredensial backend.
+- Cloud Logging untuk memantau error dan aktivitas backend.
+- IAM untuk mengatur hak akses layanan.
+- Firebase Authentication dan Firebase Storage apabila layanan tersebut digunakan.
+- Cloud Build atau metode deployment lain jika diperlukan.
+
+Jangan mengaktifkan layanan berbayar atau membuat resource yang menimbulkan biaya tanpa memberikan informasi kepada administrator dan memperoleh persetujuan yang diperlukan.
+
+Ketentuan konfigurasi
+
+1. Gunakan satu Google Cloud Project yang ditentukan administrator.
+2. Pastikan API yang dibutuhkan sudah aktif.
+3. Gunakan service account khusus backend untuk akses Google Sheets.
+4. Berikan permission minimum yang diperlukan.
+5. Jangan menggunakan Owner atau Editor untuk semua layanan secara sembarangan.
+6. Jangan menaruh private key service account di frontend.
+7. Jangan memasukkan file kredensial ke repository Git.
+8. Jangan mencetak token, private key, atau password pada log.
+9. Siapkan pemeriksaan konfigurasi untuk mengetahui layanan mana yang belum aktif.
+10. Tampilkan instruksi yang jelas jika administrator perlu menyelesaikan konfigurasi manual di Google Cloud Console.
+
+Gunakan Application Default Credentials jika didukung lingkungan deployment dan konfigurasi IAM yang digunakan.
+
+Jika menggunakan Cloud Run, utamakan service identity dan hak akses IAM dibandingkan menyimpan private key service account secara permanen.
+
+---
+
+4. INTEGRASI GOOGLE SHEETS
+
+Google Sheets harus terhubung ke spreadsheet yang dimiliki atau dikelola oleh akun Google administrator MoraJaws.
+
+Jangan menggunakan spreadsheet demo sebagai sumber data produksi.
+
+Sediakan halaman konfigurasi Google Sheets khusus Super Admin.
+
+Field konfigurasi
+
+- Google Cloud Project ID.
+- Spreadsheet ID.
+- Nama sheet sumber data.
+- Nama sheet tujuan jika diperlukan.
+- Metode autentikasi.
+- Status koneksi.
+- Waktu sinkronisasi terakhir.
+- Status sinkronisasi.
+- Pesan error jika koneksi gagal.
+- Tombol Test Connection.
+- Tombol Sync Now.
+- Tombol Refresh Status.
+
+Jangan meminta pengguna memasukkan private key ke field yang dapat diakses oleh browser.
+
+Konfigurasi kredensial service account harus dilakukan melalui mekanisme backend yang aman.
+
+Alur koneksi
+
+1. Administrator membuat atau memilih Google Cloud Project.
+2. Administrator mengaktifkan Google Sheets API.
+3. Administrator mengonfigurasi identitas layanan backend.
+4. Spreadsheet dibagikan kepada service account jika diperlukan oleh metode autentikasi yang digunakan.
+5. Administrator memasukkan Spreadsheet ID dan nama sheet melalui halaman konfigurasi.
+6. Backend melakukan validasi kredensial.
+7. Backend memeriksa apakah spreadsheet dapat diakses.
+8. Backend membaca header dan memeriksa struktur kolom.
+9. Aplikasi menampilkan status koneksi yang sebenarnya.
+10. Administrator dapat menjalankan sinkronisasi setelah validasi berhasil.
+
+Jangan menganggap koneksi berhasil hanya karena Spreadsheet ID sudah diisi.
+
+Aturan sinkronisasi
+
+- Gunakan Google Sheets API melalui backend.
+- Pertahankan urutan header asli.
+- Pertahankan nama field asli.
+- Jangan mengubah pemetaan kolom secara otomatis tanpa validasi.
+- Jangan menghapus nilai yang tidak dikenal.
+- Jangan menggeser nilai ke kolom lain jika suatu field kosong.
+- Jangan membuat WO duplikat.
+- Gunakan WO Number sebagai identitas pemeriksaan duplikasi sesuai aturan aplikasi.
+- Pertahankan format tanggal, nomor telepon, dan Customer ID sesuai aturan data.
+- Customer ID harus divalidasi sebagai 7 digit apabila mengikuti aturan data MoraJaws.
+- Tangani pagination, batas API, timeout, dan kegagalan jaringan.
+- Gunakan retry dengan exponential backoff untuk error sementara.
+- Hindari sinkronisasi bersamaan yang menyebabkan konflik.
+- Catat hasil sinkronisasi tanpa menyimpan rahasia autentikasi.
+
+Jika diperlukan, gunakan ID record yang stabil untuk menghubungkan baris spreadsheet dengan record database.
+
+Kebijakan hak akses
+
+Hanya Super Admin yang boleh:
+
+- Menghubungkan atau mengganti spreadsheet.
+- Mengubah konfigurasi integrasi.
+- Menjalankan sinkronisasi manual.
+- Mengubah atau menghapus data sumber melalui aplikasi.
+- Mengelola pemetaan kolom.
+- Mengakses log sinkronisasi yang bersifat administratif.
+
+Dispatch dapat mengimpor data melalui fitur import aplikasi sesuai kebijakan yang sudah ditetapkan.
+
+Jangan memberikan akses tulis ke spreadsheet kepada Leader atau Installer hanya karena mereka memiliki akun MoraJaws.
+
+Kebijakan sumber data
+
+Tentukan dengan jelas sumber data utama dan arah sinkronisasi.
+
+Gunakan kebijakan berikut:
+
+- Google Sheets menjadi sumber data eksternal untuk proses impor dan sinkronisasi WO.
+- Database backend menjadi penyimpanan operasional aplikasi untuk assignment, status, laporan, chat, dan konfigurasi.
+- Perubahan status operasional tidak boleh menghapus atau menimpa kolom sumber secara tidak sengaja.
+- Penulisan balik ke Google Sheets hanya dilakukan untuk field yang secara eksplisit diizinkan.
+- Konflik data harus dideteksi dan dicatat.
+- Kegagalan sinkronisasi tidak boleh mengosongkan dashboard.
+- Jika Google Sheets sementara tidak dapat diakses, aplikasi tetap membaca data operasional yang telah tersimpan di database.
+
+Jangan melakukan sinkronisasi dua arah tanpa aturan konflik yang jelas.
+
+---
+
+5. INTEGRASI FIREBASE AUTHENTICATION
+
+Gunakan Firebase Authentication untuk autentikasi pengguna apabila sesuai dengan arsitektur yang sudah ada.
+
+Pertahankan kebijakan bahwa hanya akun yang didaftarkan oleh Super Admin yang dapat mengakses MoraJaws.
+
+Jangan menyediakan registrasi publik.
+
+Jangan mengizinkan pengguna memilih role sendiri ketika login.
+
+Halaman login
+
+Gunakan portal login sederhana tanpa pilihan role.
+
+Setelah login berhasil, backend menentukan role pengguna berdasarkan data akun yang tersimpan secara resmi.
+
+Role yang didukung:
+
+- Super Admin / Super Agent.
+- Dispatch.
+- Leader / Korlap.
+- Installer.
+
+Pertahankan nama role yang sudah digunakan aplikasi dan petakan ke permission internal secara konsisten.
+
+Aturan keamanan autentikasi
+
+1. Gunakan Firebase Authentication UID sebagai identitas autentikasi.
+2. Hubungkan UID dengan record akun internal MoraJaws.
+3. Validasi Firebase ID token di backend untuk setiap request yang membutuhkan autentikasi.
+4. Verifikasi issuer, audience, masa berlaku, dan signature token melalui Firebase Admin SDK.
+5. Jangan hanya mempercayai role yang dikirim frontend.
+6. Periksa permission di backend untuk setiap operasi sensitif.
+7. Tolak akun yang dinonaktifkan.
+8. Jangan izinkan akun tanpa role yang valid mengakses dashboard.
+9. Jangan menyimpan password dalam database MoraJaws.
+10. Jangan menyimpan password dalam local storage, session storage, atau log.
+11. Jangan menyimpan Firebase ID token sebagai data permanen.
+12. Gunakan mekanisme autentikasi dan refresh token resmi Firebase.
+13. Terapkan session timeout sesuai konfigurasi administrator.
+14. Sediakan logout yang benar-benar mengakhiri sesi aplikasi.
+15. Terapkan pembatasan percobaan login jika diperlukan.
+16. Jangan mengirim Firebase Admin SDK credentials ke frontend.
+
+Jangan membuat akun Super Admin default dengan password yang ditanam di dalam kode.
+
+Jika akun awal belum tersedia, sediakan prosedur bootstrap yang aman untuk membuat administrator pertama.
+
+---
+
+6. INTEGRASI FIREBASE STORAGE
+
+Gunakan Firebase Storage untuk penyimpanan lampiran apabila diperlukan, terutama untuk:
+
+- Foto laporan Installer.
+- Foto progres pekerjaan.
+- Lampiran live chat.
+- Bukti penyelesaian WO.
+
+Jangan menyimpan foto berukuran besar langsung sebagai string Base64 di database operasional.
+
+Gunakan metadata file untuk menghubungkan lampiran dengan WO dan pengirimnya.
+
+Metadata minimum:
+
+- File ID.
+- WO Number atau ID WO internal.
+- Pengirim.
+- Role pengirim.
+- Waktu unggah.
+- Jenis file.
+- Ukuran file.
+- Lokasi penyimpanan.
+- Status validasi file.
+
+Ketentuan keamanan file
+
+- Validasi ukuran file.
+- Validasi MIME type.
+- Jangan hanya mengandalkan ekstensi file.
+- Batasi jenis file yang diizinkan.
+- Terapkan autentikasi dan otorisasi untuk upload dan download.
+- Jangan membuat seluruh bucket dapat diakses publik tanpa alasan yang jelas.
+- Gunakan Firebase Storage Security Rules.
+- Batasi akses berdasarkan assignment WO dan permission pengguna.
+- Pastikan Leader hanya dapat melihat lampiran WO yang berada dalam cakupan kewenangannya.
+- Pastikan Installer hanya dapat mengakses lampiran WO yang ditugaskan kepadanya.
+- Pastikan akses Super Admin mengikuti kebijakan administrator.
+
+Jangan membuat aturan Storage yang memberikan akses penuh kepada semua pengguna terautentikasi.
+
+---
+
+7. DATABASE OPERASIONAL DAN KONSISTENSI DATA
+
+Periksa database yang sudah digunakan oleh MoraJaws.
+
+Jika proyek sudah menggunakan PostgreSQL, pertahankan PostgreSQL sebagai database operasional utama kecuali terdapat alasan teknis yang kuat untuk mengubahnya.
+
+Jangan mengganti database secara otomatis hanya karena Firebase sudah diintegrasikan.
+
+Gunakan Firebase untuk autentikasi dan penyimpanan file jika itu paling sesuai dengan kebutuhan.
+
+Jangan menyimpan satu record yang sama secara tidak terkontrol di PostgreSQL, Firestore, dan Google Sheets.
+
+Tentukan tanggung jawab setiap penyimpanan:
+
+- Google Sheets: data eksternal untuk impor dan sinkronisasi.
+- PostgreSQL: data operasional WO, assignment, laporan, role, konfigurasi, dan metadata aplikasi.
+- Firebase Authentication: identitas autentikasi.
+- Firebase Storage: file dan foto laporan.
+- Firestore: hanya digunakan jika terdapat kebutuhan khusus yang jelas dan telah disetujui.
+
+Jika Firestore tidak diperlukan, jangan menambahkannya sekadar untuk menggunakan seluruh layanan Firebase.
+
+Ketentuan database
+
+- Gunakan migration yang dapat dilacak.
+- Buat indeks untuk pencarian WO Number, Customer ID, contractor, area, dan appointment date.
+- Gunakan transaksi untuk operasi penting.
+- Terapkan unique constraint pada identitas WO sesuai desain data.
+- Cegah assignment ganda yang tidak diinginkan.
+- Validasi relasi akun, kontraktor, WO, dan teknisi.
+- Sediakan backup dan prosedur pemulihan.
+- Jangan menghapus data produksi ketika menjalankan migration.
+- Jangan menjalankan seed sample data di lingkungan produksi.
+
+---
+
+8. SINKRONISASI DATA PADA APLIKASI PUBLIK
+
+Perbaiki masalah ketika aplikasi MoraJaws yang telah dipublikasikan hanya menampilkan dashboard kosong, sementara data yang diimpor oleh Super Admin tidak muncul.
+
+Audit penyebab berikut:
+
+- Backend production belum dikonfigurasi.
+- Frontend menggunakan API URL localhost.
+- Environment variables tidak tersedia pada production.
+- Database production berbeda dengan database lokal.
+- Data hanya tersimpan di state frontend atau local storage.
+- Request API gagal karena autentikasi.
+- Query database menggunakan user ID atau role yang salah.
+- Filter contractor atau area menyebabkan data tidak tampil.
+- Firebase atau Google Sheets gagal terhubung.
+- CORS tidak mengizinkan domain aplikasi.
+- Migration database belum dijalankan.
+- Endpoint dashboard tidak mengambil data dari database produksi.
+
+Perilaku yang diwajibkan
+
+1. Data yang diimpor harus dikirim ke backend dan disimpan secara persisten.
+2. Dashboard membaca data dari backend production.
+3. Semua role melihat data sesuai permission masing-masing.
+4. Perubahan Super Admin tersimpan dan berlaku untuk seluruh pengguna yang berwenang.
+5. Refresh browser tidak menghilangkan data.
+6. Login dari perangkat lain tetap mengakses database produksi yang sama.
+7. Data tidak boleh bergantung pada local storage sebagai penyimpanan utama.
+8. Jika backend gagal, tampilkan error yang jelas dan jangan menggantinya dengan data sample.
+9. Jika data belum tersedia, tampilkan empty state yang informatif.
+10. Jika pengguna tidak memiliki akses, tampilkan pesan permission yang sesuai.
+11. Tampilkan status koneksi backend dan waktu pembaruan data bila diperlukan.
+12. Gunakan mekanisme cache yang aman dan invalidasi cache setelah perubahan penting.
+
+Jangan menyelesaikan masalah dashboard kosong dengan memasukkan data demo.
+
+---
+
+9. PERTAHANKAN WORKFLOW DAN ROLE MORAJAWS
+
+Jangan merusak workflow yang sudah ada.
+
+Super Admin / Super Agent
+
+Berwenang untuk:
+
+- Mengelola akun dan role.
+- Mengelola kontraktor.
+- Mengimpor data WO.
+- Mengonfigurasi Google Sheets.
+- Mengelola konfigurasi aplikasi.
+- Mengelola field dan pemetaan data.
+- Mengelola akses.
+- Memantau seluruh data sesuai kebijakan.
+- Mengatur integrasi dan status koneksi.
+- Mengelola konfigurasi yang berlaku lintas role.
+
+Dispatch
+
+Berwenang sesuai permission yang sudah ditetapkan untuk:
+
+- Monitoring WO.
+- Mengelola koordinasi pekerjaan.
+- Mengawasi laporan Installer.
+- Menggunakan fitur import sesuai kebijakan.
+- Mengakses live chat yang diizinkan.
+- Mengelola status tiket sesuai kewenangan.
+
+Dispatch tidak boleh memperoleh hak Super Admin hanya karena menggunakan endpoint yang sama.
+
+Leader / Korlap
+
+Berwenang untuk:
+
+- Melihat WO sesuai kontraktor dan area yang ditetapkan.
+- Melihat jadwal appointment sesuai aturan aplikasi.
+- Melakukan assignment dan reassign WO kepada teknisi.
+- Membuat dan mengelola akun Installer sesuai permission.
+- Memantau laporan teknisi.
+- Berkoordinasi melalui live chat yang diizinkan.
+
+Leader tidak boleh mengakses data kontraktor lain tanpa permission.
+
+Installer
+
+Berwenang untuk:
+
+- Melihat WO yang ditugaskan kepadanya.
+- Memperbarui progres.
+- Mengirim laporan pekerjaan.
+- Mengunggah foto.
+- Mengirim dan menerima pesan yang diizinkan.
+
+Installer tidak boleh melakukan assignment kepada teknisi lain kecuali permission tersebut secara eksplisit diberikan oleh administrator.
+
+Seluruh aturan ini harus diterapkan pada backend, bukan hanya dengan menyembunyikan tombol di frontend.
+
+---
+
+10. KONFIGURASI APLIKASI DAN PENGATURAN SUPER ADMIN
+
+Semua konfigurasi aplikasi yang memang dirancang sebagai pengaturan global harus disimpan secara persisten.
+
+Contoh:
+
+- Pengaturan UI.
+- Layout dan sidebar.
+- Visibilitas kolom.
+- Kategori kontraktor.
+- Pemetaan field.
+- Template import.
+- Konfigurasi integrasi.
+- Pengaturan session.
+- Konfigurasi fitur.
+- Template pesan yang digunakan aplikasi.
+- Pengaturan filter dan tampilan global sesuai kebijakan.
+
+Perubahan konfigurasi harus tersimpan di backend dan dapat digunakan kembali setelah aplikasi dibuka dari perangkat lain.
+
+Pisahkan pengaturan global dari pengaturan pribadi pengguna.
+
+Jangan mengizinkan konfigurasi sensitif dibaca oleh role yang tidak berhak.
+
+---
+
+11. ENVIRONMENT VARIABLES DAN SECRET MANAGEMENT
+
+Periksa seluruh environment variables yang diperlukan oleh proyek.
+
+Buat file ".env.example" berisi nama variabel dan placeholder saja.
+
+Contoh:
+
+Frontend
+
+- VITE_API_BASE_URL
+- VITE_FIREBASE_API_KEY
+- VITE_FIREBASE_AUTH_DOMAIN
+- VITE_FIREBASE_PROJECT_ID
+- VITE_FIREBASE_STORAGE_BUCKET
+- VITE_FIREBASE_APP_ID
+
+Sesuaikan prefix dengan framework frontend yang sebenarnya.
+
+Backend
+
+- NODE_ENV
+- PORT
+- FRONTEND_URL
+- DATABASE_URL
+- GOOGLE_CLOUD_PROJECT_ID
+- GOOGLE_SHEETS_SPREADSHEET_ID
+- GOOGLE_SHEETS_SOURCE_TAB
+- GOOGLE_APPLICATION_CREDENTIALS jika memang dibutuhkan pada lingkungan lokal
+- FIREBASE_PROJECT_ID
+- SESSION_SECRET jika session berbasis cookie digunakan
+- Konfigurasi layanan eksternal yang memang diperlukan.
+
+Jangan menaruh secret backend di variabel frontend.
+
+Firebase API key yang digunakan pada frontend bukan pengganti autentikasi dan otorisasi backend. Terapkan Firebase Security Rules, pembatasan API key yang sesuai, dan validasi permission di server.
+
+Gunakan Secret Manager untuk secret produksi yang didukung oleh arsitektur deployment.
+
+Jangan memasukkan file ".env", service account JSON, private key, password, token, atau kredensial database ke Git.
+
+Pastikan ".gitignore" mencakup file sensitif.
+
+Jika secret pernah masuk ke repository, lakukan rotasi secret dan bersihkan riwayat repository sesuai prosedur keamanan.
+
+Jangan menampilkan isi secret pada log, laporan audit, atau halaman pengaturan.
+
+---
+
+12. API BACKEND DAN KEAMANAN
+
+Periksa seluruh endpoint backend.
+
+Setiap endpoint sensitif wajib menerapkan:
+
+- Autentikasi.
+- Otorisasi berdasarkan role dan resource.
+- Validasi input.
+- Penanganan error.
+- Logging aman.
+- Rate limiting jika diperlukan.
+- Proteksi terhadap akses lintas pengguna.
+- Validasi kepemilikan atau assignment WO.
+
+Gunakan endpoint yang konsisten, misalnya:
+
+- "/api/health"
+- "/api/auth/session"
+- "/api/users"
+- "/api/work-orders"
+- "/api/work-orders/:id"
+- "/api/work-orders/:id/assign"
+- "/api/work-orders/:id/reassign"
+- "/api/import"
+- "/api/integrations/google-sheets/status"
+- "/api/integrations/google-sheets/test"
+- "/api/integrations/google-sheets/sync"
+- "/api/settings"
+- "/api/reports"
+- "/api/attachments"
+
+Nama endpoint tersebut hanya sebagai referensi. Pertahankan route yang sudah ada jika fungsinya setara.
+
+Jangan memberikan endpoint administrasi tanpa autentikasi.
+
+Jangan mengizinkan frontend menentukan sendiri role atau permission melalui request.
+
+Jangan menampilkan stack trace atau detail internal server kepada pengguna produksi.
+
+---
+
+13. PERSIAPAN DEPLOYMENT PRODUKSI
+
+Gunakan arsitektur deployment yang sesuai dengan repository MoraJaws.
+
+Jika backend Node.js kompatibel, Cloud Run dapat digunakan sebagai layanan backend.
+
+Frontend dapat dipublikasikan melalui Firebase Hosting atau layanan hosting lain yang kompatibel.
+
+PostgreSQL dapat tetap menggunakan penyedia database yang sekarang digunakan, selama koneksi, keamanan, dan ketersediaannya sudah dipastikan.
+
+Jangan menganggap Firebase Hosting dapat menjalankan backend Node.js tanpa layanan server yang sesuai.
+
+Persiapan build
+
+- Periksa dependency.
+- Perbaiki error TypeScript atau lint jika tersedia.
+- Jalankan test.
+- Jalankan production build.
+- Pastikan API URL production sudah benar.
+- Pastikan konfigurasi CORS sesuai domain frontend.
+- Pastikan HTTPS aktif.
+- Pastikan migration database telah dijalankan.
+- Pastikan secret produksi sudah dikonfigurasi.
+- Pastikan health check tersedia.
+- Pastikan log dapat diperiksa.
+- Pastikan tidak ada data sample di production.
+- Pastikan aplikasi tidak bergantung pada file lokal yang hilang setelah deployment.
+- Pastikan file upload menggunakan penyimpanan yang persisten.
+- Pastikan seluruh endpoint production dapat diakses sesuai permission.
+- Pastikan domain dan pengaturan DNS benar apabila menggunakan domain khusus.
+
+Jangan mengklaim deployment berhasil sebelum aplikasi benar-benar tersedia dan telah diuji dari lingkungan publik.
+
+---
+
+14. SISTEM MONITORING DAN ERROR REPORTING
+
+Sediakan monitoring untuk:
+
+- Status backend.
+- Status database.
+- Status Google Sheets.
+- Status Firebase Authentication.
+- Status Firebase Storage.
+- Waktu sinkronisasi terakhir.
+- Jumlah WO yang berhasil diproses.
+- Jumlah record yang dilewati karena duplikasi.
+- Jumlah record yang gagal.
+- Detail error yang aman.
+- Durasi request.
+- Kegagalan autentikasi yang relevan.
+- Error aplikasi production.
+
+Jangan menyimpan password, token lengkap, private key, atau informasi autentikasi sensitif dalam log.
+
+Buat pesan error yang dapat dipahami administrator tanpa membocorkan informasi internal.
+
+Contoh:
+
+"Google Sheets tidak dapat diakses. Periksa permission spreadsheet dan konfigurasi backend."
+
+"Backend tidak dapat terhubung ke database. Data belum diperbarui."
+
+"Sinkronisasi gagal. Data sebelumnya tetap dipertahankan."
+
+---
+
+15. PENGUJIAN WAJIB SEBELUM PUBLISH
+
+Buat dan jalankan pengujian berikut.
+
+A. Pengujian Google Sheets
+
+- Kredensial valid.
+- Kredensial tidak valid.
+- Spreadsheet ID salah.
+- Permission spreadsheet tidak mencukupi.
+- Nama sheet salah.
+- Header berubah.
+- Data kosong.
+- Data dengan field kosong.
+- WO duplikat.
+- Data Customer ID tidak valid.
+- API timeout.
+- Sinkronisasi gagal di tengah proses.
+- Sinkronisasi diulang.
+- Perubahan data dari spreadsheet.
+- Pemulihan setelah koneksi kembali.
+
+Pastikan kegagalan tidak menghapus data sebelumnya.
+
+B. Pengujian Firebase Authentication
+
+- Login valid.
+- Login tidak valid.
+- Akun dinonaktifkan.
+- Akun tanpa role.
+- Token kedaluwarsa.
+- Logout.
+- Session timeout.
+- Akses endpoint tanpa autentikasi.
+- Akses endpoint dengan role yang tidak sesuai.
+
+C. Pengujian role
+
+Uji setiap role secara terpisah.
+
+Pastikan Installer tidak dapat membuka WO milik Installer lain dengan memanipulasi ID pada URL atau request API.
+
+Pastikan Leader tidak dapat membaca data kontraktor lain dengan memanipulasi parameter.
+
+Pastikan Dispatch tidak dapat melakukan operasi Super Admin tanpa permission.
+
+Pastikan Super Admin dapat mengelola konfigurasi sesuai kebijakan.
+
+D. Pengujian data publik
+
+- Import data dari Super Admin.
+- Simpan data ke database production.
+- Logout.
+- Login kembali.
+- Buka aplikasi melalui perangkat berbeda.
+- Buka dashboard Dispatch.
+- Buka dashboard Leader.
+- Buka dashboard Installer.
+- Pastikan data muncul sesuai permission.
+- Refresh browser.
+- Periksa data tetap tersedia.
+- Periksa tidak ada data demo yang tercampur.
+
+E. Pengujian Firebase Storage
+
+- Upload file yang valid.
+- Upload file terlalu besar.
+- Upload tipe file yang dilarang.
+- Pengguna tanpa akses mencoba membuka file.
+- Pengguna mengakses lampiran WO lain.
+- File gagal diunggah.
+- File dapat dibuka kembali oleh pengguna yang berhak.
+
+F. Pengujian deployment
+
+- Production build berhasil.
+- Frontend dapat dibuka.
+- Backend health check berhasil.
+- Database dapat diakses.
+- Login berjalan.
+- Google Sheets dapat diuji.
+- Data WO dapat dimuat.
+- Tidak ada API localhost di production.
+- Tidak ada secret backend di bundle frontend.
+- Tidak ada error kritis di browser console.
+- Tidak ada error kritis pada backend log.
+
+---
+
+16. KRITERIA FINAL SIAP PUBLISH
+
+Aplikasi hanya dapat dinyatakan siap produksi apabila:
+
+1. Build produksi berhasil.
+2. Backend production aktif.
+3. Database production dapat diakses.
+4. Autentikasi dan otorisasi berjalan.
+5. Google Sheets benar-benar dapat diakses melalui backend.
+6. Firebase Authentication berhasil digunakan jika diaktifkan.
+7. Firebase Storage berjalan jika digunakan.
+8. Data yang diimpor tersimpan secara persisten.
+9. Data muncul di dashboard setelah login ulang.
+10. Data tidak hilang setelah refresh.
+11. Semua role melihat data sesuai permission.
+12. Tidak ada kredensial rahasia dalam repository atau bundle frontend.
+13. Tidak ada sample data yang tercampur dengan data produksi.
+14. Error penting ditangani dengan aman.
+15. Backup dan prosedur pemulihan telah disiapkan.
+16. Pengujian akses lintas role telah lulus.
+17. Konfigurasi produksi telah diverifikasi.
+18. URL aplikasi produksi dapat dibuka dan diuji.
+
+Jika salah satu persyaratan kritis gagal, jangan menyatakan aplikasi siap produksi.
+
+---
+
+17. OUTPUT YANG HARUS DIHASILKAN
+
+Setelah implementasi, berikan hasil berikut:
+
+1. Laporan audit kondisi awal.
+2. Daftar file yang diubah.
+3. Daftar file baru.
+4. Penjelasan perubahan arsitektur.
+5. Status integrasi Google Sheets.
+6. Status integrasi Google Cloud.
+7. Status Firebase Authentication.
+8. Status Firebase Storage jika digunakan.
+9. Status database production.
+10. Daftar environment variables yang harus dikonfigurasi.
+11. Daftar secret yang harus dimasukkan melalui Secret Manager.
+12. Panduan membuat atau memilih Google Cloud Project.
+13. Panduan konfigurasi Google Sheets.
+14. Panduan konfigurasi Firebase.
+15. Panduan deployment backend.
+16. Panduan deployment frontend.
+17. Daftar pengujian beserta hasil aktualnya.
+18. Daftar masalah yang masih memerlukan tindakan administrator.
+19. URL production setelah deployment berhasil.
+20. Checklist akhir sebelum aplikasi digunakan secara resmi.
+
+Pisahkan status dengan jelas:
+
+- BERHASIL: sudah dijalankan dan diverifikasi.
+- BELUM DIKONFIGURASI: membutuhkan tindakan administrator.
+- GAGAL: telah diuji tetapi tidak berhasil.
+- BELUM DIUJI: belum memiliki bukti verifikasi.
+
+Jangan mengarang hasil pengujian atau URL deployment.
+
+---
+
+18. INSTRUKSI EKSEKUSI
+
+Kerjakan secara bertahap.
+
+TAHAP 1: Audit repository dan identifikasi arsitektur aktual.
+
+TAHAP 2: Perbaiki backend, database, autentikasi, dan penyimpanan data.
+
+TAHAP 3: Integrasikan Google Sheets melalui backend.
+
+TAHAP 4: Integrasikan Google Cloud dan pengelolaan secret.
+
+TAHAP 5: Integrasikan Firebase Authentication dan Firebase Storage jika digunakan.
+
+TAHAP 6: Perbaiki pemuatan data pada aplikasi publik.
+
+TAHAP 7: Jalankan seluruh pengujian dan perbaiki error.
+
+TAHAP 8: Siapkan konfigurasi production dan deployment.
+
+TAHAP 9: Lakukan pengujian akhir melalui URL production.
+
+TAHAP 10: Berikan laporan status dan panduan tindakan administrator.
+
+Jangan berhenti hanya setelah menulis kode atau membuat konfigurasi contoh.
+
+Lakukan implementasi sesuai akses yang tersedia. Jika memerlukan tindakan yang hanya dapat dilakukan pemilik akun Google, jelaskan langkah yang harus dilakukan dan lanjutkan pekerjaan lain yang tidak bergantung pada tindakan tersebut.
+
+Jangan meminta pengguna mengirim password Google, private key, refresh token, atau kredensial sensitif melalui percakapan.
+
+HASIL AKHIR YANG DIHARAPKAN:
+
+MoraJaws menjadi aplikasi produksi yang aman, dapat diakses secara publik, menggunakan database persisten, terhubung ke Google Sheets melalui backend, menggunakan Google Cloud untuk infrastruktur, memanfaatkan Firebase sesuai kebutuhan, serta mempertahankan seluruh workflow dan permission yang telah ditetapkan.

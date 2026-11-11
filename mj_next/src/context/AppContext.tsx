@@ -50,7 +50,7 @@ import {
   processRawImportWithEngine,
   reassignWOTechnician
 } from '../services/woFieldMappingEngine';
-import { DEFAULT_PASSWORD_HASH, quickHash, Permission, hasPermission as checkPermission } from '../services/authService';
+import { Permission, hasPermission as checkPermission } from '../services/authService';
 import { GoogleSheetsConfig, SheetSyncResult, DEFAULT_SHEETS_CONFIG } from '../types/sheets.ts';
 import {
   pullRowsFromSheet,
@@ -66,47 +66,16 @@ import {
 import { useToast } from './ToastContext';
 import { saveTicketsOffline, cacheMasterData, getOfflineTickets, removeSyncQueueItem } from '../services/offlineDb';
 import { useOfflineSync } from './OfflineSyncContext';
-import { auth, testFirestoreConnection, pingFirestore, isQuotaExceededError } from '../lib/firebase';
-import { signOut } from 'firebase/auth';
 import {
-  isFirestoreActiveForEnvironment,
-  subscribeToMoraJawsFirestore,
-  subscribeToAuditLogs,
-  saveTicketToFirestore,
-  batchSaveTicketsToFirestore,
-  batchDeleteTicketsFromFirestore,
-  deleteTicketFromFirestore,
-  softDeleteTicketInFirestore,
-  archiveTicketInFirestore,
-  restoreTicketInFirestore,
-  saveContractorToFirestore,
-  deleteContractorFromFirestore,
-  saveCoverageAreaToFirestore,
-  deleteCoverageAreaFromFirestore,
-  sendChatMessageToFirestore,
-  addAuditLogToFirestore,
-  saveTemplateToFirestore,
-  deleteTemplateFromFirestore,
-  saveUserToFirestore,
-  deleteUserFromFirestore,
-  softDeleteUserInFirestore,
-  seedFirestoreIfEmpty,
-  saveGlobalAppSettingsToFirestore,
-  loadGlobalAppSettingsFromFirestore,
-  saveReportDropdownCategoryToFirestore,
-  deleteReportDropdownCategoryFromFirestore,
-  softDeleteReportDropdownCategoryInFirestore,
-  seedReportDropdownCategoriesIfEmpty,
-  INITIAL_REPORT_DROPDOWN_CATEGORIES,
-  fetchAllTicketsFromFirestore,
-  findUserInFirestore,
-  INITIAL_CHAT_CATEGORIES,
-  saveChatCategoriesToFirestore,
-  INITIAL_HIERARCHICAL_DROPLISTS,
-  saveHierarchicalDroplistsToFirestore,
+  saveTicketToFirestore, batchSaveTicketsToFirestore, batchDeleteTicketsFromFirestore,
+  deleteTicketFromFirestore, softDeleteTicketInFirestore, archiveTicketInFirestore, restoreTicketInFirestore,
+  saveContractorToFirestore, deleteContractorFromFirestore, saveCoverageAreaToFirestore, deleteCoverageAreaFromFirestore,
+  sendChatMessageToFirestore, addAuditLogToFirestore, saveTemplateToFirestore, deleteTemplateFromFirestore,
+  saveUserToFirestore, deleteUserFromFirestore, softDeleteUserInFirestore, saveGlobalAppSettingsToFirestore,
+  loadGlobalAppSettingsFromFirestore, saveReportDropdownCategoryToFirestore, deleteReportDropdownCategoryFromFirestore,
+  softDeleteReportDropdownCategoryInFirestore, saveChatCategoriesToFirestore, saveHierarchicalDroplistsToFirestore,
   reconcileDroplistData
 } from '../services/firestoreDb';
-import { SupabaseRepository } from '../services/supabaseDb';
 import { auditAndCleanDuplicates, DuplicateAuditReport } from '../services/woDeduplicationService';
 
 import { getJakartaDateString, getJakartaDateParts, getTicketAppointmentDate } from '../services/appointmentDateParser';
@@ -317,32 +286,8 @@ interface AppContextType {
   loadCentralData: () => Promise<void>;
 }
 
-const STORAGE_KEYS = {
-  USERS: 'morajaws_users_v4',
-  TICKETS: 'morajaws_tickets_v4',
-  CONTRACTORS: 'morajaws_contractors_v4',
-  COVERAGE_AREAS: 'morajaws_coverage_areas_v4',
-  ROOT_CAUSES: 'morajaws_root_causes_v4',
-  MESSAGES: 'morajaws_messages_v4',
-  TEMPLATES: 'morajaws_wa_templates_v4',
-  WORKFLOWS: 'morajaws_workflows_v4',
-  AUDIT: 'morajaws_audit_logs_v4',
-  WA_LOGS: 'morajaws_wa_logs_v4',
-  MAPPINGS: 'morajaws_mappings_v4',
-  CANONICAL_FIELDS: 'morajaws_canonical_fields_v4',
-  SHEETS_CONFIG: 'morajaws_sheets_config_v4'
-};
+const STORAGE_KEYS = { SHEETS_CONFIG: 'morajaws_sheets_config_v4' };
 
-// Purge legacy v1/v2/v3 sample storage keys on script evaluation
-try {
-  const legacyKeys = [
-    'morajaws_users_v3', 'morajaws_tickets_v3', 'morajaws_contractors_v3',
-    'morajaws_coverage_areas_v3', 'morajaws_messages_v3', 'morajaws_audit_logs_v3',
-    'morajaws_wa_logs_v3', 'morajaws_users_v2', 'morajaws_tickets_v2',
-    'morajaws_contractors_v2', 'morajaws_messages_v2'
-  ];
-  legacyKeys.forEach(k => localStorage.removeItem(k));
-} catch (e) {}
 
 export const normalizeContractor = (c: any): Contractor => {
   if (!c) return { id: '', name: '', code: '', coverageAreas: [], active: true, createdAt: new Date().toISOString() };
@@ -429,21 +374,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
 
-  const [users, setUsers] = useState<User[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.USERS);
-      if (saved) {
-        const parsed: User[] = JSON.parse(saved);
-        DEFAULT_USERS.forEach(defU => {
-          if (!parsed.some(u => u.id === defU.id || u.username.toLowerCase() === defU.username.toLowerCase())) {
-            parsed.push(defU);
-          }
-        });
-        return parsed;
-      }
-    } catch (e) {}
-    return DEFAULT_USERS;
-  });
+  const [users, setUsers] = useState<User[]>([]);
 
   const [currentUser, setCurrentUser] = useState<User>(() => {
     try {
@@ -473,495 +404,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return UNAUTHENTICATED_USER;
   });
 
-  const [contractors, setContractors] = useState<Contractor[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.CONTRACTORS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return deduplicateContractors(parsed);
-        }
-      }
-    } catch (e) {}
-    return deduplicateContractors(DEFAULT_CONTRACTORS);
-  });
+  const [contractors, setContractors] = useState<Contractor[]>([]);
 
-  const [coverageAreas, setCoverageAreas] = useState<CoverageArea[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.COVERAGE_AREAS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return DEFAULT_COVERAGE_AREAS;
-  });
+  const [coverageAreas, setCoverageAreas] = useState<CoverageArea[]>([]);
 
-  const [rootCauseCategories, setRootCauseCategories] = useState<RootCauseCategory[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.ROOT_CAUSES);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return DEFAULT_ROOT_CAUSE_CATEGORIES;
-  });
+  const [rootCauseCategories, setRootCauseCategories] = useState<RootCauseCategory[]>([]);
 
   const workResultsList = DEFAULT_WORK_RESULTS;
 
-  const [tickets, setTickets] = useState<Ticket[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.TICKETS);
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.warn('Failed loading tickets from storage', e);
-    }
-    return [];
-  });
+  const [tickets, setTickets] = useState<Ticket[]>([]);
 
-  const [ticketMessages, setTicketMessages] = useState<TicketMessage[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.MESSAGES);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [];
-  });
+  const [ticketMessages, setTicketMessages] = useState<TicketMessage[]>([]);
 
-  const [templates, setTemplates] = useState<WhatsAppTemplate[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.TEMPLATES);
-      if (saved) {
-        const parsed: WhatsAppTemplate[] = JSON.parse(saved);
-        const existingIds = new Set(parsed.map(t => t.id));
-        const missing = DEFAULT_WHATSAPP_TEMPLATES.filter(t => !existingIds.has(t.id));
-        return missing.length > 0 ? [...parsed, ...missing] : parsed;
-      }
-    } catch (e) {}
-    return DEFAULT_WHATSAPP_TEMPLATES;
-  });
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
 
-  const [workflowRules, setWorkflowRules] = useState<WorkflowRule[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.WORKFLOWS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return DEFAULT_WORKFLOW_RULES;
-  });
+  const [workflowRules, setWorkflowRules] = useState<WorkflowRule[]>(DEFAULT_WORKFLOW_RULES);
 
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.AUDIT);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [
-      {
-        id: 'audit-1',
-        action: 'MoraJaws System Initialized',
-        entity: 'auth',
-        entityId: 'sys-0',
-        details: 'MoraJaws operational with Contractors, Wi-Fi Root Cause Catalog, and Live Chat Engine',
-        performedBy: 'System',
-        userRole: 'super_admin',
-        timestamp: new Date().toISOString()
-      }
-    ];
-  });
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   const [ticketActivities, setTicketActivities] = useState<TicketActivity[]>([]);
 
-  const [waLogs, setWaLogs] = useState<WhatsAppMessageLog[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.WA_LOGS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [];
-  });
+  const [waLogs, setWaLogs] = useState<WhatsAppMessageLog[]>([]);
 
-  const [headerMappings, setHeaderMappings] = useState<HeaderMapping[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.MAPPINGS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return STANDARD_HEADER_MAPPINGS;
-  });
+  const [headerMappings, setHeaderMappings] = useState<HeaderMapping[]>(STANDARD_HEADER_MAPPINGS);
 
-  const [reportDropdownCategories, setReportDropdownCategories] = useState<ReportDropdownCategory[]>(() => {
-    try {
-      const saved = localStorage.getItem('morajaws_report_dropdown_categories');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_REPORT_DROPDOWN_CATEGORIES;
-  });
+  const [reportDropdownCategories, setReportDropdownCategories] = useState<ReportDropdownCategory[]>([]);
 
   const [isDropdownCategoriesLoading, setIsDropdownCategoriesLoading] = useState(true);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('morajaws_report_dropdown_categories', JSON.stringify(reportDropdownCategories));
-    } catch (e) {}
-  }, [reportDropdownCategories]);
 
   // Contact Center Chat Categories state
-  const [chatCategories, setChatCategories] = useState<ChatCategoryConfig[]>(() => {
-    try {
-      const saved = localStorage.getItem('morajaws_chat_categories');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_CHAT_CATEGORIES;
-  });
+  const [chatCategories, setChatCategories] = useState<ChatCategoryConfig[]>([]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('morajaws_chat_categories', JSON.stringify(chatCategories));
-    } catch (e) {}
-  }, [chatCategories]);
 
   // Hierarchical Droplists (Status -> Reason -> Remarks) state
-  const [hierarchicalStatuses, setHierarchicalStatuses] = useState<HierarchicalStatus[]>(() => {
-    try {
-      const saved = localStorage.getItem('morajaws_hierarchical_droplists');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_HIERARCHICAL_DROPLISTS;
-  });
+  const [hierarchicalStatuses, setHierarchicalStatuses] = useState<HierarchicalStatus[]>([]);
 
+
+  const [canonicalFields, setCanonicalFields] = useState<CanonicalFieldConfig[]>(MASTER_CANONICAL_FIELDS);
+
+  // Operational data is authoritative in Supabase. Browser storage is not a source of truth.
+
+  // Supabase-only connectivity lifecycle. Historical Firestore status fields remain for UI compatibility.
   useEffect(() => {
-    try {
-      localStorage.setItem('morajaws_hierarchical_droplists', JSON.stringify(hierarchicalStatuses));
-    } catch (e) {}
-  }, [hierarchicalStatuses]);
-
-  const [canonicalFields, setCanonicalFields] = useState<CanonicalFieldConfig[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.CANONICAL_FIELDS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return MASTER_CANONICAL_FIELDS;
-  });
-
-  // Persistent storage sync
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CANONICAL_FIELDS, JSON.stringify(canonicalFields));
-  }, [canonicalFields]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-  }, [users]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CONTRACTORS, JSON.stringify(contractors));
-  }, [contractors]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.COVERAGE_AREAS, JSON.stringify(coverageAreas));
-  }, [coverageAreas]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ROOT_CAUSES, JSON.stringify(rootCauseCategories));
-  }, [rootCauseCategories]);
-
-  // Persistent storage sync (localStorage & IndexedDB offline cache)
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TICKETS, JSON.stringify(tickets));
-    saveTicketsOffline(tickets).catch(e => console.warn('Failed saving tickets to IndexedDB', e));
-  }, [tickets]);
-
-  // Mirror master data catalogs into IndexedDB for offline access
-  useEffect(() => {
-    cacheMasterData({
-      contractors,
-      users,
-      coverageAreas,
-      rootCauses: rootCauseCategories
-    }).catch(e => console.warn('Failed caching master data to IndexedDB', e));
-  }, [contractors, users, coverageAreas, rootCauseCategories]);
-
-  // Load offline tickets from IndexedDB on startup if available
-  useEffect(() => {
-    async function loadFromIndexedDb() {
-      try {
-        const offlineList = await getOfflineTickets();
-        if (offlineList && offlineList.length > 0) {
-          setTickets(prev => {
-            const existingMap = new Map(prev.map(t => [t.id, t]));
-            offlineList.forEach(t => existingMap.set(t.id, t));
-            return Array.from(existingMap.values());
-          });
-        }
-      } catch (e) {
-        console.warn('Failed loading offline tickets from IndexedDB', e);
-      }
-    }
-    loadFromIndexedDb();
-  }, []);
-
-  // Cloud Firestore Real-Time Subscriptions & Master Sync
-  useEffect(() => {
-    let unsubscribeFirestore: (() => void) | null = null;
-    let isCancelled = false;
-
-    // Handle online/offline network transitions
-    const handleOnline = () => {
-      setSyncStatus('SYNCING');
-      setFirestoreStatus('connecting');
-      refreshFirestoreData().catch(() => {});
-    };
-    const handleOffline = () => {
-      setSyncStatus('OFFLINE');
-      setFirestoreStatus('offline');
-    };
-
+    const handleOnline = () => { setSyncStatus('SYNCING'); setFirestoreStatus('connecting'); loadCentralData().catch(() => {}); };
+    const handleOffline = () => { setSyncStatus('OFFLINE'); setFirestoreStatus('offline'); };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
-    async function initFirestore() {
-      // In production, Firestore is fully deactivated as an inactive transition archive.
-      // All production real-time updates and persistence route via Express + Supabase.
-      if (!isFirestoreActiveForEnvironment()) {
-        setFirestoreStatus('offline');
-        setFirestoreLoading(false);
-        setIsFirestoreReady(false);
-        setSyncStatus('SAVED');
-        try {
-          const unsubSSE = SupabaseRepository.getInstance().subscribeToChanges({
-            table: 'work_orders',
-            onPayload: (payload) => {
-              if (isCancelled) return;
-              if (payload && payload.new) {
-                setTickets(prev => {
-                  const idx = prev.findIndex(t => t.id === payload.new.id);
-                  if (idx >= 0) {
-                    const copy = [...prev];
-                    copy[idx] = payload.new;
-                    return copy;
-                  }
-                  return [payload.new, ...prev];
-                });
-              }
-            }
-          });
-          unsubscribeFirestore = unsubSSE;
-        } catch (sseErr) {
-          console.warn('[Realtime SSE] Non-fatal notice attaching Supabase SSE:', sseErr);
-        }
-        return;
-      }
-
-      setFirestoreLoading(true);
-      setFirestoreStatus('connecting');
-      setSyncStatus(navigator.onLine ? 'LOADING' : 'OFFLINE');
-
-      try {
-        const isConnected = await testFirestoreConnection();
-        if (isCancelled) return;
-
-        if (!isConnected) {
-          setFirestoreStatus('offline');
-          setFirestoreLoading(false);
-          setSyncStatus('OFFLINE');
-          return;
-        }
-
-        // Seed Firestore if empty so cloud database has initial data (dev only)
-        await seedFirestoreIfEmpty({
-          tickets: INITIAL_SAMPLE_TICKETS,
-          contractors: DEFAULT_CONTRACTORS,
-          coverageAreas: DEFAULT_COVERAGE_AREAS,
-          templates: DEFAULT_WHATSAPP_TEMPLATES,
-          users: DEFAULT_USERS
-        });
-
-        await pingFirestore();
-
-        // Subscribe to real-time collections using onSnapshot
-        unsubscribeFirestore = subscribeToMoraJawsFirestore({
-          onTicketsChange: (liveTickets) => {
-            if (isCancelled) return;
-            setTickets(liveTickets || []);
-            setFirestoreStatus('connected');
-            setFirestoreLoading(false);
-            setIsFirestoreReady(true);
-            setSyncStatus('SAVED');
-            setLastSyncTime(new Date().toISOString());
-            setSyncError(null);
-          },
-          onContractorsChange: (liveContractors) => {
-            if (isCancelled) return;
-            if (liveContractors) {
-              setContractors(deduplicateContractors(liveContractors));
-            }
-          },
-          onCoverageAreasChange: (liveAreas) => {
-            if (isCancelled) return;
-            if (liveAreas) {
-              setCoverageAreas(liveAreas);
-            }
-          },
-          onMessagesChange: (liveMessages) => {
-            if (isCancelled) return;
-            if (liveMessages) {
-              setTicketMessages(liveMessages);
-            }
-          },
-          onTemplatesChange: (liveTemplates) => {
-            if (isCancelled) return;
-            if (liveTemplates) {
-              setTemplates(liveTemplates);
-            }
-          },
-          onUsersChange: (liveUsers) => {
-            if (isCancelled) return;
-            if (liveUsers && liveUsers.length > 0) {
-              setUsers(liveUsers);
-              const sessionStr = localStorage.getItem('morajaws_auth_session');
-              if (sessionStr) {
-                try {
-                  const s = JSON.parse(sessionStr);
-                  const matchingLive = liveUsers.find(u => u.id === s.userId || u.username.toLowerCase() === (s.username || '').toLowerCase());
-                  if (matchingLive) {
-                    if (matchingLive.active === false || (matchingLive as any).isDeleted) {
-                      logout();
-                      toast.error('Akun Anda telah dinonaktifkan oleh Administrator.', 'Akses Ditutup');
-                    } else {
-                      setCurrentUser(matchingLive);
-                    }
-                  }
-                } catch (e) {}
-              }
-            }
-          },
-          onReportDropdownCategoriesChange: (liveCats) => {
-            if (isCancelled) return;
-            if (liveCats && liveCats.length > 0) {
-              setReportDropdownCategories(liveCats);
-            }
-            setIsDropdownCategoriesLoading(false);
-          },
-          onChatCategoriesChange: (liveChatCats) => {
-            if (isCancelled) return;
-            if (liveChatCats && liveChatCats.length > 0) {
-              setChatCategories(liveChatCats);
-            }
-          },
-          onHierarchicalDroplistsChange: (liveHier) => {
-            if (isCancelled) return;
-            if (liveHier && liveHier.length > 0) {
-              setHierarchicalStatuses(liveHier);
-            }
-          },
-          onError: (err) => {
-            if (isQuotaExceededError(err)) {
-              console.warn('[Firestore Live] Daily free read quota reached. MoraJaws active on central server storage.');
-              setFirestoreStatus('offline');
-              setSyncStatus('SAVED');
-              setSyncError('Batas Kuota Harian Firestore Terlampaui (Free Tier). Sistem aktif menggunakan database server MoraJaws.');
-            } else {
-              console.warn('[Firestore Live] Notice in subscription:', err?.message || err);
-              setFirestoreStatus('error');
-              setSyncStatus('ERROR');
-              setSyncError(err?.message || 'Gagal sinkronisasi data real-time Firestore');
-            }
-          }
-        });
-
-        seedReportDropdownCategoriesIfEmpty().catch(e => console.warn('[Firestore] Notice seeding report categories:', e));
-        setFirestoreStatus('connected');
-      } catch (err: any) {
-        if (isQuotaExceededError(err)) {
-          console.warn('[Firestore] Quota limit reached during initialization, falling back to server database.');
-          setFirestoreStatus('offline');
-          setSyncStatus('SAVED');
-          setSyncError('Batas Kuota Harian Firestore Terlampaui (Free Tier). Sistem aktif menggunakan database server MoraJaws.');
-        } else {
-          console.warn('[Firestore] Initialization notice:', err?.message || err);
-          setFirestoreStatus('error');
-          setSyncStatus('ERROR');
-          setSyncError(err?.message || 'Gagal inisialisasi koneksi Cloud Firestore');
-        }
-      } finally {
-        if (!isCancelled) {
-          setFirestoreLoading(false);
-        }
-      }
-    }
-
-    initFirestore();
-
-    return () => {
-      isCancelled = true;
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      if (unsubscribeFirestore) {
-        unsubscribeFirestore();
-      }
-    };
+    setFirestoreStatus(navigator.onLine ? 'connecting' : 'offline');
+    setFirestoreLoading(false);
+    setIsFirestoreReady(true);
+    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
   }, []);
 
-  // Dedicated Audit Logs Listener (Dev only with Firestore, Production uses Express Supabase API)
-  useEffect(() => {
-    let unsubAudit: (() => void) | null = null;
-    const canViewAudit = Boolean(
-      currentUser.id &&
-      currentUser.active &&
-      (currentUser.role === 'super_admin' || currentUser.role === 'it_support')
-    );
+  // Audit logs are loaded from the protected Supabase-backed API by loadCentralData.
 
-    if (canViewAudit && isFirestoreActiveForEnvironment() && firestoreStatus !== 'offline') {
-      try {
-        unsubAudit = subscribeToAuditLogs(
-          (liveLogs) => {
-            if (liveLogs) {
-              setAuditLogs(liveLogs);
-            }
-          },
-          (err) => {
-            console.warn('[AuditLogs] Non-fatal notice in audit logs listener:', err?.message || err);
-          }
-        );
-      } catch (err) {
-        console.warn('[AuditLogs] Failed attaching audit logs listener:', err);
-      }
-    } else {
-      if (!canViewAudit) {
-        setAuditLogs([]);
-      }
-    }
-
-    return () => {
-      if (unsubAudit) {
-        unsubAudit();
-      }
-    };
-  }, [currentUser.id, currentUser.role, currentUser.active, firestoreStatus]);
-
-  // Explicit Firestore data refresh (re-queries Cloud Firestore only when active in dev)
+  // Legacy method name retained for UI compatibility; Supabase bootstrap is canonical.
   const refreshFirestoreData = async () => {
-    if (!isFirestoreActiveForEnvironment()) {
-      return;
-    }
-    if (!navigator.onLine) {
-      setSyncStatus('OFFLINE');
-      toast.warning('Koneksi internet terputus. Menggunakan data offline lokal.', 'Mode Offline');
-      return;
-    }
-    setSyncStatus('SYNCING');
-    try {
-      const liveTickets = await fetchAllTicketsFromFirestore();
-      if (Array.isArray(liveTickets) && liveTickets.length > 0) {
-        setTickets(liveTickets);
-      }
-      setSyncStatus('SAVED');
-      setLastSyncTime(new Date().toISOString());
-      setSyncError(null);
-      setFirestoreStatus('connected');
-    } catch (err: any) {
-      if (isQuotaExceededError(err)) {
-        console.warn('[Firestore Sync] Quota limit reached on free tier. Using central server persistence.');
-        setSyncStatus('SAVED');
-        setFirestoreStatus('offline');
-        setSyncError('Batas Kuota Harian Firestore Terlampaui (Free Tier). Sistem aktif menggunakan database server MoraJaws.');
-      } else {
-        console.warn('[Firestore Sync] Refresh notice:', err?.message || err);
-        setSyncStatus('ERROR');
-        setSyncError(err?.message || 'Gagal menyinkronkan data dari Cloud Firestore');
-      }
-    }
+    await loadCentralData();
   };
 
   const loadCentralData = async () => {
@@ -1019,14 +519,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } catch {}
       }
 
-      // In dev with Firestore active, query Firestore refresh
-      if (isFirestoreActiveForEnvironment()) {
-        try {
-          await refreshFirestoreData();
-        } catch (fErr) {
-          console.warn('[CentralData] Firestore sync fallback to backend server database:', fErr);
-        }
-      }
     } catch (err: any) {
       console.warn('[CentralData] Sync error:', err);
       setDataLoadError(err?.message || 'Gagal memuat status sesi');
@@ -1127,25 +619,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, [registerAppSyncHandler]);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(ticketMessages));
-  }, [ticketMessages]);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TEMPLATES, JSON.stringify(templates));
-  }, [templates]);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.WORKFLOWS, JSON.stringify(workflowRules));
-  }, [workflowRules]);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.AUDIT, JSON.stringify(auditLogs));
-  }, [auditLogs]);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.WA_LOGS, JSON.stringify(waLogs));
-  }, [waLogs]);
 
   const [googleSheetsConfig, setGoogleSheetsConfig] = useState<GoogleSheetsConfig>(() => {
     try {
@@ -1185,7 +662,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setAuditLogs(prev => [entry, ...prev.slice(0, 499)]);
     addAuditLogToFirestore(entry).catch(err => {
-      console.warn('[Firestore] Error recording audit log:', err);
+      console.warn('[Supabase] Error recording audit log:', err);
     });
   };
 
@@ -1203,19 +680,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
 
   // Operational schedule reference date (Asia/Jakarta WIB)
-  const [operationalDate, setOperationalDateState] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('morajaws_operational_date');
-      if (saved) return saved;
-    } catch (e) {}
-    return getJakartaDateString(0);
-  });
+  const [operationalDate, setOperationalDateState] = useState<string>(() => getJakartaDateString(0));
 
   const setOperationalDate = (date: string) => {
     setOperationalDateState(date);
-    try {
-      localStorage.setItem('morajaws_operational_date', date);
-    } catch (e) {}
     saveGlobalAppSettingsToFirestore({ operationalDate: date }).catch(() => {});
     fetch('/api/system/operational-date', {
       method: 'POST',
@@ -1233,7 +701,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(data => {
         if (data && data.success && data.operationalDate) {
           setOperationalDateState(data.operationalDate);
-          localStorage.setItem('morajaws_operational_date', data.operationalDate);
         }
       })
       .catch(() => {});
@@ -1487,8 +954,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (permanent) {
       setUsers(prev => prev.filter(u => u.id !== userId));
       deleteUserFromFirestore(userId)
-        .then(() => toast.warning(`Akun ${target.name} (@${target.username}) telah dihapus permanen dari Cloud Firestore.`, 'Akun Dihapus Permanen'))
-        .catch(err => toast.error('Gagal menghapus user dari Cloud Firestore: ' + (err?.message || err)));
+        .then(() => toast.warning(`Akun ${target.name} (@${target.username}) telah dihapus permanen dari database Supabase.`, 'Akun Dihapus Permanen'))
+        .catch(err => toast.error('Gagal menghapus user dari database Supabase: ' + (err?.message || err)));
       addAuditLog('User Permanently Deleted', 'auth', userId, `Super Admin ${currentUser.name} menghapus permanen akun ${target.name} (@${target.username}). Alasan: ${reason}`);
     } else {
       const softDeleted = {
@@ -1501,16 +968,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       setUsers(prev => prev.map(u => (u.id === userId ? softDeleted : u)));
       softDeleteUserInFirestore(userId, currentUser.name, reason)
-        .then(() => toast.warning(`Akun ${target.name} (@${target.username}) berhasil dinonaktifkan & ditandai terhapus di Cloud Firestore.`, 'Akun Dihapus (Soft Delete)'))
-        .catch(err => toast.error('Gagal memperbarui status user di Cloud Firestore: ' + (err?.message || err)));
+        .then(() => toast.warning(`Akun ${target.name} (@${target.username}) berhasil dinonaktifkan & ditandai terhapus di database Supabase.`, 'Akun Dihapus (Soft Delete)'))
+        .catch(err => toast.error('Gagal memperbarui status user di database Supabase: ' + (err?.message || err)));
       addAuditLog('User Soft Deleted', 'auth', userId, `Super Admin ${currentUser.name} menonaktifkan & menandai terhapus (soft delete) akun ${target.name} (@${target.username}). Alasan: ${reason}`);
     }
 
-    fetch(`/api/users/${userId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ reason, permanent })
-    }).catch(e => console.error('Error syncing user deletion to server:', e));
 
     return { success: true };
   };
@@ -1579,14 +1041,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSyncStatus('SAVED');
       setLastSyncTime(new Date().toISOString());
 
-      // Sync with backend API
-      await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(updates)
-      });
 
-      toast.success(`Data akun ${updatedUser.name} berhasil diperbarui di Cloud Firestore.`, 'Akun Diperbarui');
+      toast.success(`Data akun ${updatedUser.name} berhasil diperbarui di database Supabase.`, 'Akun Diperbarui');
       addAuditLog('User Account Updated', 'auth', userId, `${currentUser.name} memperbarui profil pengguna ${updatedUser.name}`);
       return { success: true };
     } catch (err: any) {
@@ -1637,14 +1093,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           await batchSaveTicketsToFirestore(report.mergedMasterTickets);
         } catch (e) {
-          console.warn('[Firestore] Error saving merged master tickets:', e);
+          console.warn('[Supabase] Error saving merged master tickets:', e);
         }
       }
       if (report.duplicateDocIdsToDelete.length > 0) {
         try {
           await batchDeleteTicketsFromFirestore(report.duplicateDocIdsToDelete);
         } catch (e) {
-          console.warn('[Firestore] Error deleting duplicate docs:', e);
+          console.warn('[Supabase] Error deleting duplicate docs:', e);
         }
       }
       addAuditLog(
@@ -1699,7 +1155,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         })
         .catch(err => {
           setSyncStatus('ERROR');
-          console.warn('[Firestore] Error anonymizing customer tickets:', err);
+          console.warn('[Supabase] Error anonymizing customer tickets:', err);
         });
     }
 
@@ -1746,15 +1202,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUsers(prev => [...prev, newUser]);
     addAuditLog('Dispatch Account Registered', 'auth', newUser.id, `Super Admin registered Dispatch account: ${newUser.name} (@${newUser.username})`);
     
-    saveUserToFirestore(newUser).catch(e => console.warn('[Firestore] Error saving dispatch account:', e));
+    saveUserToFirestore(newUser).catch(e => console.warn('[Supabase] Error saving dispatch account:', e));
 
-    fetch('/api/users', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(newUser)
-    }).catch(e => console.error('Error syncing dispatch account to server:', e));
 
-    toast.success(`Akun Dispatch ${newUser.name} berhasil didaftarkan! Password default: 12345678`, 'Registrasi Sukses');
+    toast.success(`Akun Dispatch ${newUser.name} berhasil didaftarkan! Password sementara dibuat aman oleh server`, 'Registrasi Sukses');
     return { success: true, user: newUser };
   };
 
@@ -1804,7 +1255,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: new Date().toISOString()
       };
       setContractors(prev => [...prev, matchedContractor!]);
-      saveContractorToFirestore(matchedContractor).catch(e => console.warn('[Firestore] Error saving contractor:', e));
+      saveContractorToFirestore(matchedContractor).catch(e => console.warn('[Supabase] Error saving contractor:', e));
       addAuditLog(
         'Contractor Auto-Registered with Leader',
         'ui_config',
@@ -1819,7 +1270,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setContractors(prev =>
           prev.map(c => c.id === matchedContractor!.id ? updatedContractorObj : c)
         );
-        saveContractorToFirestore(updatedContractorObj).catch(e => console.warn('[Firestore] Error updating contractor:', e));
+        saveContractorToFirestore(updatedContractorObj).catch(e => console.warn('[Supabase] Error updating contractor:', e));
       }
     }
 
@@ -1839,7 +1290,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setUsers(prev => [...prev, newUser]);
-    saveUserToFirestore(newUser).catch(e => console.warn('[Firestore] Error saving leader user:', e));
+    saveUserToFirestore(newUser).catch(e => console.warn('[Supabase] Error saving leader user:', e));
 
     // Update contractor's leader if empty
     setContractors(prev =>
@@ -1849,21 +1300,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('Leader Account Registered', 'auth', newUser.id, `Super Admin registered Leader account: ${newUser.name} for ${matchedContractor.name}`);
 
     // Persist new user & contractor to backend
-    fetch('/api/users', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(newUser)
-    }).catch(e => console.error('Error syncing leader user to server:', e));
 
-    if (matchedContractor) {
-      fetch('/api/contractors', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ contractor: matchedContractor })
-      }).catch(e => console.error('Error syncing contractor to server:', e));
-    }
 
-    toast.success(`Akun Leader ${newUser.name} berhasil didaftarkan untuk ${matchedContractor.name}! Password default: 12345678`, 'Registrasi Sukses');
+    toast.success(`Akun Leader ${newUser.name} berhasil didaftarkan untuk ${matchedContractor.name}! Password sementara dibuat aman oleh server`, 'Registrasi Sukses');
     return { success: true, user: newUser };
   };
 
@@ -1917,14 +1356,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setUsers(prev => [...prev, newUser]);
-    saveUserToFirestore(newUser).catch(e => console.warn('[Firestore] Error saving installer user:', e));
+    saveUserToFirestore(newUser).catch(e => console.warn('[Supabase] Error saving installer user:', e));
     addAuditLog('Installer Account Registered', 'auth', newUser.id, `${currentUser.name} registered Installer: ${newUser.name} under ${contractorName} (${assignedArea})`);
 
-    fetch('/api/users', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(newUser)
-    }).catch(e => console.error('Error syncing installer account to server:', e));
 
     toast.success('BERHASIL – Akun Installer berhasil dibuat.', 'Registrasi Sukses');
     return { success: true, user: newUser };
@@ -1942,7 +1376,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: err };
     }
     if (targetUser) {
-      saveUserToFirestore({ ...targetUser, active: !targetUser.active }).catch(e => console.warn('[Firestore] Error toggling user status:', e));
+      saveUserToFirestore({ ...targetUser, active: !targetUser.active }).catch(e => console.warn('[Supabase] Error toggling user status:', e));
     }
     setUsers(prev =>
       prev.map(u => {
@@ -1954,38 +1388,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
-    fetch(`/api/users/${userId}/toggle`, {
-      method: 'PUT',
-      headers: getAuthHeaders()
-    }).catch(e => console.error('Error syncing user status toggle to server:', e));
 
     return { success: true };
   };
 
-  const resetUserPassword = (userId: string): { success: boolean; newPassword?: string; error?: string } => {
+  const resetUserPassword = (userId: string): { success: boolean; error?: string } => {
     if (currentUser.role !== 'super_admin') {
-      toast.error('Akses Ditolak: Hanya Super Admin yang berwenang mereset kata sandi akun pengguna.', 'Akses Ditolak');
-      return { success: false, error: 'Akses Ditolak: Hanya Super Admin yang berwenang mereset kata sandi akun pengguna.' };
+      const error = 'Akses Ditolak: Hanya Super Admin yang berwenang mereset kata sandi akun pengguna.';
+      toast.error(error, 'Akses Ditolak');
+      return { success: false, error };
     }
-    const targetUser = users.find(u => u.id === userId);
-    if (targetUser) {
-      saveUserToFirestore({ ...targetUser, passwordHash: DEFAULT_PASSWORD_HASH, mustChangePassword: true }).catch(e => console.warn('[Firestore] Error resetting user password:', e));
-    }
-    setUsers(prev =>
-      prev.map(u => {
-        if (u.id !== userId) return u;
-        addAuditLog('Password Reset', 'auth', u.id, `Password akun ${u.name} di-reset ke default 12345678`);
-        toast.success(`Password akun ${u.name} berhasil di-reset ke default 12345678.`, 'Password Direset');
-        return { ...u, passwordHash: DEFAULT_PASSWORD_HASH, mustChangePassword: true };
-      })
-    );
-
-    fetch(`/api/users/${userId}/reset-password`, {
-      method: 'POST',
-      headers: getAuthHeaders()
-    }).catch(e => console.error('Error syncing password reset to server:', e));
-
-    return { success: true, newPassword: '12345678' };
+    fetch(`/api/supabase/users/${encodeURIComponent(userId)}/reset-password`, { method:'POST', headers:getAuthHeaders() })
+      .then(async r => { const data=await r.json().catch(()=>({})); if(!r.ok||!data.success) throw new Error(data?.error?.message||data?.error||'Gagal reset password'); setUsers(prev=>prev.map(u=>u.id===userId?{...u,mustChangePassword:true,sessionVersion:(u as any).sessionVersion+1}:u)); toast.success('Password berhasil di-reset. Password sementara hanya ditampilkan oleh server kepada operator yang berwenang.', 'Password Direset'); })
+      .catch((e:any)=>toast.error(e?.message||'Gagal reset password','Reset Password Gagal'));
+    return { success: true };
   };
 
   // Master Contractors & Coverage Areas
@@ -1996,14 +1412,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString()
     };
     setContractors(prev => [...prev, newContractor]);
-    saveContractorToFirestore(newContractor).catch(e => console.warn('[Firestore] Error saving contractor:', e));
+    saveContractorToFirestore(newContractor).catch(e => console.warn('[Supabase] Error saving contractor:', e));
     addAuditLog('Contractor Added', 'ui_config', newContractor.id, `Added contractor vendor: ${newContractor.name}`);
 
-    fetch('/api/contractors', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ contractor: newContractor })
-    }).catch(e => console.error('Error syncing new contractor to server:', e));
   };
 
   const updateContractor = (id: string, updates: Partial<Contractor>) => {
@@ -2011,7 +1422,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map(c => {
         if (c.id === id) {
           const updated = { ...c, ...updates };
-          saveContractorToFirestore(updated).catch(e => console.warn('[Firestore] Error updating contractor:', e));
+          saveContractorToFirestore(updated).catch(e => console.warn('[Supabase] Error updating contractor:', e));
           return updated;
         }
         return c;
@@ -2019,11 +1430,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
     addAuditLog('Contractor Updated', 'ui_config', id, `Updated contractor: ${updates.name || id}`);
 
-    fetch(`/api/contractors/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(updates)
-    }).catch(e => console.error('Error syncing contractor update to server:', e));
   };
 
   const deleteContractor = async (contractorId: string): Promise<{ success: boolean; error?: string }> => {
@@ -2042,11 +1448,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSyncStatus('SAVED');
       setLastSyncTime(new Date().toISOString());
       addAuditLog('Contractor Deleted', 'ui_config', contractorId, `Super Admin ${currentUser.name} menghapus kontraktor ${target.name}`);
-      toast.warning(`Kontraktor ${target.name} berhasil dihapus dari Cloud Firestore.`, 'Kontraktor Dihapus');
+      toast.warning(`Kontraktor ${target.name} berhasil dihapus dari database Supabase.`, 'Kontraktor Dihapus');
       return { success: true };
     } catch (err: any) {
       setSyncStatus('ERROR');
-      toast.error('Gagal menghapus kontraktor di Cloud Firestore: ' + (err?.message || err));
+      toast.error('Gagal menghapus kontraktor di database Supabase: ' + (err?.message || err));
       return { success: false, error: err?.message };
     }
   };
@@ -2121,7 +1527,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'area-' + Date.now()
     };
     setCoverageAreas(prev => [...prev, newArea]);
-    saveCoverageAreaToFirestore(newArea).catch(e => console.warn('[Firestore] Error saving coverage area:', e));
+    saveCoverageAreaToFirestore(newArea).catch(e => console.warn('[Supabase] Error saving coverage area:', e));
     addAuditLog('Coverage Area Added', 'ui_config', newArea.id, `Added coverage area: ${newArea.name}`);
   };
 
@@ -2130,7 +1536,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map(a => {
         if (a.id === id) {
           const updated = { ...a, ...updates };
-          saveCoverageAreaToFirestore(updated).catch(e => console.warn('[Firestore] Error updating coverage area:', e));
+          saveCoverageAreaToFirestore(updated).catch(e => console.warn('[Supabase] Error updating coverage area:', e));
           return updated;
         }
         return a;
@@ -2155,11 +1561,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSyncStatus('SAVED');
       setLastSyncTime(new Date().toISOString());
       addAuditLog('Coverage Area Deleted', 'ui_config', areaId, `Super Admin ${currentUser.name} menghapus area ${target.name}`);
-      toast.warning(`Area coverage ${target.name} berhasil dihapus dari Cloud Firestore.`, 'Area Dihapus');
+      toast.warning(`Area coverage ${target.name} berhasil dihapus dari database Supabase.`, 'Area Dihapus');
       return { success: true };
     } catch (err: any) {
       setSyncStatus('ERROR');
-      toast.error('Gagal menghapus area coverage di Cloud Firestore: ' + (err?.message || err));
+      toast.error('Gagal menghapus area coverage di database Supabase: ' + (err?.message || err));
       return { success: false, error: err?.message };
     }
   };
@@ -2413,7 +1819,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await saveTicketToFirestore(updatedTicket);
     } catch (err: any) {
-      console.warn('[Firestore] Error saving workStarted status:', err);
+      console.warn('[Supabase] Error saving workStarted status:', err);
     }
 
     return { success: true, ticket: updatedTicket };
@@ -2865,7 +2271,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'Approval Berhasil'
       );
     } catch (err: any) {
-      console.error('[Firestore] Error saving approved report:', err);
+      console.error('[Supabase] Error saving approved report:', err);
       // Rollback local state jika gagal
       setTickets(prev => prev.map(t => (t.id === ticketId ? ticket : t)));
       return { success: false, error: err?.message || 'Gagal menyimpan status approval ke Cloud Firestore.' };
@@ -2933,7 +2339,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await saveTicketToFirestore(updatedTicket);
     } catch (err: any) {
-      console.warn('[Firestore] Error saving rejected report:', err);
+      console.warn('[Supabase] Error saving rejected report:', err);
       return { success: false, error: err?.message || 'Gagal menyimpan status penolakan ke Firestore.' };
     }
 
@@ -2992,7 +2398,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       toast.success(`Kategori "${newCategory.name}" berhasil disimpan ke Cloud Firestore.`, 'Kategori Ditambahkan');
       return { success: true, category: newCategory };
     } catch (err: any) {
-      console.error('[Firestore] Error saving category:', err);
+      console.error('[Supabase] Error saving category:', err);
       return { success: false, error: err?.message || 'Gagal menyimpan kategori ke Firestore.' };
     }
   };
@@ -3040,10 +2446,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id,
         `Memperbarui kategori ${existing.categoryType}: "${updatedCategory.name}"`
       );
-      toast.success(`Kategori "${updatedCategory.name}" berhasil diperbarui di Cloud Firestore.`, 'Kategori Diperbarui');
+      toast.success(`Kategori "${updatedCategory.name}" berhasil diperbarui di database Supabase.`, 'Kategori Diperbarui');
       return { success: true };
     } catch (err: any) {
-      console.error('[Firestore] Error updating category:', err);
+      console.error('[Supabase] Error updating category:', err);
       return { success: false, error: err?.message || 'Gagal memperbarui kategori di Firestore.' };
     }
   };
@@ -3068,7 +2474,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           id,
           `Menghapus permanen kategori ${existing.categoryType}: "${existing.name}"`
         );
-        toast.warning(`Kategori "${existing.name}" dihapus permanen dari Cloud Firestore.`, 'Kategori Dihapus');
+        toast.warning(`Kategori "${existing.name}" dihapus permanen dari database Supabase.`, 'Kategori Dihapus');
         return { success: true };
       } catch (err: any) {
         return { success: false, error: err?.message || 'Gagal menghapus kategori dari Firestore.' };
@@ -3177,7 +2583,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
       .catch(err => {
         setSyncStatus('ERROR');
-        toast.error('Gagal menyimpan status penutupan di Cloud Firestore: ' + (err?.message || err), 'Gagal');
+        toast.error('Gagal menyimpan status penutupan di database Supabase: ' + (err?.message || err), 'Gagal');
       });
 
     return { success: true };
@@ -3220,7 +2626,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
       .catch(err => {
         setSyncStatus('ERROR');
-        toast.error('Gagal membuka tiket di Cloud Firestore: ' + (err?.message || err), 'Gagal');
+        toast.error('Gagal membuka tiket di database Supabase: ' + (err?.message || err), 'Gagal');
       });
 
     return { success: true };
@@ -3374,8 +2780,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map(t => (t.id === ticketId ? updatedTicketChat : t))
     );
 
-    sendChatMessageToFirestore(newMessage).catch(e => console.warn('[Firestore] Error saving chat message:', e));
-    saveTicketToFirestore(updatedTicketChat).catch(e => console.warn('[Firestore] Error syncing ticket status from chat:', e));
+    sendChatMessageToFirestore(newMessage).catch(e => console.warn('[Supabase] Error saving chat message:', e));
+    saveTicketToFirestore(updatedTicketChat).catch(e => console.warn('[Supabase] Error syncing ticket status from chat:', e));
 
     // Also persist message & check-in to server API
     fetch(`/api/tickets/${ticketId}/messages`, {
@@ -3473,7 +2879,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setLastSyncTime(new Date().toISOString());
       })
       .catch(e => {
-        console.warn('[Firestore] Error saving created ticket:', e);
+        console.warn('[Supabase] Error saving created ticket:', e);
         setSyncStatus('ERROR');
       });
 
@@ -3557,7 +2963,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setLastSyncTime(new Date().toISOString());
         })
         .catch(e => {
-          console.warn('[Firestore] Error updating ticket:', e);
+          console.warn('[Supabase] Error updating ticket:', e);
           setSyncStatus('ERROR');
         });
     }
@@ -3716,7 +3122,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(({ saved }) => {
         setSyncStatus('SAVED');
         setLastSyncTime(new Date().toISOString());
-        toast.success(`Berhasil memperbarui penugasan untuk ${saved} tiket di Cloud Firestore.`, 'Penugasan Massal Sukses');
+        toast.success(`Berhasil memperbarui penugasan untuk ${saved} tiket di database Supabase.`, 'Penugasan Massal Sukses');
       })
       .catch(err => {
         setSyncStatus('ERROR');
@@ -3857,7 +3263,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         })
         .catch(err => {
           setSyncStatus('ERROR');
-          toast.error('Gagal memperbarui status tiket di Cloud Firestore: ' + (err?.message || err), 'Gagal');
+          toast.error('Gagal memperbarui status tiket di database Supabase: ' + (err?.message || err), 'Gagal');
         });
     }
 
@@ -3885,7 +3291,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
       .catch(err => {
         setSyncStatus('ERROR');
-        toast.error('Gagal mengarsipkan tiket di Cloud Firestore: ' + (err?.message || err), 'Gagal');
+        toast.error('Gagal mengarsipkan tiket di database Supabase: ' + (err?.message || err), 'Gagal');
       });
     addAuditLog('Ticket Archived', 'ticket', ticketId, `Ticket moved to archive by ${currentUser.name}`);
   };
@@ -3915,7 +3321,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
       .catch(err => {
         setSyncStatus('ERROR');
-        toast.error('Gagal memulihkan tiket di Cloud Firestore: ' + (err?.message || err), 'Gagal');
+        toast.error('Gagal memulihkan tiket di database Supabase: ' + (err?.message || err), 'Gagal');
       });
     addAuditLog('Ticket Restored', 'ticket', ticketId, `Ticket restored from archive/deletion by ${currentUser.name}`);
   };
@@ -3973,14 +3379,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSyncStatus('SAVED');
         setLastSyncTime(new Date().toISOString());
         if (permanent) {
-          toast.warning(`WO ${ticket.woNumber} telah dihapus permanen dari Cloud Firestore.`, 'Dihapus Permanen');
+          toast.warning(`WO ${ticket.woNumber} telah dihapus permanen dari database Supabase.`, 'Dihapus Permanen');
         } else {
           toast.warning(`WO ${ticket.woNumber} berhasil dihapus (soft delete).`, 'WO Dihapus');
         }
       })
       .catch(err => {
         setSyncStatus('ERROR');
-        toast.error('Gagal menghapus tiket di Cloud Firestore: ' + (err?.message || err), 'Gagal');
+        toast.error('Gagal menghapus tiket di database Supabase: ' + (err?.message || err), 'Gagal');
       });
 
     fetch(`/api/tickets/${ticketId}`, {
@@ -4358,7 +3764,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setLastSyncTime(new Date().toISOString());
       })
       .catch(err => {
-        console.warn('[Firestore] Error deleting batch tickets:', err);
+        console.warn('[Supabase] Error deleting batch tickets:', err);
         setSyncStatus('ERROR');
       });
 
@@ -4375,7 +3781,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       `Management Data ${currentUser.name} menghapus ${matchingTickets.length} data tiket hasil import tanggal ${importDate}. Alasan: ${reason}`
     );
 
-    toast.warning(`Berhasil menghapus ${matchingTickets.length} tiket hasil import tanggal ${importDate} dari Cloud Firestore.`, 'Data Import Dihapus');
+    toast.warning(`Berhasil menghapus ${matchingTickets.length} tiket hasil import tanggal ${importDate} dari database Supabase.`, 'Data Import Dihapus');
     return { success: true, count: matchingTickets.length };
   };
 
@@ -4426,7 +3832,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
       .catch(err => {
         setSyncStatus('ERROR');
-        toast.error('Gagal menghapus tiket massal di Cloud Firestore: ' + (err?.message || err), 'Gagal');
+        toast.error('Gagal menghapus tiket massal di database Supabase: ' + (err?.message || err), 'Gagal');
       });
 
     fetch('/api/tickets/bulk-delete', {
@@ -4642,7 +4048,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       lastUpdated: new Date().toISOString()
     };
     setTemplates(prev => [newTpl, ...prev]);
-    saveTemplateToFirestore(newTpl).catch(e => console.warn('[Firestore] Error saving template:', e));
+    saveTemplateToFirestore(newTpl).catch(e => console.warn('[Supabase] Error saving template:', e));
     addAuditLog('Template Created', 'template', newTpl.id, `Created WhatsApp template: ${newTpl.name}`);
     return newTpl;
   };
@@ -4657,7 +4063,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map(t => {
         if (t.id === id) {
           const updated = { ...t, ...updates, version: t.version + 1, lastUpdated: new Date().toISOString(), updatedBy: currentUser.name };
-          saveTemplateToFirestore(updated).catch(e => console.warn('[Firestore] Error updating template:', e));
+          saveTemplateToFirestore(updated).catch(e => console.warn('[Supabase] Error updating template:', e));
           return updated;
         }
         return t;
@@ -4673,7 +4079,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     setTemplates(prev => prev.filter(t => t.id !== id));
-    deleteTemplateFromFirestore(id).catch(e => console.warn('[Firestore] Error deleting template:', e));
+    deleteTemplateFromFirestore(id).catch(e => console.warn('[Supabase] Error deleting template:', e));
     addAuditLog('Template Deleted', 'template', id, `Deleted template ${id}`);
   };
 
@@ -4729,7 +4135,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await saveChatCategoriesToFirestore(updated);
     } catch (e) {
-      console.warn('[Firestore] Error toggling chat category:', e);
+      console.warn('[Supabase] Error toggling chat category:', e);
     }
   };
 
@@ -4744,7 +4150,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await saveTicketToFirestore({ ...target, chatCategory: category, updatedAt: now });
       addAuditLog('Chat Category Assigned', 'ticket', ticketId, `Assigned category ${category} to WO ${target.woNumber}`);
     } catch (e) {
-      console.warn('[Firestore] Error saving ticket chat category:', e);
+      console.warn('[Supabase] Error saving ticket chat category:', e);
     }
   };
 

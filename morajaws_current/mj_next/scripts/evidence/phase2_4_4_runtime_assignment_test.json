@@ -1,0 +1,71 @@
+{
+  "suite": "MORAJAWS PHASE 2.4.4 RUNTIME ASSIGNMENT & INSTALLER ID TEST",
+  "timestamp": "2026-11-11T16:53:48.926Z",
+  "environment": "ISOLATED_IN_MEMORY_RUNTIME",
+  "total": 10,
+  "passed": 10,
+  "failed": 0,
+  "overallStatus": "SUCCESS",
+  "results": [
+    {
+      "id": "TEST-01",
+      "name": "Leader performs assignment to active installer",
+      "status": "PASS",
+      "detail": "Passed assertion verification."
+    },
+    {
+      "id": "TEST-02",
+      "name": "Leader performs reassignment to another installer",
+      "status": "PASS",
+      "detail": "Passed assertion verification."
+    },
+    {
+      "id": "TEST-03",
+      "name": "Installer cannot access/take WO belonging to another installer",
+      "status": "PASS",
+      "detail": "Passed assertion verification."
+    },
+    {
+      "id": "TEST-04",
+      "name": "Non-installer account is rejected on assignment",
+      "status": "PASS",
+      "detail": "Passed assertion verification."
+    },
+    {
+      "id": "TEST-05",
+      "name": "Inactive, archived, and deleted installer accounts are rejected",
+      "status": "PASS",
+      "detail": "Passed assertion verification."
+    },
+    {
+      "id": "TEST-06",
+      "name": "Unknown installer ID is rejected",
+      "status": "PASS",
+      "detail": "Passed assertion verification."
+    },
+    {
+      "id": "TEST-07",
+      "name": "Ambiguous installer ID is rejected (fail-closed)",
+      "status": "PASS",
+      "detail": "Passed assertion verification."
+    },
+    {
+      "id": "TEST-08",
+      "name": "Leader outside contractor scope is rejected",
+      "status": "PASS",
+      "detail": "Passed assertion verification."
+    },
+    {
+      "id": "TEST-09",
+      "name": "Rollback restores previous installer ID on subsequent failure",
+      "status": "PASS",
+      "detail": "Passed assertion verification."
+    },
+    {
+      "id": "TEST-10",
+      "name": "Assignment history records correct installer user ID identity in payload",
+      "status": "PASS",
+      "detail": "Passed assertion verification."
+    }
+  ]
+}

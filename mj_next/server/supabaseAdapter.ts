@@ -2599,6 +2599,24 @@ export async function insertWaTemplateToSupabase(template: any): Promise<Supabas
   }
 }
 
+export async function updateWaTemplateInSupabase(id: string, template: any): Promise<SupabaseOpResult<any>> {
+  const client = getSupabaseBackendClient();
+  if (!client) return { success:false, error:{code:'NOT_CONFIGURED',message:'Supabase client belum dikonfigurasi.'} };
+  try {
+    const row:any = { ...template, updated_at:new Date().toISOString() };
+    delete row.createdAt; delete row.updatedAt; delete row.createdBy; delete row.updatedBy;
+    if ('created_by' in template) row.created_by = template.created_by;
+    if ('updated_by' in template) row.updated_by = template.updated_by;
+    const { data, error } = await client.from('wa_templates').update(row).eq('id',id).select().maybeSingle();
+    return error ? {success:false,error:classifySupabaseError(error)} : {success:true,data};
+  } catch (err:any) { return {success:false,error:classifySupabaseError(err)}; }
+}
+export async function deleteWaTemplateFromSupabase(id:string):Promise<SupabaseOpResult<any>>{
+  const client=getSupabaseBackendClient();
+  if(!client)return {success:false,error:{code:'NOT_CONFIGURED',message:'Supabase client belum dikonfigurasi.'}};
+  try{const {data,error}=await client.from('wa_templates').delete().eq('id',id).select().maybeSingle();return error?{success:false,error:classifySupabaseError(error)}:{success:true,data};}catch(err:any){return {success:false,error:classifySupabaseError(err)};}
+}
+
 // ------------------------------------------------------------------------------
 // DATA ACCESS LAYER: APPLICATION SETTINGS
 // ------------------------------------------------------------------------------

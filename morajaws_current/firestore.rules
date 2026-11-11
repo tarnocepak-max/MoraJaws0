@@ -1,0 +1,186 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Security Helper Functions
+    // -------------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // -------------------------------------------------------------------------
+    // RBAC & Identity Mapping Audit Note:
+    // 1. Document IDs in '/users/{userId}' are custom IDs ('u-ray', 'u-1', 'u-mgmt', etc.),
+    //    NOT Firebase Authentication UIDs ('request.auth.uid').
+    // 2. Custom claims ('request.auth.token.role') are not published on Firebase tokens.
+    // 3. Direct Firestore client-level role checks via get(/users/$(request.auth.uid))
+    //    evaluate to false because the document path does not match the Firebase Auth UID.
+    // 4. Role enforcement is authoritatively guaranteed by MoraJaws Express Backend (server.ts).
+    // 5. In client rules, helper gates are defined for forward-compatibility with future
+    //    token custom claims or user lookup mapping documents (BLOCKED for autonomous client-only RBAC).
+    // -------------------------------------------------------------------------
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token != null && request.auth.token.role == 'super_admin') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin')
+      );
+    }
+
+    function isSuperOrDispatch() {
+      return isAdmin() || (
+        isSignedIn() && (
+          (request.auth.token != null && request.auth.token.role in ['super_admin', 'dispatch']) ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'dispatch'])
+        )
+      );
+    }
+
+    function isSuperOrITSupport() {
+      return isAdmin() || (
+        isSignedIn() && (
+          (request.auth.token != null && request.auth.token.role in ['super_admin', 'it_support']) ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'it_support'])
+        )
+      );
+    }
+
+    function isManagementData() {
+      return isSignedIn() && (
+        (request.auth.token != null && request.auth.token.role == 'management_data') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'management_data')
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // System Health / Connection Ping (Authenticated Only)
+    // -------------------------------------------------------------------------
+    match /system_health/{healthId} {
+      allow get, list: if isSignedIn() && isValidId(healthId);
+      allow write: if isSignedIn() && isValidId(healthId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Users Collection (Authenticated Only, No Client Hard-Delete)
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+      allow get, list: if isSignedIn() && isValidId(userId);
+      allow create, update: if isSignedIn() && isValidId(userId);
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Work Orders / Tickets Collection (Strict RBAC Protection)
+    // - All operations strictly require authenticated user (isSignedIn)
+    // - Regular updates CANNOT modify isDeleted, deletedAt, deletedBy, or deletionReason
+    // - Document deletion is restricted to management_data role
+    // -------------------------------------------------------------------------
+    match /tickets/{ticketId} {
+      allow get, list: if isSignedIn() && isValidId(ticketId);
+      allow create: if isSignedIn() && isValidId(ticketId);
+      allow update: if isSignedIn() && isValidId(ticketId) &&
+        !incoming().diff(existing()).affectedKeys().hasAny(['isDeleted', 'deletedAt', 'deletedBy', 'deletionReason']);
+      allow delete: if isSignedIn() && isValidId(ticketId) && isManagementData();
+    }
+
+    // -------------------------------------------------------------------------
+    // Contractors & Basecamps Collection (Authenticated Only)
+    // -------------------------------------------------------------------------
+    match /contractors/{contractorId} {
+      allow get, list: if isSignedIn() && isValidId(contractorId);
+      allow create, update, delete: if isSignedIn() && isValidId(contractorId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Coverage Areas Collection (Authenticated Only)
+    // -------------------------------------------------------------------------
+    match /coverage_areas/{areaId} {
+      allow get, list: if isSignedIn() && isValidId(areaId);
+      allow create, update, delete: if isSignedIn() && isValidId(areaId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Work Order Real-Time Messages / Live Chat (Authenticated Only)
+    // -------------------------------------------------------------------------
+    match /ticket_messages/{messageId} {
+      allow get, list: if isSignedIn() && isValidId(messageId);
+      allow create, update: if isSignedIn() && isValidId(messageId);
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Audit Logs Collection (Super Admin & IT Support Read-Only, Append-Only)
+    // - Read restricted to super_admin and it_support
+    // - Appended via authenticated client operations
+    // - Updates and deletions are strictly forbidden (immutable append-only)
+    // -------------------------------------------------------------------------
+    match /audit_logs/{logId} {
+      allow get, list: if isSuperOrITSupport();
+      allow create: if isSignedIn() && isValidId(logId);
+      allow update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // System Error Logs Collection (Append-Only, Authenticated)
+    // -------------------------------------------------------------------------
+    match /system_error_logs/{errorId} {
+      allow get, list: if isSignedIn() && isValidId(errorId);
+      allow create: if isSignedIn() && isValidId(errorId);
+      allow update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // WhatsApp Message Templates (Strict RBAC)
+    // - Read allowed for all authenticated users (technicians use for click-to-chat)
+    // - Management (create, update, delete) restricted to super_admin & dispatch
+    // -------------------------------------------------------------------------
+    match /wa_templates/{templateId} {
+      allow get, list: if isSignedIn() && isValidId(templateId);
+      allow create, update, delete: if isValidId(templateId) && isSuperOrDispatch();
+    }
+
+    // -------------------------------------------------------------------------
+    // Global Application Settings (Authenticated Only)
+    // -------------------------------------------------------------------------
+    match /appSettings/{settingId} {
+      allow get, list: if isSignedIn() && isValidId(settingId);
+      allow create, update, delete: if isSignedIn() && isValidId(settingId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Report Dropdown Categories (Authenticated Only)
+    // -------------------------------------------------------------------------
+    match /report_dropdown_categories/{categoryId} {
+      allow get, list: if isSignedIn() && isValidId(categoryId);
+      allow create, update, delete: if isSignedIn() && isValidId(categoryId);
+    }
+
+    // -------------------------------------------------------------------------
+    // User Preferences (User-Scoped Settings, Authenticated Only)
+    // -------------------------------------------------------------------------
+    match /users/{userId}/preferences/{prefId} {
+      allow get, list: if isSignedIn() && isValidId(userId) && isValidId(prefId);
+      allow create, update, delete: if isSignedIn() && isValidId(userId) && isValidId(prefId);
+    }
+  }
+}

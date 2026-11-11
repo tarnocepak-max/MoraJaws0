@@ -17,13 +17,15 @@ export interface ParseOptions {
   existingWoNumbers?: string[];
   contractors?: Contractor[];
   coverageAreas?: CoverageArea[];
+  manualSheetName?: string;
 }
 
 /**
  * Parse uploaded Excel or CSV file buffer
  */
 export function parseWorkOrderFile(fileBuffer: ArrayBuffer, options: ParseOptions = {}): TextToTableResult {
-  const rawRows = parseExcelWorkbook(fileBuffer);
+  const parseRes = parseExcelWorkbook(fileBuffer, options.manualSheetName);
+  const rawRows = Array.isArray(parseRes) ? parseRes : (parseRes.records || []);
   const existingWoNumbers = new Set(options.existingWoNumbers || []);
 
   const engineResult = processRawImportWithEngine(
@@ -46,7 +48,9 @@ export function parseWorkOrderFile(fileBuffer: ArrayBuffer, options: ParseOption
     headerCheckPassed: engineResult.headerCheckPassed,
     parsedRows: engineResult.parsedRows,
     detectedContractors: engineResult.detectedContractors,
-    newCoverageAreas: engineResult.newCoverageAreas
+    newCoverageAreas: engineResult.newCoverageAreas,
+    sheetNames: !Array.isArray(parseRes) ? parseRes.sheetNames : undefined,
+    selectedSheetName: !Array.isArray(parseRes) ? parseRes.selectedSheetName : undefined
   };
 }
 

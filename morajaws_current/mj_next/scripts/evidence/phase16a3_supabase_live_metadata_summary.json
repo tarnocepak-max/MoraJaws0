@@ -1,0 +1,29 @@
+{
+  "phase": "16A.3",
+  "projectRef": "wiahuupjgpadxqiiarzi",
+  "inspectionMode": "read_only",
+  "observedAt": "2026-11-12T00:26:00+07:00",
+  "publicTables": 21,
+  "publicTablesWithRlsEnabled": 21,
+  "publicPolicies": 0,
+  "publicSchemaUsage": {
+    "anon": false,
+    "authenticated": false,
+    "service_role": true
+  },
+  "publicTableGrantsObserved": ["service_role", "postgres"],
+  "storageBuckets": [
+    { "id": "morajaws-reports", "public": false }
+  ],
+  "storagePolicies": 0,
+  "liveMigrations": [
+    { "version": "20261104200712", "name": "lock_public_schema_to_express_backend" },
+    { "version": "20261104200723", "name": "restrict_public_schema_usage_to_backend" },
+    { "version": "20261111153915", "name": "add_missing_foreign_key_indexes" }
+  ],
+  "securityAdvisor": {
+    "rls_enabled_no_policy_count": 21,
+    "severity": "INFO"
+  },
+  "mutationsPerformed": false
+}

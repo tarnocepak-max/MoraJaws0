@@ -33,9 +33,22 @@ export interface SupabaseOpResult<T = any> {
   error?: SupabaseOpError;
 }
 
+export interface BulkImportOptions {
+  batchId?: string;
+  importId?: string;
+  idempotencyKey?: string;
+  fileName?: string;
+  sheetName?: string;
+  duplicatePolicy?: 'skip' | 'update_allowed' | 'review';
+  autoRegisterContractors?: boolean;
+}
+
 export interface BulkImportResult {
+  importId?: string;
+  status?: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED';
   totalSubmitted: number;
   imported: number;
+  updatedCount?: number;
   skippedDuplicates: number;
   invalidCount: number;
   failedCount: number;
@@ -43,6 +56,7 @@ export interface BulkImportResult {
   duplicateExistingWoNumbers: string[];
   invalidRows: Array<{ index: number; reason: string; rawWo?: string }>;
   failedErrors: string[];
+  errors?: Array<{ row?: number; field?: string; code?: string; message: string }>;
 }
 
 export interface DateValidationResult {
@@ -2159,38 +2173,108 @@ export async function deleteSandboxWorkOrderHardFromSupabase(woNumber: string): 
  */
 export async function bulkImportWorkOrdersToSupabase(
   tickets: any[],
-  batchId?: string,
-  importedBy?: string
+  batchIdOrOptions?: string | BulkImportOptions,
+  importedBy?: string,
+  extraOptions?: BulkImportOptions
 ): Promise<SupabaseOpResult<BulkImportResult>> {
   const client = getSupabaseBackendClient();
   if (!client) {
     return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
   }
 
+  const options: BulkImportOptions = typeof batchIdOrOptions === 'object' && batchIdOrOptions !== null
+    ? { ...batchIdOrOptions, ...extraOptions }
+    : { batchId: typeof batchIdOrOptions === 'string' ? batchIdOrOptions : undefined, ...extraOptions };
+
+  const batchId = options.batchId || options.importId || `batch_${Date.now()}`;
+  const importId = options.importId || `WOIMP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+  const idempotencyKey = options.idempotencyKey;
+  const duplicatePolicy = options.duplicatePolicy || 'skip';
+  const fileName = options.fileName || 'Imported_File.xlsx';
+  const sheetName = options.sheetName || 'Data_WO';
+  const uploaderName = importedBy || 'System';
+
   const result: BulkImportResult = {
+    importId,
+    status: 'FAILED',
     totalSubmitted: Array.isArray(tickets) ? tickets.length : 0,
     imported: 0,
+    updatedCount: 0,
     skippedDuplicates: 0,
     invalidCount: 0,
     failedCount: 0,
     duplicateInFileWoNumbers: [],
     duplicateExistingWoNumbers: [],
     invalidRows: [],
-    failedErrors: []
+    failedErrors: [],
+    errors: []
   };
 
   if (!Array.isArray(tickets) || tickets.length === 0) {
+    result.status = 'SUCCESS';
     return { success: true, data: result };
   }
 
+  // Idempotency check: return existing successful import if idempotencyKey matches
+  if (idempotencyKey) {
+    try {
+      const { data: existingImport } = await client
+        .from('work_order_imports')
+        .select('*')
+        .eq('idempotency_key', idempotencyKey)
+        .maybeSingle();
+      if (existingImport && (existingImport.status === 'SUCCESS' || existingImport.status === 'PARTIAL_SUCCESS')) {
+        return {
+          success: true,
+          data: {
+            importId: existingImport.import_id,
+            status: existingImport.status,
+            totalSubmitted: existingImport.total_rows,
+            imported: existingImport.inserted_rows,
+            updatedCount: existingImport.updated_rows,
+            skippedDuplicates: existingImport.duplicate_rows,
+            invalidCount: existingImport.invalid_rows,
+            failedCount: existingImport.failed_rows,
+            duplicateInFileWoNumbers: [],
+            duplicateExistingWoNumbers: [],
+            invalidRows: [],
+            failedErrors: [],
+            errors: []
+          }
+        };
+      }
+    } catch {
+      // Non-fatal if table does not exist
+    }
+  }
+
+  // Record initial import tracking state
   try {
-    // 1. Validate each ticket and detect duplicates within incoming file
+    await client.from('work_order_imports').upsert({
+      import_id: importId,
+      filename: fileName,
+      sheet_name: sheetName,
+      uploaded_by: uploaderName,
+      uploaded_at: new Date().toISOString(),
+      total_rows: tickets.length,
+      status: 'PROCESSING',
+      duplicate_policy: duplicatePolicy,
+      idempotency_key: idempotencyKey || null,
+      metadata: { batchId }
+    }, { onConflict: 'import_id' });
+  } catch {
+    // Non-fatal if table not initialized
+  }
+
+  try {
+    // 1. Validate each ticket and detect duplicates within incoming file (Level 1 Duplicate Detection)
     const validBatchMap = new Map<string, any>();
 
     tickets.forEach((t, index) => {
       if (!t || typeof t !== 'object') {
         result.invalidCount++;
         result.invalidRows.push({ index: index + 1, reason: 'Baris data kosong atau bukan objek.' });
+        result.errors?.push({ row: index + 1, field: 'row', code: 'EMPTY_ROW', message: 'Baris data kosong atau bukan objek.' });
         return;
       }
 
@@ -2205,12 +2289,31 @@ export async function bulkImportWorkOrdersToSupabase(
           reason: 'Nomor WO kosong atau tidak memenuhi panjang minimum 3 karakter.',
           rawWo: String(rawWo)
         });
+        result.errors?.push({ row: index + 1, field: 'woNumber', code: 'INVALID_WO', message: 'Nomor WO kosong atau tidak memenuhi format valid.' });
         return;
       }
 
+      // Address or coordinates validation (strict business rule)
+      const address = (t.streetName || t.address || '').trim();
+      const lat = t.latitude !== undefined && t.latitude !== '' ? Number(t.latitude) : null;
+      const lng = t.longitude !== undefined && t.longitude !== '' ? Number(t.longitude) : null;
+      const hasCoords = lat !== null && !isNaN(lat) && lng !== null && !isNaN(lng) && (lat !== 0 || lng !== 0);
+      if (!address && !hasCoords) {
+        result.invalidCount++;
+        result.invalidRows.push({
+          index: index + 1,
+          reason: 'Baris tidak memiliki alamat jalan atau pasangan koordinat.',
+          rawWo: String(rawWo)
+        });
+        result.errors?.push({ row: index + 1, field: 'address', code: 'MISSING_LOCATION', message: 'Alamat atau koordinat wajib tersedia untuk penugasan WO.' });
+        return;
+      }
+
+      // Duplicate within file
       if (validBatchMap.has(canonicalKey)) {
         result.skippedDuplicates++;
         result.duplicateInFileWoNumbers.push(normWo);
+        result.errors?.push({ row: index + 1, field: 'woNumber', code: 'DUPLICATE_IN_FILE', message: `Nomor WO '${normWo}' duplikat di dalam berkas yang diunggah.` });
         return;
       }
 
@@ -2219,11 +2322,11 @@ export async function bulkImportWorkOrdersToSupabase(
 
     const uniqueCandidates = Array.from(validBatchMap.values());
     if (uniqueCandidates.length === 0) {
+      result.status = result.failedCount === 0 && result.skippedDuplicates > 0 ? 'SUCCESS' : 'FAILED';
       return { success: result.failedCount === 0, data: result };
     }
 
-    // 2. Query Supabase for existing WO numbers in chunks of 200
-    // Gather both exact strings and normalized candidates
+    // 2. Query Supabase for existing WO numbers in chunks of 200 (Level 2 Duplicate Detection)
     const existingInDbCanonicalSet = new Set<string>();
     const checkChunkSize = 200;
 
@@ -2248,29 +2351,54 @@ export async function bulkImportWorkOrdersToSupabase(
       });
     }
 
-    // 3. Separate candidate rows: skip those already in DB, prepare fresh rows
+    // 3. Separate candidate rows: insert vs update vs skip
     const rowsToInsert: Record<string, any>[] = [];
 
     for (const candidate of uniqueCandidates) {
       if (existingInDbCanonicalSet.has(candidate.canonicalKey)) {
-        result.skippedDuplicates++;
-        result.duplicateExistingWoNumbers.push(candidate.normWo);
+        if (duplicatePolicy === 'update_allowed') {
+          // Update safe fields on existing record without overwriting technician assignment or completed technical reports
+          const updates: Record<string, any> = {
+            updated_at: new Date().toISOString(),
+            updated_by: uploaderName
+          };
+          if (candidate.appointmentDate) updates.appointment_date = toDateOnlyString(candidate.appointmentDate);
+          if (candidate.slotTime) updates.slot_time = candidate.slotTime;
+          if (candidate.remarksAgent) updates.remarks_agent = candidate.remarksAgent;
+          if (candidate.ticketCategory) updates.ticket_category = candidate.ticketCategory;
+          if (candidate.customerPhone) updates.customer_phone = candidate.customerPhone;
+
+          const { error: updateErr } = await client
+            .from('work_orders')
+            .update(updates)
+            .eq('wo_number', candidate.normWo);
+
+          if (!updateErr) {
+            result.updatedCount = (result.updatedCount || 0) + 1;
+          } else {
+            result.failedCount++;
+            result.failedErrors.push(`Gagal memperbarui WO ${candidate.normWo}: ${updateErr.message}`);
+          }
+        } else {
+          result.skippedDuplicates++;
+          result.duplicateExistingWoNumbers.push(candidate.normWo);
+        }
       } else {
         const row = ticketToPostgresRow({
           ...candidate,
           woNumber: candidate.normWo,
           workOrderNumber: candidate.normWo,
-          importBatchId: batchId || `batch_${Date.now()}`,
+          importBatchId: batchId,
           importedAt: new Date().toISOString(),
-          updatedBy: importedBy || 'Import'
+          importDate: new Date().toISOString().slice(0, 10),
+          updatedBy: uploaderName
         });
         rowsToInsert.push(row);
       }
     }
 
     // 4. Primary Defense: Insert fresh rows in chunks of 50
-    // If PostgreSQL 23505 (unique constraint violation) occurs:
-    // Isolate the duplicate rows, mark them as duplicate conflicts, and do not fail the entire batch.
+    // Database unique constraint (uq_work_orders_wo_number_normalized) acts as last line of defense
     const insertChunkSize = 50;
 
     for (let i = 0; i < rowsToInsert.length; i += insertChunkSize) {
@@ -2281,8 +2409,7 @@ export async function bulkImportWorkOrdersToSupabase(
         const classified = classifySupabaseError(insertError);
 
         if (classified.isDuplicate || classified.code === '23505') {
-          // Race-condition duplicate or unindexed legacy spacing duplicate:
-          // Fall back to row-by-row insertion to salvage non-duplicate records in this chunk
+          // Race-condition duplicate conflict: fall back to row-by-row insertion
           for (const singleRow of chunk) {
             const { error: singleErr } = await client.from('work_orders').insert([singleRow]);
             if (singleErr) {
@@ -2300,7 +2427,7 @@ export async function bulkImportWorkOrdersToSupabase(
           }
         } else {
           result.failedCount += chunk.length;
-          result.failedErrors.push(`Gagal mengimpor chunk ${i} - ${i + chunk.length}: ${classified.message}`);
+          result.failedErrors.push(`Gagal mengimpor batch ${i + 1} - ${i + chunk.length}: ${classified.message}`);
         }
       } else {
         result.imported += chunk.length;
@@ -2308,6 +2435,46 @@ export async function bulkImportWorkOrdersToSupabase(
     }
 
     const hasFailed = result.failedCount > 0 || result.failedErrors.length > 0;
+    const hasSuccess = result.imported > 0 || (result.updatedCount || 0) > 0;
+
+    let finalStatus: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED' = 'FAILED';
+    if (hasSuccess && !hasFailed) {
+      finalStatus = 'SUCCESS';
+    } else if (hasSuccess && hasFailed) {
+      finalStatus = 'PARTIAL_SUCCESS';
+    } else if (result.skippedDuplicates > 0 && result.failedCount === 0) {
+      finalStatus = 'SUCCESS';
+    } else {
+      finalStatus = 'FAILED';
+    }
+    result.status = finalStatus;
+
+    // Update work_order_imports tracking table
+    try {
+      await client.from('work_order_imports').upsert({
+        import_id: importId,
+        filename: fileName,
+        sheet_name: sheetName,
+        uploaded_by: uploaderName,
+        uploaded_at: new Date().toISOString(),
+        total_rows: result.totalSubmitted,
+        valid_rows: uniqueCandidates.length,
+        invalid_rows: result.invalidCount,
+        inserted_rows: result.imported,
+        updated_rows: result.updatedCount || 0,
+        duplicate_rows: result.skippedDuplicates,
+        failed_rows: result.failedCount,
+        status: finalStatus,
+        duplicate_policy: duplicatePolicy,
+        error_summary: result.failedErrors.length > 0 ? result.failedErrors.slice(0, 5).join('; ') : null,
+        error_details: result.errors || [],
+        idempotency_key: idempotencyKey || null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'import_id' });
+    } catch {
+      // Non-fatal if table not initialized
+    }
+
     return {
       success: !hasFailed,
       data: result
@@ -2315,6 +2482,30 @@ export async function bulkImportWorkOrdersToSupabase(
   } catch (err: any) {
     const classified = classifySupabaseError(err);
     return { success: false, error: classified };
+  }
+}
+
+/**
+ * Retrieves the recent history of Work Order imports from Supabase.
+ */
+export async function getWorkOrderImportHistory(limit = 20): Promise<SupabaseOpResult<any[]>> {
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
+  }
+  try {
+    const { data, error } = await client
+      .from('work_order_imports')
+      .select('*')
+      .order('uploaded_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      return { success: false, error: classifySupabaseError(error) };
+    }
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, error: classifySupabaseError(err) };
   }
 }
 

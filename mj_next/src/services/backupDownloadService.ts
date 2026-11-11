@@ -1,4 +1,3 @@
-import { auth } from '../lib/firebase';
 
 export interface BackupDownloadResult {
   success: boolean;
@@ -27,12 +26,7 @@ export async function downloadProductionBackup(): Promise<BackupDownloadResult> 
     }
   } catch (e) {}
 
-  // 1.B. Fallback to Firebase ID token if available
-  if (!token && auth.currentUser) {
-    try {
-      token = await auth.currentUser.getIdToken();
-    } catch (e) {}
-  }
+
 
   if (!token) {
     return {

@@ -1,0 +1,113 @@
+{
+  "phase": "16A.3",
+  "auditType": "static_source_audit_only",
+  "productionMutation": false,
+  "checkCount": 17,
+  "passed": 17,
+  "failed": 0,
+  "verdict": "PASS",
+  "checks": [
+    {
+      "id": "firebase_runtime_imports_removed",
+      "pass": true,
+      "severity": "BLOCKER",
+      "evidence": "No Firebase SDK import remains in the production runtime graph."
+    },
+    {
+      "id": "firebase_packages_not_runtime_dependencies",
+      "pass": true,
+      "severity": "BLOCKER",
+      "evidence": "Firebase packages are retained only for archival/backup tooling."
+    },
+    {
+      "id": "firestore_compat_layer_is_provider_neutral",
+      "pass": true,
+      "severity": "BLOCKER",
+      "evidence": "Legacy firestoreDb filename is now an Express/Supabase compatibility layer."
+    },
+    {
+      "id": "navigation_provider_neutral",
+      "pass": true,
+      "severity": "BLOCKER",
+      "evidence": "Navigation persistence uses Supabase-backed app_settings."
+    },
+    {
+      "id": "error_logging_provider_neutral",
+      "pass": true,
+      "severity": "HIGH",
+      "evidence": "System error reporting no longer writes to Firestore."
+    },
+    {
+      "id": "backup_has_no_firebase_token_fallback",
+      "pass": true,
+      "severity": "HIGH",
+      "evidence": "Backup download uses MoraJaws session credentials only."
+    },
+    {
+      "id": "server_has_no_firebase_admin_import",
+      "pass": true,
+      "severity": "BLOCKER",
+      "evidence": "server.ts no longer imports Firebase Admin."
+    },
+    {
+      "id": "server_has_no_firebase_auth_route",
+      "pass": true,
+      "severity": "HIGH",
+      "evidence": "Firebase login route removed."
+    },
+    {
+      "id": "server_has_no_supabase_auth_jwt_fallback",
+      "pass": true,
+      "severity": "BLOCKER",
+      "evidence": "Only MoraJaws internal session tokens are accepted."
+    },
+    {
+      "id": "custom_auth_uses_bcrypt",
+      "pass": true,
+      "severity": "INFO",
+      "evidence": "Custom auth verifies bcrypt/legacy hashes server-side."
+    },
+    {
+      "id": "custom_auth_uses_postgres_tables",
+      "pass": true,
+      "severity": "INFO",
+      "evidence": "Custom auth persists sessions, refresh tokens and login attempts in PostgreSQL."
+    },
+    {
+      "id": "supabase_backend_requires_server_secret",
+      "pass": true,
+      "severity": "INFO",
+      "evidence": "Supabase backend client requires a server secret."
+    },
+    {
+      "id": "supabase_storage_target_present",
+      "pass": true,
+      "severity": "INFO",
+      "evidence": "Supabase Storage remains the application storage target."
+    },
+    {
+      "id": "google_sheets_service_no_firebase",
+      "pass": true,
+      "severity": "HIGH",
+      "evidence": "Google Sheets OAuth uses Google Identity Services directly."
+    },
+    {
+      "id": "google_sheets_ui_present",
+      "pass": true,
+      "severity": "INFO",
+      "evidence": "Google Sheets feature remains available."
+    },
+    {
+      "id": "legacy_firebase_config_archived_only",
+      "pass": true,
+      "severity": "INFO",
+      "evidence": "Legacy Firebase config remains for archival/backup tooling and is not imported by runtime code."
+    },
+    {
+      "id": "custom_login_endpoint_is_primary",
+      "pass": true,
+      "severity": "INFO",
+      "evidence": "Frontend and backend use MoraJaws internal authentication."
+    }
+  ]
+}

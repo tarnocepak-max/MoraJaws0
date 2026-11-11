@@ -1,0 +1,59 @@
+{
+  "phase": "2.5",
+  "checkCount": 10,
+  "passed": 10,
+  "failed": 0,
+  "verdict": "PASS",
+  "checks": [
+    {
+      "id": "internal_auth_only",
+      "pass": true,
+      "evidence": "No Supabase Auth JWT fallback or Firebase login route in runtime code."
+    },
+    {
+      "id": "no_frontend_service_role",
+      "pass": true,
+      "evidence": "No server database secret is referenced by frontend runtime source."
+    },
+    {
+      "id": "no_direct_supabase_browser_client",
+      "pass": true,
+      "evidence": "Browser runtime routes database access through Express."
+    },
+    {
+      "id": "firebase_not_runtime",
+      "pass": true,
+      "evidence": "Firebase SDK imports are absent from runtime source."
+    },
+    {
+      "id": "firebase_dev_only",
+      "pass": true,
+      "evidence": "Firebase dependencies are not production dependencies."
+    },
+    {
+      "id": "operational_localstorage_not_used_as_source",
+      "pass": true,
+      "evidence": "AppContext no longer persists operational collections to localStorage."
+    },
+    {
+      "id": "navigation_backend_persistence",
+      "pass": true,
+      "evidence": "Navigation settings persist through Supabase-backed app_settings."
+    },
+    {
+      "id": "final_internal_auth_rls_lockdown",
+      "pass": true,
+      "evidence": "Final migration revokes direct anon/authenticated table access and grants backend service_role."
+    },
+    {
+      "id": "migration_count",
+      "pass": true,
+      "evidence": "20 SQL migrations discovered."
+    },
+    {
+      "id": "syntax_transpile",
+      "pass": true,
+      "evidence": "122/122 TypeScript/TSX runtime files transpile without syntax diagnostics."
+    }
+  ]
+}

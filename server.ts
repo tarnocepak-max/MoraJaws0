@@ -51,6 +51,7 @@ import {
   archiveWorkOrderInSupabase,
   restoreWorkOrderInSupabase,
   bulkImportWorkOrdersToSupabase,
+  getWorkOrderImportHistory,
   getContractorsFromSupabase,
   getContractorByIdFromSupabase,
   insertContractorToSupabase,
@@ -2183,14 +2184,20 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     let contractorsList: any[] = [];
     let coverageAreasList: any[] = [];
     let templatesList: any[] = [];
+    let globalConfig: any = null;
+    let sheetsConfig: any = null;
 
     try {
-      const [sbResult, sbContr, sbAreas, sbTemplates] = await Promise.all([
+      const [sbResult, sbContr, sbAreas, sbTemplates, sbGlobal, sbSheets] = await Promise.all([
         getWorkOrdersFromSupabase(),
         getContractorsFromSupabase(),
         getCoverageAreasFromSupabase(),
-        getWaTemplatesFromSupabase()
+        getWaTemplatesFromSupabase(),
+        getAppSettingFromSupabase('global'),
+        getAppSettingFromSupabase('google_sheets_config')
       ]);
+      globalConfig = sbGlobal.success ? sbGlobal.data : null;
+      sheetsConfig = sbSheets.success ? sbSheets.data : null;
 
       if (!sbResult.success) {
         if (!isLocalJsonModeAllowed()) {
@@ -2244,6 +2251,8 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       contractorsList = db.contractors;
       coverageAreasList = db.coverageAreas;
       templatesList = db.templates;
+      globalConfig = db.globalConfig;
+      sheetsConfig = db.sheetsConfig;
     }
 
     const scopedTickets = user ? scopeTicketsForUser(baseTickets, user) : [];
@@ -2280,8 +2289,8 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       contractors: safeContractors,
       coverageAreas: coverageAreasList,
       templates: templatesList,
-      globalConfig: db.globalConfig,
-      sheetsConfig: user?.role === 'super_admin' ? db.sheetsConfig : undefined,
+      globalConfig,
+      sheetsConfig: user?.role === 'super_admin' ? sheetsConfig : undefined,
       operationalDate: getOperationalDate().date,
       serverTime: new Date().toISOString()
     });
@@ -3517,7 +3526,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
     // Production / Authoritative Supabase Path:
     const batchId = 'batch_' + Date.now();
-    const supaRes = await bulkImportWorkOrdersToSupabase(importedRows, batchId, req.user!.name);
+    const supaRes = await bulkImportWorkOrdersToSupabase(importedRows, batchId, req.user!.name, options);
 
     if (!supaRes.success) {
       console.error('[Bulk Import] Supabase import error:', supaRes.error?.message);
@@ -5043,8 +5052,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     const assignedArea = req.user!.role === 'leader' ? (req.user!.area || undefined) : area;
     const assignedContractorId = req.user!.role === 'leader' ? (req.user!.contractorId || undefined) : contractorId;
 
+    const temporaryPassword = generateSecureTemporaryPassword();
     const newUser: ServerUser = {
-      id: 'u-' + Date.now(),
+      id: 'u-' + Date.now() + '-' + crypto.randomBytes(3).toString('hex'),
       name: cleanName,
       username: cleanUsername,
       email: email?.trim() || `${cleanUsername}@morajaws.net`,
@@ -5054,7 +5064,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       contractorId: assignedContractorId,
       area: assignedArea,
       active: true,
-      passwordHash: DEFAULT_HASH,
+      passwordHash: await hashPasswordWithBcrypt(temporaryPassword),
+      mustChangePassword: true,
+      sessionVersion: 1,
       createdAt: new Date().toISOString()
     };
 
@@ -5083,7 +5095,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         await logServerAuditAsync('User Created', 'auth', newUser.id, `User ${req.user!.name} membuat akun: ${newUser.name} (@${newUser.username}) [${newUser.role}]`, req.user);
         if (!isLocalJsonModeAllowed()) {
           const { passwordHash: _, ...safeUser } = (insRes.data || newUser) as any;
-          return res.status(201).json({ success: true, user: safeUser });
+          return res.status(201).json({ success: true, user: safeUser, temporaryPassword });
         }
       } else if (!isLocalJsonModeAllowed()) {
         const status = insRes.error?.isUnavailable ? 503 : 500;
@@ -5111,7 +5123,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       logServerAudit('User Created', 'auth', newUser.id, `User ${req.user!.name} membuat akun: ${newUser.name} (@${newUser.username}) [${newUser.role}]`, req.user);
 
       const { passwordHash: _, ...safeUser } = newUser;
-      return res.status(201).json({ success: true, user: safeUser });
+      return res.status(201).json({ success: true, user: safeUser, temporaryPassword });
     }
 
     return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
@@ -5377,7 +5389,10 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     if (!user) return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
 
     const newSessionVersion = (user.sessionVersion || 1) + 1;
-    user.passwordHash = DEFAULT_HASH;
+    const temporaryPassword = generateSecureTemporaryPassword();
+    const newPasswordHash = await hashPasswordWithBcrypt(temporaryPassword);
+
+    user.passwordHash = newPasswordHash;
     user.mustChangePassword = true;
     user.sessionVersion = newSessionVersion;
 
@@ -5387,7 +5402,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
     if (isSupabaseMode()) {
       const supaRes = await updateUserInSupabase(id, {
-        passwordHash: DEFAULT_HASH,
+        passwordHash: newPasswordHash,
         mustChangePassword: true,
         sessionVersion: newSessionVersion
       });
@@ -5396,22 +5411,21 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         return res.status(status).json({ success: false, error: supaRes.error?.message || 'Gagal mereset password di Supabase.' });
       }
       if (!isLocalJsonModeAllowed()) {
-        await logServerAuditAsync('User Password Reset', 'auth', id, `Password akun ${user.name} di-reset ke default 12345678`, req.user);
-        return res.json({ success: true, message: 'Password berhasil di-reset ke default 12345678.' });
+        await logServerAuditAsync('User Password Reset', 'auth', id, `Password akun ${user.name} di-reset oleh Super Admin`, req.user);
+        return res.json({ success: true, message: 'Password berhasil di-reset.', temporaryPassword });
       }
     }
 
     if (isLocalJsonModeAllowed()) {
       const localUser = db.users.find(u => u.id === id);
       if (localUser) {
-        localUser.passwordHash = DEFAULT_HASH;
+        localUser.passwordHash = newPasswordHash;
         localUser.mustChangePassword = true;
         localUser.sessionVersion = newSessionVersion;
       }
       saveDatabaseToDisk();
-      await logServerAuditAsync('User Password Reset', 'auth', id, `Password akun ${user.name} di-reset ke default 12345678`, req.user);
-
-      return res.json({ success: true, message: 'Password berhasil di-reset ke default 12345678.' });
+      await logServerAuditAsync('User Password Reset', 'auth', id, `Password akun ${user.name} di-reset oleh Super Admin`, req.user);
+      return res.json({ success: true, message: 'Password berhasil di-reset.', temporaryPassword });
     }
 
     return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
@@ -5701,20 +5715,43 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   });
 
   // --- Operational Date Engine (Asia/Jakarta) ---
-  app.get('/api/system/operational-date', (_req, res) => {
-    res.json(getOperationalDate());
+  app.get('/api/system/operational-date', async (_req, res) => {
+    try {
+      const result = await getAppSettingFromSupabase('global');
+      const stored = result.success && result.data?.operationalDate ? String(result.data.operationalDate) : '';
+      if (stored) {
+        return res.json({ success: true, operationalDate: stored, isAuto: false, timezone: 'Asia/Jakarta' });
+      }
+    } catch {}
+    return res.json({ success: true, ...getOperationalDate() });
   });
 
-  app.post('/api/system/operational-date', requireAuth, (req: AuthenticatedRequest, res) => {
+  app.post('/api/system/operational-date', requireAuth, async (req: AuthenticatedRequest, res) => {
     if (req.user!.role !== 'super_admin' && req.user!.role !== 'dispatch') {
       return res.status(403).json({ error: 'Akses Ditolak: Perubahan tanggal operasional hanya dapat dilakukan oleh Super Admin atau Dispatch.' });
     }
     const { date, operationalDate, isAuto } = req.body;
     const targetDate = operationalDate || date;
     db.operationalDateOverride = isAuto || !targetDate ? null : String(targetDate).trim();
-    saveDatabaseToDisk();
-    logServerAudit('Operational Date Changed', 'system', 'operational-date', `Tanggal operasional diatur ke ${db.operationalDateOverride || 'Otomatis (Hari Ini)'} oleh ${req.user!.name}`, req.user);
-    res.json({ success: true, operationalDate: getOperationalDate().date });
+    const globalResult = await getAppSettingFromSupabase('global');
+    const globalConfig = globalResult.success && globalResult.data ? globalResult.data : {};
+    const saved = await saveAppSettingToSupabase(
+      'global',
+      { ...globalConfig, operationalDate: db.operationalDateOverride, updatedAt: new Date().toISOString() },
+      'MoraJaws global application settings'
+    );
+    if (!saved.success && !isLocalJsonModeAllowed()) {
+      return res.status(503).json({ success: false, error: saved.error || 'Gagal menyimpan tanggal operasional ke Supabase.', code: 'DATABASE_UNAVAILABLE' });
+    }
+    if (isLocalJsonModeAllowed()) saveDatabaseToDisk();
+    await logServerAuditAsync(
+      'Operational Date Changed',
+      'system',
+      'operational-date',
+      `Tanggal operasional diatur ke ${db.operationalDateOverride || 'Otomatis (Hari Ini)'} oleh ${req.user!.name}`,
+      req.user
+    );
+    res.json({ success: true, operationalDate: db.operationalDateOverride || getOperationalDate().date });
   });
 
   // Helper to extract clean Google Spreadsheet ID
@@ -5728,26 +5765,51 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   }
 
   // --- Google Sheets Sync Configuration & Real Backend Integration ---
-  app.get(['/api/sheets/config', '/api/integrations/google-sheets/config'], requireSuperAdmin, (_req, res) => {
-    res.json({ config: db.sheetsConfig });
+  app.get(['/api/sheets/config', '/api/integrations/google-sheets/config'], requireSuperAdmin, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const result = await getAppSettingFromSupabase('google_sheets_config');
+      if (result.success) {
+        return res.json({ success: true, config: result.data || {} });
+      }
+      if (!isLocalJsonModeAllowed()) {
+        return res.status(503).json({ success: false, error: 'Konfigurasi Google Sheets tidak tersedia dari Supabase.', code: 'DATABASE_UNAVAILABLE' });
+      }
+      return res.json({ success: true, config: db.sheetsConfig });
+    } catch (err: any) {
+      if (!isLocalJsonModeAllowed()) {
+        return res.status(503).json({ success: false, error: 'Konfigurasi Google Sheets tidak tersedia dari Supabase.', code: 'DATABASE_UNAVAILABLE' });
+      }
+      return res.json({ success: true, config: db.sheetsConfig });
+    }
   });
 
-  app.post(['/api/sheets/config', '/api/integrations/google-sheets/config'], requireSuperAdmin, (req: AuthenticatedRequest, res) => {
-    const updates = req.body;
-    const cleanId = extractCleanSpreadsheetId(updates.spreadsheetId || updates.spreadsheetUrl || db.sheetsConfig.spreadsheetId);
-
-    db.sheetsConfig = {
-      ...db.sheetsConfig,
-      ...updates,
-      spreadsheetId: cleanId || db.sheetsConfig.spreadsheetId,
-      spreadsheetUrl: cleanId ? `https://docs.google.com/spreadsheets/d/${cleanId}/edit` : db.sheetsConfig.spreadsheetUrl,
-      updatedAt: new Date().toISOString(),
-      updatedBy: req.user!.name
-    };
-
-    saveDatabaseToDisk();
-    logServerAudit('Google Sheets Config Updated', 'ui_config', 'sheets', `Konfigurasi Google Sheets diperbarui oleh ${req.user!.name}`, req.user);
-    res.json({ success: true, config: db.sheetsConfig });
+  app.post(['/api/sheets/config', '/api/integrations/google-sheets/config'], requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const updates = req.body || {};
+      const currentResult = await getAppSettingFromSupabase('google_sheets_config');
+      const current = currentResult.success && currentResult.data ? currentResult.data : {};
+      const cleanId = extractCleanSpreadsheetId(
+        updates.spreadsheetId || updates.spreadsheetUrl || current.spreadsheetId || db.sheetsConfig.spreadsheetId
+      );
+      const config = {
+        ...current,
+        ...updates,
+        spreadsheetId: cleanId || current.spreadsheetId || '',
+        spreadsheetUrl: cleanId ? `https://docs.google.com/spreadsheets/d/${cleanId}/edit` : (current.spreadsheetUrl || ''),
+        updatedAt: new Date().toISOString(),
+        updatedBy: req.user!.name
+      };
+      const saved = await saveAppSettingToSupabase('google_sheets_config', config, 'MoraJaws Google Sheets integration configuration');
+      if (!saved.success && !isLocalJsonModeAllowed()) {
+        return res.status(503).json({ success: false, error: saved.error || 'Gagal menyimpan konfigurasi Google Sheets ke Supabase.', code: 'DATABASE_UNAVAILABLE' });
+      }
+      db.sheetsConfig = { ...db.sheetsConfig, ...config };
+      if (isLocalJsonModeAllowed()) saveDatabaseToDisk();
+      await logServerAuditAsync('Google Sheets Config Updated', 'ui_config', 'sheets', `Konfigurasi Google Sheets diperbarui oleh ${req.user!.name}`, req.user);
+      return res.json({ success: true, config });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Gagal menyimpan konfigurasi Google Sheets.' });
+    }
   });
 
   // Google Sheets Real-Time Status Endpoint
@@ -7518,41 +7580,229 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     }
   });
 
-  // 8. POST /api/supabase/work-orders/bulk-import
-  app.post('/api/supabase/work-orders/bulk-import', requireImportPermission, async (req: AuthenticatedRequest, res: Response) => {
-    try {
-      const user = req.user!;
-      const { tickets, batchId } = req.body || {};
+  // 8. Canonical Work Order Import Endpoints: POST /api/supabase/work-orders/import, /api/work-orders/import, /api/supabase/work-orders/bulk-import
+  app.post(
+    ['/api/supabase/work-orders/import', '/api/work-orders/import', '/api/supabase/work-orders/bulk-import'],
+    requireImportPermission,
+    async (req: AuthenticatedRequest, res: Response) => {
+      const generatedImportId = `WOIMP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+      try {
+        const user = req.user!;
+        const { tickets, batchId, importId, idempotencyKey, fileName, sheetName, options } = req.body || {};
+        const effectiveImportId = importId || batchId || generatedImportId;
 
-      if (!Array.isArray(tickets) || tickets.length === 0) {
-        return res.status(400).json({
+        if (!Array.isArray(tickets) || tickets.length === 0) {
+          return res.status(400).json({
+            success: false,
+            importId: effectiveImportId,
+            status: 'FAILED',
+            error: { code: 'INVALID_INPUT', message: 'Daftar tickets harus berupa array dan tidak boleh kosong.' },
+            summary: { total: 0, valid: 0, inserted: 0, updated: 0, duplicate: 0, invalid: 0, failed: 0 },
+            errors: [{ code: 'INVALID_INPUT', message: 'Daftar tickets kosong.' }]
+          });
+        }
+
+        // Strict Fail-Closed: If Supabase mode is inactive and local mode is disallowed
+        if (!isSupabaseMode() && !isLocalJsonModeAllowed()) {
+          return res.status(503).json({
+            success: false,
+            importId: effectiveImportId,
+            status: 'FAILED',
+            error: {
+              code: 'DATABASE_UNAVAILABLE',
+              message: 'Database authoritative Supabase belum dikonfigurasi atau tidak tersedia. Data belum tersimpan.'
+            },
+            summary: { total: tickets.length, valid: 0, inserted: 0, updated: 0, duplicate: 0, invalid: 0, failed: tickets.length },
+            errors: [{ code: 'DATABASE_UNAVAILABLE', message: 'Koneksi ke Supabase belum dikonfigurasi.' }]
+          });
+        }
+
+        // Filter out protected records
+        const safeTickets = tickets.filter(t => {
+          const id = (t.id || '').trim();
+          const wo = (t.woNumber || t.workOrderNumber || '').trim();
+          return !PROTECTED_PRODUCTION_WO_IDS.has(id) && !PROTECTED_PRODUCTION_WO_IDS.has(wo);
+        });
+
+        const importOptions = {
+          batchId: batchId || effectiveImportId,
+          importId: effectiveImportId,
+          idempotencyKey,
+          fileName: fileName || 'Uploaded_WO.xlsx',
+          sheetName: sheetName || 'Data_WO',
+          duplicatePolicy: options?.duplicatePolicy || req.body?.duplicatePolicy || 'skip',
+          autoRegisterContractors: options?.autoRegisterContractors ?? true
+        };
+
+        if (isSupabaseMode()) {
+          const result = await bulkImportWorkOrdersToSupabase(safeTickets, importOptions, user.name);
+
+          if (result.success && result.data) {
+            broadcastSupabaseChange('work_orders', 'INSERT', {
+              importId: effectiveImportId,
+              imported: result.data.imported,
+              updated: result.data.updatedCount || 0
+            });
+            await logServerAuditAsync(
+              'WO_IMPORT_COMPLETED',
+              'work_order',
+              effectiveImportId,
+              `Import ${result.data.imported} WO baru, ${result.data.updatedCount || 0} diperbarui, ${result.data.skippedDuplicates} duplikat oleh ${user.name} (${user.role}) dari file ${fileName || 'unnamed'}`,
+              user
+            );
+          } else if (!result.success) {
+            await logServerAuditAsync(
+              'WO_IMPORT_FAILED',
+              'work_order',
+              effectiveImportId,
+              `Gagal import WO dari file ${fileName || 'unnamed'}: ${result.error?.message || 'Kesalahan database'}`,
+              user
+            );
+          }
+
+          const httpStatus = result.success ? 200 : (result.data?.imported ? 207 : 422);
+          return res.status(httpStatus).json({
+            success: result.success,
+            importId: effectiveImportId,
+            status: result.data?.status || (result.success ? 'SUCCESS' : 'FAILED'),
+            summary: {
+              total: result.data?.totalSubmitted || tickets.length,
+              valid: (result.data?.totalSubmitted || tickets.length) - (result.data?.invalidCount || 0),
+              inserted: result.data?.imported || 0,
+              updated: result.data?.updatedCount || 0,
+              duplicate: result.data?.skippedDuplicates || 0,
+              invalid: result.data?.invalidCount || 0,
+              failed: result.data?.failedCount || 0
+            },
+            data: result.data,
+            errors: result.data?.errors || result.data?.failedErrors || []
+          });
+        }
+
+        // Local dev mode fallback (only when explicitly in dev and ALLOW_LOCAL_JSON_MODE=true)
+        const policy = importOptions.duplicatePolicy;
+        let importedCount = 0;
+        let updatedCount = 0;
+        let duplicatesIgnored = 0;
+        const existingWoMap = new Map<string, any>();
+        db.tickets.forEach(t => {
+          const upper = (t.woNumber || t.workOrderNumber || '').trim().toUpperCase();
+          if (upper) existingWoMap.set(upper, t);
+        });
+
+        const nowIso = new Date().toISOString();
+        const newItems: any[] = [];
+
+        safeTickets.forEach((item: any) => {
+          const rawWo = (item.woNumber || item.workOrderNumber || '').trim();
+          if (!rawWo) return;
+          const upperWo = rawWo.toUpperCase();
+          if (existingWoMap.has(upperWo)) {
+            if (policy === 'update_allowed') {
+              const existing = existingWoMap.get(upperWo);
+              if (item.appointmentDate) existing.appointmentDate = item.appointmentDate;
+              if (item.slotTime) existing.slotTime = item.slotTime;
+              if (item.remarksAgent) existing.remarksAgent = item.remarksAgent;
+              existing.updatedAt = nowIso;
+              existing.updatedBy = user.name;
+              updatedCount++;
+            } else {
+              duplicatesIgnored++;
+            }
+            return;
+          }
+          const newTicket = {
+            ...item,
+            id: item.id || ('wo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
+            woNumber: rawWo,
+            workOrderNumber: rawWo,
+            importBatchId: effectiveImportId,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+            updatedBy: user.name
+          };
+          existingWoMap.set(upperWo, newTicket);
+          newItems.push(newTicket);
+          importedCount++;
+        });
+
+        db.tickets.unshift(...newItems);
+        saveDatabaseToDisk();
+
+        await logServerAuditAsync(
+          'WO_IMPORT_COMPLETED',
+          'work_order',
+          effectiveImportId,
+          `[Local Mode] Import ${importedCount} WO baru, ${updatedCount} diperbarui, ${duplicatesIgnored} duplikat oleh ${user.name}`,
+          user
+        );
+
+        return res.json({
+          success: true,
+          importId: effectiveImportId,
+          status: 'SUCCESS',
+          summary: {
+            total: tickets.length,
+            valid: safeTickets.length,
+            inserted: importedCount,
+            updated: updatedCount,
+            duplicate: duplicatesIgnored,
+            invalid: tickets.length - safeTickets.length,
+            failed: 0
+          },
+          errors: []
+        });
+      } catch (err: any) {
+        return res.status(500).json({
           success: false,
-          error: { code: 'INVALID_INPUT', message: 'Daftar tickets harus berupa array dan tidak boleh kosong.' }
+          importId: generatedImportId,
+          status: 'FAILED',
+          error: { code: 'INTERNAL_ERROR', message: err?.message || 'Gagal import ke Supabase.' },
+          summary: { total: 0, valid: 0, inserted: 0, updated: 0, duplicate: 0, invalid: 0, failed: 0 },
+          errors: [{ code: 'INTERNAL_ERROR', message: err?.message || 'Kesalahan internal server.' }]
         });
       }
-
-      // Filter out any protected records
-      const safeTickets = tickets.filter(t => {
-        const id = (t.id || '').trim();
-        const wo = (t.woNumber || '').trim();
-        return !PROTECTED_PRODUCTION_WO_IDS.has(id) && !PROTECTED_PRODUCTION_WO_IDS.has(wo);
-      });
-
-      const result = await bulkImportWorkOrdersToSupabase(safeTickets, batchId, user.name);
-
-      if (result.success && result.data) {
-        broadcastSupabaseChange('work_orders', 'INSERT', { batchId, imported: result.data.imported });
-        await logServerAuditAsync('Bulk Import Work Orders (Supabase)', 'work_order', batchId || 'bulk', `Import ${result.data.imported} WO oleh ${user.name}. Duplikat diabaikan: ${result.data.skippedDuplicates}`, user);
-      }
-
-      return res.json(result);
-    } catch (err: any) {
-      return res.status(500).json({
-        success: false,
-        error: { code: 'INTERNAL_ERROR', message: err?.message || 'Gagal bulk import ke Supabase.' }
-      });
     }
-  });
+  );
+
+  // 8b. GET /api/supabase/work-orders/import-history and /api/work-orders/import-history
+  app.get(
+    ['/api/supabase/work-orders/import-history', '/api/work-orders/import-history'],
+    requireAuth,
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        if (!isSupabaseMode() && !isLocalJsonModeAllowed()) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' }
+          });
+        }
+        const limit = Math.min(parseInt(String(req.query.limit || '20'), 10) || 20, 100);
+        if (isSupabaseMode()) {
+          const histResult = await getWorkOrderImportHistory(limit);
+          if (!histResult.success) {
+            return res.status(503).json({
+              success: false,
+              error: histResult.error || { code: 'DATABASE_ERROR', message: 'Gagal memuat riwayat import dari Supabase.' }
+            });
+          }
+          return res.json({
+            success: true,
+            history: histResult.data || []
+          });
+        }
+        return res.json({
+          success: true,
+          history: []
+        });
+      } catch (err: any) {
+        return res.status(500).json({
+          success: false,
+          error: { code: 'INTERNAL_ERROR', message: err?.message || 'Gagal memuat riwayat import.' }
+        });
+      }
+    }
+  );
 
   // 9. GET /api/supabase/users
   app.get('/api/supabase/users', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
@@ -7697,6 +7947,14 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const assignedContractorId = user.role === 'leader' ? (resolveUserContractorId(user) || user.contractorId || '') : (body.contractorId || body.contractor || '');
       const assignedArea = user.role === 'leader' ? String(user.area || '').trim() : (body.area || '');
 
+      const temporaryPassword = body.password ? null : generateSecureTemporaryPassword();
+      const suppliedPassword = body.password ? String(body.password) : temporaryPassword!;
+      if (body.password) {
+        const strength = validatePasswordStrength(suppliedPassword);
+        if (!strength.valid) {
+          return res.status(400).json({ success: false, error: { code: 'WEAK_PASSWORD', message: strength.error } });
+        }
+      }
       const newUser: ServerUser = {
         id: body.id || `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
         name: body.name.trim(),
@@ -7708,8 +7966,8 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         contractorId: assignedContractorId,
         area: assignedArea,
         active: body.active !== false,
-        passwordHash: body.password ? hashPassword(body.password) : DEFAULT_HASH,
-        mustChangePassword: body.password ? false : true,
+        passwordHash: await hashPasswordWithBcrypt(suppliedPassword),
+        mustChangePassword: !body.password,
         sessionVersion: 1,
         createdAt: new Date().toISOString()
       };
@@ -7719,13 +7977,15 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         return res.status(400).json({ success: false, error: result.error });
       }
 
-      db.users.push(newUser);
-      saveDatabaseToDisk();
+      if (isLocalJsonModeAllowed()) {
+        db.users.push(newUser);
+        saveDatabaseToDisk();
+      }
 
       await logServerAuditAsync('User Created (Supabase)', 'auth', newUser.id, `Pengguna baru ${newUser.name} (@${newUser.username}) dibuat oleh ${user.role} ${user.name}`, user);
 
       const { passwordHash: _, ...safeUser } = newUser as any;
-      return res.status(201).json({ success: true, data: safeUser });
+      return res.status(201).json({ success: true, data: safeUser, temporaryPassword });
     } catch (err: any) {
       return res.status(500).json({
         success: false,
@@ -7898,29 +8158,47 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const { id } = req.params;
       const user = req.user!;
 
-      // Revoke all sessions
       SERVER_SESSIONS.forEach(s => {
         if (s.userId === id) s.status = 'revoked';
       });
 
       const existingUser = db.users.find(u => u.id === id);
       const newVersion = (existingUser?.sessionVersion || 1) + 1;
+      const temporaryPassword = generateSecureTemporaryPassword();
+      const newPasswordHash = await hashPasswordWithBcrypt(temporaryPassword);
+
       if (existingUser) {
-        existingUser.passwordHash = DEFAULT_HASH;
+        existingUser.passwordHash = newPasswordHash;
         existingUser.mustChangePassword = true;
         existingUser.sessionVersion = newVersion;
         saveDatabaseToDisk();
       }
 
       const result = await updateUserInSupabase(id, {
-        passwordHash: DEFAULT_HASH,
+        passwordHash: newPasswordHash,
         mustChangePassword: true,
         sessionVersion: newVersion
       });
+      if (!result.success && !isLocalJsonModeAllowed()) {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: result.error?.message || 'Gagal memperbarui password di Supabase.' }
+        });
+      }
 
-      await logServerAuditAsync('User Password Reset (Supabase)', 'auth', id, `Password akun ${id} di-reset oleh Super Admin ${user.name}`, user);
+      await logServerAuditAsync(
+        'User Password Reset (Supabase)',
+        'auth',
+        id,
+        `Password akun ${id} di-reset oleh Super Admin ${user.name}`,
+        user
+      );
 
-      return res.json({ success: true, message: 'Password berhasil di-reset ke default 12345678.' });
+      return res.json({
+        success: true,
+        message: 'Password berhasil di-reset.',
+        temporaryPassword
+      });
     } catch (err: any) {
       return res.status(500).json({
         success: false,

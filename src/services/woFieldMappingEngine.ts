@@ -11,6 +11,7 @@ import {
   WOAssignmentHistory
 } from '../types/index.ts';
 import * as XLSX from 'xlsx';
+import { readWorkbookWithSmartSheetDetection } from '../utils/excelClient.ts';
 import { parseAppointmentDate, formatAppointmentDateDisplay, DateParseResult } from './appointmentDateParser.ts';
 
 /**
@@ -1755,52 +1756,73 @@ export function processRawImportWithEngine(
   };
 }
 
+export interface ExcelWorkbookParseResult {
+  records: Record<string, string>[];
+  sheetNames: string[];
+  selectedSheetName: string;
+}
+
 /**
- * Parse Excel Binary Buffer (.xlsx, .xls) into raw record rows
- * Smartly inspects sheet 'Data_WO', 'Sheet1', or the first non-empty sheet,
- * preserving strings and leading zeros.
+ * Parse Excel Binary Buffer (.xlsx, .xls) into raw record rows.
+ * Uses smart sheet detection, header discovery across top 15 rows,
+ * and robust date/number formatting while preserving leading zeros.
  */
-export function parseExcelWorkbook(buffer: ArrayBuffer | Uint8Array): Record<string, string>[] {
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true, raw: false });
-  let targetSheetName = workbook.SheetNames[0];
+export function parseExcelWorkbook(
+  buffer: ArrayBuffer | Uint8Array,
+  manualSheetName?: string
+): ExcelWorkbookParseResult {
+  try {
+    const analysis = readWorkbookWithSmartSheetDetection(buffer, manualSheetName);
+    return {
+      records: analysis.records,
+      sheetNames: analysis.sheetNames,
+      selectedSheetName: analysis.selectedSheetName
+    };
+  } catch (err) {
+    const workbook = XLSX.read(buffer, { type: 'array', cellDates: true, raw: false });
+    const sheetNames = workbook.SheetNames || [];
+    let targetSheetName = manualSheetName && sheetNames.includes(manualSheetName)
+      ? manualSheetName
+      : sheetNames[0] || 'Sheet1';
 
-  // Check priority sheet names
-  if (workbook.SheetNames.includes('Data_WO')) {
-    targetSheetName = 'Data_WO';
-  } else if (workbook.SheetNames.includes('Sheet1')) {
-    targetSheetName = 'Sheet1';
-  } else if (workbook.SheetNames.includes('Work_Orders')) {
-    targetSheetName = 'Work_Orders';
-  }
+    if (!manualSheetName) {
+      if (sheetNames.includes('Data_WO')) targetSheetName = 'Data_WO';
+      else if (sheetNames.includes('BASE_DATA_WO')) targetSheetName = 'BASE_DATA_WO';
+      else if (sheetNames.includes('WO_KORLAP')) targetSheetName = 'WO_KORLAP';
+      else if (sheetNames.includes('Work_Orders')) targetSheetName = 'Work_Orders';
+    }
 
-  const worksheet = workbook.Sheets[targetSheetName];
-  if (!worksheet) return [];
+    const worksheet = workbook.Sheets[targetSheetName];
+    if (!worksheet) return { records: [], sheetNames, selectedSheetName: targetSheetName };
 
-  const rawJson: any[] = XLSX.utils.sheet_to_json(worksheet, {
-    defval: '',
-    raw: false
-  });
-
-  return rawJson.map(row => {
-    const record: Record<string, string> = {};
-    Object.entries(row).forEach(([k, v]) => {
-      let strVal = '';
-      if (v instanceof Date) {
-        try {
-          const y = v.getFullYear();
-          const m = String(v.getMonth() + 1).padStart(2, '0');
-          const d = String(v.getDate()).padStart(2, '0');
-          strVal = `${y}-${m}-${d}`;
-        } catch {
-          strVal = String(v);
-        }
-      } else if (v !== undefined && v !== null) {
-        strVal = String(v).trim();
-      }
-      record[k] = strVal;
+    const rawJson: any[] = XLSX.utils.sheet_to_json(worksheet, {
+      defval: '',
+      raw: false
     });
-    return record;
-  });
+
+    const records = rawJson.map(row => {
+      const record: Record<string, string> = {};
+      Object.entries(row).forEach(([k, v]) => {
+        let strVal = '';
+        if (v instanceof Date) {
+          try {
+            const y = v.getFullYear();
+            const m = String(v.getMonth() + 1).padStart(2, '0');
+            const d = String(v.getDate()).padStart(2, '0');
+            strVal = `${y}-${m}-${d}`;
+          } catch {
+            strVal = String(v);
+          }
+        } else if (v !== undefined && v !== null) {
+          strVal = String(v).trim();
+        }
+        record[k] = strVal;
+      });
+      return record;
+    });
+
+    return { records, sheetNames, selectedSheetName: targetSheetName };
+  }
 }
 
 /**

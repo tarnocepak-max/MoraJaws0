@@ -11,14 +11,6 @@ export type { Ticket };
 
 import { checkSupabaseConnection, getLastSupabaseHealthStatus, getSupabaseBackendClient } from './server/supabaseClient.ts';
 import {
-  signInWithSupabaseAuth,
-  verifySupabaseAuthToken,
-  refreshSupabaseAuthSession,
-  signOutSupabaseAuth,
-  resetSupabaseAuthPassword,
-  approveAuthUidMapping
-} from './server/supabaseAuthAdapter.ts';
-import {
   loginWithCustomAuth,
   verifyAccessToken,
   rotateRefreshToken,
@@ -31,7 +23,6 @@ import {
   LOCAL_REFRESH_TOKENS,
   LOCAL_LOGIN_ATTEMPTS
 } from './server/customAuthService.ts';
-import { checkFirebaseAdminHealth, verifyFirebaseIdToken } from './server/firebaseAdmin.ts';
 import { EventEmitter } from 'events';
 import {
   findUserInSupabase,
@@ -64,6 +55,9 @@ import {
   getTicketMessagesFromSupabase,
   insertTicketMessageToSupabase,
   getWaTemplatesFromSupabase,
+  insertWaTemplateToSupabase,
+  updateWaTemplateInSupabase,
+  deleteWaTemplateFromSupabase,
   insertAssignmentHistoryToSupabase,
   getAssignmentHistoryFromSupabase,
   updateCoverageAreaInSupabase,
@@ -133,7 +127,7 @@ export function hashPassword(password: string, salt: string = 'morajaws_secure_s
 }
 
 export const DEFAULT_LEGACY_HASH = '28232849';
-export const DEFAULT_HASH = hashPassword('12345678');
+export const DEFAULT_HASH = 'disabled:seed-account-password-not-configured';
 
 export function hashPasswordSecure(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -847,10 +841,10 @@ const INITIAL_SEED_TICKETS = [
 
 // Persistent state in memory backed by disk
 export let db: DatabaseSchema = {
-  users: [...INITIAL_SEED_USERS],
-  tickets: [...INITIAL_SEED_TICKETS],
-  contractors: [...INITIAL_SEED_CONTRACTORS],
-  coverageAreas: [...INITIAL_SEED_AREAS],
+  users: process.env.NODE_ENV === 'production' ? [] : [...INITIAL_SEED_USERS],
+  tickets: process.env.NODE_ENV === 'production' ? [] : [...INITIAL_SEED_TICKETS],
+  contractors: process.env.NODE_ENV === 'production' ? [] : [...INITIAL_SEED_CONTRACTORS],
+  coverageAreas: process.env.NODE_ENV === 'production' ? [] : [...INITIAL_SEED_AREAS],
   templates: [],
   ticketMessages: [],
   assignmentHistory: [],
@@ -906,10 +900,10 @@ function loadDatabaseFromDisk() {
           ...db,
           ...parsed,
           // Ensure essential baseline users exist
-          users: Array.isArray(parsed.users) && parsed.users.length > 0 ? parsed.users : INITIAL_SEED_USERS,
-          tickets: Array.isArray(parsed.tickets) && parsed.tickets.length > 0 ? parsed.tickets : INITIAL_SEED_TICKETS,
-          contractors: Array.isArray(parsed.contractors) && parsed.contractors.length > 0 ? parsed.contractors : INITIAL_SEED_CONTRACTORS,
-          coverageAreas: Array.isArray(parsed.coverageAreas) && parsed.coverageAreas.length > 0 ? parsed.coverageAreas : INITIAL_SEED_AREAS,
+          users: Array.isArray(parsed.users) ? parsed.users : (process.env.NODE_ENV === 'production' ? [] : INITIAL_SEED_USERS),
+          tickets: Array.isArray(parsed.tickets) ? parsed.tickets : (process.env.NODE_ENV === 'production' ? [] : INITIAL_SEED_TICKETS),
+          contractors: Array.isArray(parsed.contractors) ? parsed.contractors : (process.env.NODE_ENV === 'production' ? [] : INITIAL_SEED_CONTRACTORS),
+          coverageAreas: Array.isArray(parsed.coverageAreas) ? parsed.coverageAreas : (process.env.NODE_ENV === 'production' ? [] : INITIAL_SEED_AREAS),
           attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
           storageMetadata: Array.isArray(parsed.storageMetadata) ? parsed.storageMetadata : []
         };
@@ -918,12 +912,12 @@ function loadDatabaseFromDisk() {
           SERVER_SESSIONS.push(...parsed.sessions);
         }
         // Ensure Ray Super Admin is present in user directory
-        if (!db.users.some(u => u.username.toLowerCase() === 'rays' || u.email.toLowerCase() === 'rayhanafirzanx@gmail.com')) {
+        if (process.env.NODE_ENV !== 'production' && !db.users.some(u => u.username.toLowerCase() === 'rays' || u.email.toLowerCase() === 'rayhanafirzanx@gmail.com')) {
           db.users.unshift(INITIAL_SEED_USERS[0]);
           saveDatabaseToDisk();
         }
         // Ensure IT Support seed account is present
-        if (!db.users.some(u => u.username.toLowerCase() === 'itsupport')) {
+        if (process.env.NODE_ENV !== 'production' && !db.users.some(u => u.username.toLowerCase() === 'itsupport')) {
           const itSeed = INITIAL_SEED_USERS.find(u => u.username === 'itsupport');
           if (itSeed) db.users.push(itSeed);
           saveDatabaseToDisk();
@@ -1279,9 +1273,7 @@ function buildWhatsAppClickToChatUrl(phone: string, messageText: string): { url:
 interface AuthenticatedRequest extends Request {
   user?: ServerUser;
   session?: ServerSession;
-  authSource?: 'firebase_token' | 'server_session' | 'supabase_auth';
-  decodedFirebaseToken?: any;
-  supabaseAuthUser?: any;
+  authSource?: 'server_session';
 }
 
 export function validateCsrfProtection(req: { method?: string; headers?: Record<string, string | string[] | undefined> }): { valid: boolean; reason?: string } {
@@ -1384,28 +1376,7 @@ async function resolveUserFromHeader(req: AuthenticatedRequest, res: Response, n
       // Fallback
     }
 
-    // 2. Fallback: JWT Token Verification if token format starts with eyJ
-    if (!found && token.startsWith('eyJ')) {
-      try {
-        const saRes = await verifySupabaseAuthToken(token, knownSession?.sessionVersion);
-        if (saRes.success && saRes.data) {
-          authSource = 'server_session';
-          found = saRes.data as ServerUser;
-        } else if (saRes.error?.code === 'SESSION_REVOKED') {
-          return res.status(401).json({
-            error: 'Sesi login telah dicabut karena perubahan akun atau logout.',
-            code: 'SESSION_REVOKED'
-          });
-        } else if (saRes.error?.code === 'TOKEN_EXPIRED') {
-          return res.status(401).json({
-            error: saRes.error.message || 'Token telah kedaluwarsa.',
-            code: 'TOKEN_EXPIRED'
-          });
-        }
-      } catch (saErr) {
-        // Fallback to server session check
-      }
-    }
+    // 2. External JWT/Supabase Auth fallback is intentionally disabled. MoraJaws uses only internal sessions.
 
     // 3. Server Session Verification with strict sessionVersion checking (Non-production local development only)
     if (!found && isLocalJsonModeAllowed()) {
@@ -1834,7 +1805,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   // Health check endpoint with infrastructure, Supabase connectivity, Firebase Admin, and active storage
   app.get('/api/health', async (_req, res) => {
     const supabaseHealth = await checkSupabaseConnection();
-    const firebaseAdminHealth = checkFirebaseAdminHealth();
     const isProd = process.env.NODE_ENV === 'production';
     const isSupaConfigured = Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY));
 
@@ -1915,19 +1885,12 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         latencyMs: supabaseHealth.latencyMs,
         message: supabaseHealth.message
       },
-      firebaseAdmin: {
-        status: firebaseAdminHealth.status,
-        projectId: firebaseAdminHealth.projectId || null,
-        clientEmailConfigured: firebaseAdminHealth.clientEmailConfigured,
-        privateKeyConfigured: firebaseAdminHealth.privateKeyConfigured,
-        message: firebaseAdminHealth.message
-      },
       authentication: {
-        primarySystem: 'Supabase Auth (Authoritative Target)',
+        primarySystem: 'MoraJaws Internal Authentication',
         backendVerification: 'active',
-        supabaseAuthAdapter: 'ready',
-        firebaseCompatibility: 'transition_mode',
-        sessionFallbackAvailable: !isProd
+        supabaseAuthAdapter: 'disabled',
+        firebaseCompatibility: 'disabled',
+        sessionFallbackAvailable: false
       },
       activeDatabase: activeDatabaseStatus,
       databaseStats: {
@@ -1957,21 +1920,9 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
           lastSyncAt: db.sheetsConfig.lastSyncAt,
           lastSyncStatus: db.sheetsConfig.lastSyncStatus
         },
-        firebaseAuth: {
-          enabled: true,
-          projectId: 'sonic-ripple-cxtlg',
-          firestoreDatabaseId: 'ai-studio-morajawsv6-c6c8e7c8-6b4d-4b80-8e21-1af2f4c29daa'
-        },
-        cloudFirestore: {
-          status: 'Connected',
-          projectId: 'sonic-ripple-cxtlg',
-          firestoreDatabaseId: 'ai-studio-morajawsv6-c6c8e7c8-6b4d-4b80-8e21-1af2f4c29daa'
-        },
-        firebaseStorage: {
-          enabled: true,
-          bucket: 'sonic-ripple-cxtlg.firebasestorage.app',
-          totalAttachments: (db.attachments || []).length
-        }
+
+
+
       },
       serverTime: new Date().toISOString()
     });
@@ -1991,152 +1942,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       authenticated: true,
       user: safeUser,
       session: req.session || null
-    });
-  });
-
-  // Firebase Authentication Backend Verification Endpoint
-  app.post('/api/auth/firebase-login', async (req: Request, res: Response) => {
-    if (!isLocalJsonModeAllowed()) {
-      return res.status(403).json({
-        success: false,
-        error: 'Firebase Authentication dinonaktifkan pada lingkungan produksi MoraJaws. Gunakan login resmi dengan Supabase Auth via /api/auth/supabase-login.',
-        code: 'FIREBASE_AUTH_DISABLED_PRODUCTION'
-      });
-    }
-
-    const { email, uid, displayName, idToken } = req.body;
-
-    const fbAdminHealth = checkFirebaseAdminHealth();
-    if (fbAdminHealth.status !== 'connected' && fbAdminHealth.status !== 'initialized') {
-      return res.status(503).json({
-        success: false,
-        error: 'Firebase Admin SDK belum dikonfigurasi pada server backend untuk memverifikasi Firebase ID Token. Silakan gunakan Staff Login Portal (Nama Pengguna & Kata Sandi) atau hubungi Administrator untuk melengkapi kredensial backend.',
-        code: 'FIREBASE_ADMIN_NOT_CONFIGURED'
-      });
-    }
-
-    if (!idToken) {
-      return res.status(400).json({
-        success: false,
-        error: 'ID Token Firebase wajib disertakan untuk verifikasi keamanan backend.',
-        code: 'ID_TOKEN_REQUIRED'
-      });
-    }
-
-    const decoded = await verifyFirebaseIdToken(idToken);
-    if (!decoded || !decoded.uid) {
-      return res.status(401).json({
-        success: false,
-        error: 'Token autentikasi Firebase tidak valid atau telah kedaluwarsa. Silakan login kembali.',
-        code: 'INVALID_FIREBASE_TOKEN'
-      });
-    }
-
-    // Strictly extract verified identity from cryptographic token payload only
-    const cleanUid = String(decoded.uid).trim();
-    const cleanEmail = String(decoded.email || '').trim().toLowerCase();
-
-    let user: ServerUser | null = null;
-
-    if (isSupabaseMode()) {
-      try {
-        const sbUser = (await findUserInSupabase(cleanUid)) || (cleanEmail ? await findUserInSupabase(cleanEmail) : null);
-        if (sbUser && !sbUser.isDeleted) {
-          user = sbUser;
-        } else if (!sbUser && !isLocalJsonModeAllowed()) {
-          await logServerAuditAsync('Firebase Login Rejected', 'auth', cleanEmail || cleanUid, `Percobaan login Firebase ditolak: Akun belum terdaftar di Supabase (${cleanEmail || cleanUid})`, null, { level: 'critical' });
-          return res.status(403).json({
-            error: `Akun Google / Firebase (${cleanEmail || cleanUid}) belum terdaftar dalam sistem MoraJaws. Hubungi Super Admin untuk mendaftarkan akun staf Anda.`,
-            code: 'USER_NOT_REGISTERED'
-          });
-        }
-      } catch (err: any) {
-        if (!isLocalJsonModeAllowed()) {
-          return res.status(503).json({
-            error: 'Database authoritative Supabase tidak dapat diakses saat login Firebase.',
-            code: 'DATABASE_UNAVAILABLE'
-          });
-        }
-      }
-    }
-
-    if (!user && isLocalJsonModeAllowed()) {
-      user = db.users.find(u => {
-        if (u.isDeleted) return false;
-        if (cleanEmail && (
-          u.email.toLowerCase() === cleanEmail ||
-          (u.altEmail && u.altEmail.toLowerCase().includes(cleanEmail))
-        )) return true;
-        if (cleanUid && u.firebaseUid === cleanUid) return true;
-        return false;
-      }) || null;
-    }
-
-    if (!user) {
-      await logServerAuditAsync('Firebase Login Rejected', 'auth', cleanEmail || cleanUid, `Percobaan login Firebase ditolak: Akun belum terdaftar (${cleanEmail || cleanUid})`, null, { level: 'critical' });
-      return res.status(403).json({
-        error: `Akun Google / Firebase (${cleanEmail || cleanUid}) belum terdaftar dalam sistem MoraJaws. Hubungi Super Admin untuk mendaftarkan akun staf Anda.`,
-        code: 'USER_NOT_REGISTERED'
-      });
-    }
-
-    if (!user.active) {
-      await logServerAuditAsync('Firebase Login Blocked Inactive', 'auth', user.id, `Akun dinonaktifkan mencoba login Firebase: ${user.name}`, user, { level: 'critical' });
-      return res.status(403).json({
-        error: 'Akun Anda telah dinonaktifkan oleh Administrator. Hubungi Super Admin.',
-        code: 'USER_INACTIVE'
-      });
-    }
-
-    if (cleanUid && !user.firebaseUid) {
-      user.firebaseUid = cleanUid;
-    }
-
-    const nowIso = new Date().toISOString();
-    const nowMs = Date.now();
-    const sessionMaxDurationMs = (db.sessionConfig.sessionMaxDurationHours || 8) * 3600 * 1000;
-    const expiresIso = new Date(nowMs + sessionMaxDurationMs).toISOString();
-
-    const sessionId = 'sess_' + Date.now() + '_' + crypto.randomBytes(6).toString('hex');
-    const token = crypto.randomBytes(32).toString('hex');
-    const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
-    const userAgent = req.headers['user-agent'] || 'Firebase Web Client';
-    const deviceType = userAgent.toLowerCase().includes('mobi') ? 'mobile' : 'desktop';
-
-    const newSession: ServerSession = {
-      sessionId,
-      token,
-      userId: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
-      contractor: user.contractor,
-      sessionVersion: user.sessionVersion || 1,
-      loginAt: nowIso,
-      lastActivityAt: nowIso,
-      expiresAt: expiresIso,
-      status: 'active',
-      ipAddress: clientIp,
-      userAgent,
-      deviceType
-    };
-
-    SERVER_SESSIONS.unshift(newSession);
-    user.lastLoginAt = nowIso;
-    user.loginCount = (user.loginCount || 0) + 1;
-    if (isLocalJsonModeAllowed()) {
-      saveDatabaseToDisk();
-    }
-
-    await logServerAuditAsync('Firebase Login Success', 'auth', user.id, `User ${user.name} (${user.role}) berhasil masuk via Firebase Auth [${cleanEmail}]`, user, { level: 'critical' });
-
-    const { passwordHash: _, ...safeUser } = user;
-    res.json({
-      success: true,
-      token,
-      sessionId,
-      expiresAt: expiresIso,
-      user: safeUser
     });
   });
 
@@ -2497,7 +2302,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   };
 
   app.post('/api/auth/login', handleLogin);
-  app.post('/api/auth/supabase-login', handleLogin);
 
   const handleRefresh = async (req: Request, res: Response) => {
     const tokenFromCookie = (req as any).cookies?.mora_refresh_token;
@@ -2551,7 +2355,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   };
 
   app.post('/api/auth/refresh', handleRefresh);
-  app.post('/api/auth/supabase-refresh', handleRefresh);
 
   const handleLogout = async (req: AuthenticatedRequest, res: Response) => {
     const authHeader = req.headers['authorization'];
@@ -2584,7 +2387,6 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
   };
 
   app.post('/api/auth/logout', handleLogout);
-  app.post('/api/auth/supabase-logout', handleLogout);
 
   // Reject Public Registration & Signup
   const blockPublicRegister = (_req: Request, res: Response) => {
@@ -7696,6 +7498,11 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const assignedContractorId = user.role === 'leader' ? (resolveUserContractorId(user) || user.contractorId || '') : (body.contractorId || body.contractor || '');
       const assignedArea = user.role === 'leader' ? String(user.area || '').trim() : (body.area || '');
 
+      const temporaryPassword = body.password ? String(body.password) : generateSecureTemporaryPassword();
+      const passwordValidation = validatePasswordStrength(temporaryPassword);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({ success: false, error: { code: 'WEAK_PASSWORD', message: passwordValidation.error } });
+      }
       const newUser: ServerUser = {
         id: body.id || `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
         name: body.name.trim(),
@@ -7707,8 +7514,8 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         contractorId: assignedContractorId,
         area: assignedArea,
         active: body.active !== false,
-        passwordHash: body.password ? hashPassword(body.password) : DEFAULT_HASH,
-        mustChangePassword: body.password ? false : true,
+        passwordHash: await hashPasswordWithBcrypt(temporaryPassword),
+        mustChangePassword: true,
         sessionVersion: 1,
         createdAt: new Date().toISOString()
       };
@@ -7724,7 +7531,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       await logServerAuditAsync('User Created (Supabase)', 'auth', newUser.id, `Pengguna baru ${newUser.name} (@${newUser.username}) dibuat oleh ${user.role} ${user.name}`, user);
 
       const { passwordHash: _, ...safeUser } = newUser as any;
-      return res.status(201).json({ success: true, data: safeUser });
+      return res.status(201).json({ success: true, data: safeUser, temporaryPassword: body.password ? undefined : temporaryPassword });
     } catch (err: any) {
       return res.status(500).json({
         success: false,
@@ -7904,22 +7711,25 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
 
       const existingUser = db.users.find(u => u.id === id);
       const newVersion = (existingUser?.sessionVersion || 1) + 1;
+      const temporaryPassword = generateSecureTemporaryPassword();
+      const newPasswordHash = await hashPasswordWithBcrypt(temporaryPassword);
       if (existingUser) {
-        existingUser.passwordHash = DEFAULT_HASH;
+        existingUser.passwordHash = newPasswordHash;
         existingUser.mustChangePassword = true;
         existingUser.sessionVersion = newVersion;
         saveDatabaseToDisk();
       }
 
       const result = await updateUserInSupabase(id, {
-        passwordHash: DEFAULT_HASH,
+        passwordHash: newPasswordHash,
         mustChangePassword: true,
         sessionVersion: newVersion
       });
+      if (!result.success) return res.status(400).json({ success: false, error: result.error });
 
       await logServerAuditAsync('User Password Reset (Supabase)', 'auth', id, `Password akun ${id} di-reset oleh Super Admin ${user.name}`, user);
 
-      return res.json({ success: true, message: 'Password berhasil di-reset ke default 12345678.' });
+      return res.json({ success: true, message: 'Password berhasil di-reset.', temporaryPassword });
     } catch (err: any) {
       return res.status(500).json({
         success: false,
@@ -8021,6 +7831,35 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     } catch (err: any) {
       return res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err?.message } });
     }
+  });
+
+  app.post('/api/supabase/wa-templates', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    if (!['super_admin','dispatch'].includes(req.user!.role)) return res.status(403).json({success:false,error:{code:'FORBIDDEN_ROLE',message:'Akses template WhatsApp ditolak.'}});
+    const result=await insertWaTemplateToSupabase(req.body||{});
+    if(!result.success)return res.status(400).json({success:false,error:result.error});
+    await logServerAuditAsync('WhatsApp Template Created','settings',result.data?.id||'new',`Template WhatsApp dibuat oleh ${req.user!.name}`,req.user!);
+    return res.status(201).json({success:true,data:result.data});
+  });
+  app.patch('/api/supabase/wa-templates/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    if (!['super_admin','dispatch'].includes(req.user!.role)) return res.status(403).json({success:false,error:{code:'FORBIDDEN_ROLE',message:'Akses template WhatsApp ditolak.'}});
+    const result=await updateWaTemplateInSupabase(req.params.id,req.body||{});
+    if(!result.success)return res.status(400).json({success:false,error:result.error});
+    return res.json({success:true,data:result.data});
+  });
+  app.delete('/api/supabase/wa-templates/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    if (!['super_admin','dispatch'].includes(req.user!.role)) return res.status(403).json({success:false,error:{code:'FORBIDDEN_ROLE',message:'Akses template WhatsApp ditolak.'}});
+    const result=await deleteWaTemplateFromSupabase(req.params.id);
+    if(!result.success)return res.status(400).json({success:false,error:result.error});
+    return res.json({success:true,data:result.data});
+  });
+  app.delete('/api/supabase/contractors/:id', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
+    const result=await deleteContractorInSupabase(req.params.id); if(!result.success)return res.status(400).json({success:false,error:result.error}); return res.json({success:true,data:result.data});
+  });
+  app.patch('/api/supabase/coverage-areas/:id', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
+    const result=await updateCoverageAreaInSupabase(req.params.id,req.body||{}); if(!result.success)return res.status(400).json({success:false,error:result.error}); return res.json({success:true,data:result.data});
+  });
+  app.delete('/api/supabase/coverage-areas/:id', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
+    const result=await deleteCoverageAreaInSupabase(req.params.id); if(!result.success)return res.status(400).json({success:false,error:result.error}); return res.json({success:true,data:result.data});
   });
 
   // 20. GET /api/supabase/settings/:key
@@ -9295,8 +9134,6 @@ export async function startServer() {
       })
       .catch(() => {});
 
-    const fbHealth = checkFirebaseAdminHealth();
-    console.log(`[Startup Check] Firebase Admin: ${fbHealth.status.toUpperCase()} - ${fbHealth.message}`);
   });
 }
 

@@ -1542,14 +1542,14 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
   };
 
   // Add technician submit
-  const handleAddInstaller = (e: React.FormEvent) => {
+  const handleAddInstaller = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!instName.trim() || !instUsername.trim() || !instPhone.trim()) {
       triggerNotice('error', 'Nama lengkap, username, dan nomor telepon WhatsApp wajib diisi.');
       return;
     }
 
-    const res = registerInstallerAccount({
+    const res = await registerInstallerAccount({
       name: instName,
       username: instUsername,
       phone: instPhone,
@@ -1558,7 +1558,10 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
 
     if (res.success) {
       toast.success('BERHASIL – Akun Installer berhasil dibuat.', 'Pendaftaran Sukses');
-      triggerNotice('success', `Teknisi ${instName} berhasil didaftarkan ke ${displayContractor}! Password default: 12345678`);
+      triggerNotice(
+        'success',
+        `Teknisi ${instName} berhasil didaftarkan ke ${displayContractor}. Password sementara: ${res.temporaryPassword || 'lihat hasil pendaftaran di backend'}`
+      );
       setInstName('');
       setInstUsername('');
       setInstPhone('');

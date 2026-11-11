@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const p = 'scripts/evidence/phase2_4_6_pre_cutover_audit.json';
+assert.ok(fs.existsSync(p), 'Audit JSON evidence must exist');
+const report = JSON.parse(fs.readFileSync(p, 'utf8'));
+assert.equal(report.phase, '2.4.6');
+assert.equal(report.mode, 'READ_ONLY_SOURCE_AUDIT');
+assert.ok(report.scannedFileCount > 0, 'Must scan source files');
+assert.ok(report.inventories.firebaseFirestore.occurrenceCount > 0, 'Legacy Firestore evidence must be recorded');
+assert.ok(report.inventories.googleSheets.occurrenceCount > 0, 'Google Sheets evidence must be recorded');
+assert.ok(report.inventories.supabase.occurrenceCount > 0, 'Supabase implementation evidence must be recorded');
+assert.equal(report.summary.cutoverReady, false, 'Cutover must remain blocked while legacy paths exist');
+assert.equal(report.summary.verdict, 'NOT_READY_FIREBASE_OR_SHEETS_PATHS_REMAIN');
+assert.ok(report.checks.find(x => x.id === 'no_database_write_performed')?.pass, 'Audit must remain read-only');
+console.log('PHASE 2.4.6 AUDIT INTEGRITY: 9/9 PASS');
