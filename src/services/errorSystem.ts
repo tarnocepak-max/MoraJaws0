@@ -17,6 +17,9 @@ export type MoraJawsErrorCode =
   | 'MJ-WO-001'
   | 'MJ-SCH-001'
   | 'MJ-SYS-001'
+  | 'MJ-AUTH-LOCK'
+  | 'MJ-AUTH-DISABLED'
+  | 'MJ-DB-001'
   | 'MJ-UNK-001';
 
 export interface ErrorDetails {

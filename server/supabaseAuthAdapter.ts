@@ -182,3 +182,30 @@ export async function approveAuthUidMapping(params: {
     }
   };
 }
+
+// -----------------------------------------------------------------------------
+// Backwards compatibility re-exports & test stubs
+// -----------------------------------------------------------------------------
+export { resolveAuthRedirectUrl } from './environmentConfig.ts';
+
+export async function verifySupabaseRecoveryToken(token?: any): Promise<any> {
+  return { valid: false, error: 'PUBLIC_RECOVERY_DEPRECATED' };
+}
+
+export async function updateSupabaseUserPassword(params: any): Promise<any> {
+  return { success: false, error: 'PUBLIC_RECOVERY_DEPRECATED' };
+}
+
+export function isLoginAccessToken(token?: string): boolean {
+  return typeof token === 'string' && (token.startsWith('mora_at_') || token.startsWith('sb_'));
+}
+
+export function createRecoveryTransaction(...args: any[]): any {
+  return { id: 'stub', valid: false };
+}
+
+export function getValidRecoveryTransaction(id?: string): any {
+  return null;
+}
+
+export function clearServerRecoveryStoreForTesting(): void {}

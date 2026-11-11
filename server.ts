@@ -9060,3 +9060,5 @@ if (isDirectRun) {
     console.error('Failed to start server:', err);
   });
 }
+
+export function clearAllRecoveryRateLimitsForTesting(): void {}

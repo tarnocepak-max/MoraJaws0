@@ -345,7 +345,7 @@ try {
 } catch (e) {}
 
 export const normalizeContractor = (c: any): Contractor => {
-  if (!c) return { id: '', name: '', code: '', coverageAreas: [] };
+  if (!c) return { id: '', name: '', code: '', coverageAreas: [], active: true, createdAt: new Date().toISOString() };
   const rawAreas = c.coverageAreas ?? c.coverage_areas ?? [];
   const coverageAreas = Array.isArray(rawAreas) ? rawAreas.filter(Boolean).map(String) : [];
   return {

@@ -253,6 +253,8 @@ export interface Ticket {
   postalCode?: string;
   clusterName?: string;
   area: string;
+  latitude?: number;
+  longitude?: number;
 
   // --- C. Appointment & Schedule ---
   appointmentDate?: string;

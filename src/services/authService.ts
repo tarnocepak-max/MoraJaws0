@@ -308,5 +308,44 @@ export async function adminUpdateUser(targetUserId: string, userData: Partial<Us
   return { ok: res.ok, status: res.status, data };
 }
 
+/**
+ * Client Password Recovery Endpoints
+ */
+export async function requestPasswordRecovery(identifier: string) {
+  const res = await fetch('/api/auth/request-password-recovery', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier })
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+export async function verifyRecoverySession(token: string | Record<string, any>) {
+  const res = await fetch('/api/auth/verify-recovery-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(typeof token === 'string' ? { token } : token)
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+export async function resetPasswordWithRecoveryToken(payload: {
+  newPassword: string;
+  confirmPassword: string;
+  recoveryToken?: string | null;
+  code?: string;
+  token_hash?: string;
+}) {
+  const res = await fetch('/api/auth/reset-password-with-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
 
 
