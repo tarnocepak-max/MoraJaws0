@@ -25,6 +25,7 @@
     "test:phase15a.2": "tsx scripts/verify_phase15a2_hardening.ts"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "@google/genai": "^2.32.0",
     "@supabase/supabase-js": "^2.118.0",
     "@tailwindcss/vite": "^4.0.0",

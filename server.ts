@@ -70,7 +70,10 @@ import {
   deleteCoverageAreaInSupabase,
   deleteContractorInSupabase,
   assignTicketInSupabase,
-  reassignTicketInSupabase
+  reassignTicketInSupabase,
+  getTechnicalReportByWorkOrderIdFromSupabase,
+  insertTechnicalReportToSupabase,
+  verifyTechnicalReportInSupabase
 } from './server/supabaseAdapter.ts';
 import { runPhase8ShadowDryRunSuite } from './server/supabaseShadowService.ts';
 import { realtimeSandboxHub, requireSandboxSuperAdmin, getSandboxSuperAdminAllowlist } from './server/realtimeHub.ts';
@@ -4102,6 +4105,14 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         });
       }
       if (supaRes.success && supaRes.data) updatedTicket = supaRes.data;
+
+      const repRes = await insertTechnicalReportToSupabase(technicalReport, ticket.woNumber);
+      if (!repRes.success && !isLocalJsonModeAllowed()) {
+        return res.status(503).json({
+          error: 'Gagal mencatat laporan teknis ke tabel kanonis Supabase.',
+          code: 'DATABASE_UNAVAILABLE'
+        });
+      }
     }
 
     if (isLocalJsonModeAllowed()) {
@@ -7046,15 +7057,26 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
         if (sbResult.success && sbResult.data) {
           ticket = sbResult.data;
         } else {
+          if (!sbResult.success && !sbResult.error?.isNotFound && !isLocalJsonModeAllowed()) {
+            return res.status(503).json({
+              success: false,
+              error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' }
+            });
+          }
           // Try fallback search by woNumber
           const byWo = await getWorkOrderByWoNumberFromSupabase(id);
           if (byWo.success && byWo.data) {
             ticket = byWo.data;
+          } else if (!byWo.success && !byWo.error?.isNotFound && !isLocalJsonModeAllowed()) {
+            return res.status(503).json({
+              success: false,
+              error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' }
+            });
           }
         }
       }
 
-      if (!ticket) {
+      if (!ticket && isLocalJsonModeAllowed()) {
         ticket = db.tickets.find(t => t.id === id || t.woNumber === id) || null;
       }
 
@@ -7437,7 +7459,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       const includeDeleted = req.query.includeDeleted === 'true';
 
       const result = await getUsersFromSupabase(includeDeleted);
-      let users = result.success ? (result.data || []) : db.users;
+      if (!result.success && !isLocalJsonModeAllowed()) {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' }
+        });
+      }
+      let users = result.success ? (result.data || []) : (isLocalJsonModeAllowed() ? db.users : []);
 
       // Filter deleted if not requested
       if (!includeDeleted) {
@@ -7485,11 +7513,13 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
       }
 
       const result = await getUserByIdFromSupabase(id);
-      if (!result.success && !isLocalJsonModeAllowed() && result.error?.isUnavailable) {
-        return res.status(503).json({
-          success: false,
-          error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' }
-        });
+      if (!result.success && !isLocalJsonModeAllowed()) {
+        if (!result.error?.isNotFound) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' }
+          });
+        }
       }
 
       const targetUser = result.success && result.data ? result.data : (isLocalJsonModeAllowed() ? db.users.find(u => u.id === id) : null);
@@ -8346,7 +8376,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     res.json({ success: true, workOrder: ticket, ticket });
   });
 
-  app.post('/api/work-orders/:id/assign', requireLeaderOrAdminForAssignment, async (req: AuthenticatedRequest, res) => {
+  app.post(['/api/work-orders/:id/assign', '/api/supabase/work-orders/:id/assign', '/api/tickets/:id/assign'], requireLeaderOrAdminForAssignment, async (req: AuthenticatedRequest, res) => {
     const id = req.params.id;
     const { installerName, slotTime, remarks, reason } = req.body;
     if (!installerName || !installerName.trim()) {
@@ -8435,7 +8465,7 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
   });
 
-  app.post('/api/work-orders/:id/reassign', requireLeaderOrAdminForAssignment, async (req: AuthenticatedRequest, res) => {
+  app.post(['/api/work-orders/:id/reassign', '/api/supabase/work-orders/:id/reassign', '/api/tickets/:id/reassign'], requireLeaderOrAdminForAssignment, async (req: AuthenticatedRequest, res) => {
     const id = req.params.id;
     const { newInstallerName, reason } = req.body;
     if (!newInstallerName || !newInstallerName.trim()) {
@@ -8522,6 +8552,78 @@ export async function createExpressApp(options?: { skipVite?: boolean }): Promis
     }
 
     return res.status(503).json({ success: false, error: 'Database authoritative Supabase tidak tersedia.', code: 'DATABASE_UNAVAILABLE' });
+  });
+
+  // Dedicated Technical Report Endpoints
+  app.get(['/api/work-orders/:id/technical-report', '/api/supabase/work-orders/:id/technical-report', '/api/tickets/:id/technical-report'], requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (isSupabaseMode()) {
+        const reportRes = await getTechnicalReportByWorkOrderIdFromSupabase(id);
+        if (reportRes.success && reportRes.data) {
+          return res.json({ success: true, data: reportRes.data });
+        }
+        if (!reportRes.success && !isLocalJsonModeAllowed()) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' }
+          });
+        }
+      }
+      if (isLocalJsonModeAllowed()) {
+        const ticket = db.tickets.find(t => t.id === id || t.woNumber === id);
+        if (ticket && ticket.technicalReport) {
+          return res.json({ success: true, data: ticket.technicalReport });
+        }
+      }
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Laporan teknis tidak ditemukan.' } });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err?.message } });
+    }
+  });
+
+  app.patch(['/api/technical-reports/:id/verify', '/api/supabase/technical-reports/:id/verify'], requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const user = req.user!;
+      const allowedRoles = ['superadmin', 'admin', 'dispatch'];
+      if (!allowedRoles.includes((user.role || '').toLowerCase())) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Hanya Super Admin, Admin, dan Dispatch yang berhak memverifikasi laporan teknis.' }
+        });
+      }
+
+      if (isSupabaseMode()) {
+        const verRes = await verifyTechnicalReportInSupabase(id, user.name || user.username);
+        if (!verRes.success && !isLocalJsonModeAllowed()) {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'DATABASE_UNAVAILABLE', message: 'Database authoritative Supabase tidak tersedia.' }
+          });
+        }
+        if (verRes.success) {
+          await logServerAuditAsync('Technical Report Verified', 'report', id, `Laporan teknis ${id} diverifikasi oleh ${user.name}`, user);
+          return res.json({ success: true, data: verRes.data });
+        }
+      }
+
+      if (isLocalJsonModeAllowed()) {
+        const t = db.tickets.find(x => x.technicalReport && (x.technicalReport.id === id || x.id === id || x.woNumber === id));
+        if (t && t.technicalReport) {
+          t.technicalReport.verifiedByDispatch = true;
+          t.technicalReport.verifiedAt = new Date().toISOString();
+          t.technicalReport.verifiedBy = user.name || user.username;
+          saveDatabaseToDisk();
+          await logServerAuditAsync('Technical Report Verified', 'report', id, `Laporan teknis ${id} diverifikasi oleh ${user.name}`, user);
+          return res.json({ success: true, data: t.technicalReport });
+        }
+      }
+
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Laporan teknis tidak ditemukan.' } });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err?.message } });
+    }
   });
 
   app.get('/api/settings', requireAuth, async (_req, res) => {

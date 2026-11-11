@@ -2,7 +2,7 @@
 // MORAJAWS CLIENT-SIDE SUPABASE MODULE
 // SECURITY & ARCHITECTURE DIRECTIVE:
 // 1. DILARANG membuat Supabase Client langsung di browser (createClient).
-// 2. SUPABASE_SERVICE_ROLE_KEY dan SECRET_KEY tidak boleh ada di frontend.
+// 2. Kredensial server-side administratif (secret / service role key) tidak boleh ada di frontend.
 // 3. Seluruh akses database Supabase wajib melalui Express Backend Proxy (/api/supabase/*).
 // 4. Autentikasi dan autorisasi ditegakkan sepenuhnya oleh server backend Express.
 // 5. Status koneksi wajib mencerminkan probe aktual ke database, bukan sekadar backend aktif.

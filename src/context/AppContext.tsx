@@ -175,7 +175,7 @@ interface AppContextType {
   saveTechnicalReport: (
     ticketId: string,
     reportData: Omit<TechnicalReport, 'id' | 'ticketId' | 'submittedAt' | 'submittedBy'>
-  ) => { success: boolean; error?: string };
+  ) => Promise<{ success: boolean; error?: string; code?: string }>;
   saveProgressReport: (
     ticketId: string,
     data: {
@@ -191,7 +191,7 @@ interface AppContextType {
       rootcauseLabel?: string;
     }
   ) => Promise<{ success: boolean; error?: string; report?: ProgressReportEntry }>;
-  verifyTechnicalReport: (ticketId: string) => void;
+  verifyTechnicalReport: (ticketId: string) => Promise<{ success: boolean; error?: string }>;
   startWorkOnTicket: (ticketId: string) => Promise<{ success: boolean; error?: string; ticket?: Ticket }>;
   approveProgressReport: (ticketId: string, notes?: string) => Promise<{ success: boolean; error?: string }>;
   rejectProgressReport: (ticketId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
@@ -2157,11 +2157,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('Root Causes Updated', 'ui_config', 'root_causes', 'Updated Wi-Fi root cause taxonomy catalog');
   };
 
-  // Technical Report Submission
-  const saveTechnicalReport = (
+  // Technical Report Submission (Authoritative Supabase PostgreSQL Persistence)
+  const saveTechnicalReport = async (
     ticketId: string,
     reportData: Omit<TechnicalReport, 'id' | 'ticketId' | 'submittedAt' | 'submittedBy'>
-  ) => {
+  ): Promise<{ success: boolean; error?: string; code?: string }> => {
     const ticket = getTicketById(ticketId);
     if (!ticket) return { success: false, error: 'Tiket tidak ditemukan.' };
 
@@ -2174,7 +2174,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       submittedAt: now
     };
 
-    // Requirement 3.B: Auto check-out on valid technical report save
+    // Requirement 3.B: Auto check-out calculation on valid technical report save
     let checkOutAtVal: string | undefined = ticket.checkOutAt;
     let workDurationMinVal: number | undefined = ticket.workDurationMinutes;
     let workDurationStrVal: string | undefined = ticket.workDurationFormatted;
@@ -2208,101 +2208,139 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    setTickets(prev =>
-      prev.map(t => {
-        if (t.id !== ticketId) return t;
-        const nextInstallerStatus = reportData.workResult === 'Tidak Berhasil'
-          ? 'Failed / Cancelled'
-          : reportData.workResult === 'Pekerjaan Tertunda'
-          ? 'Pending Technical'
-          : 'Completed';
-
-        return {
-          ...t,
-          technicalReport: report,
-          statusWOInstaller: nextInstallerStatus,
-          statusWOAgent: nextInstallerStatus === 'Completed' ? 'Resolved' : t.statusWOAgent,
-          checkOutAt: checkOutAtVal,
-          workDurationMinutes: workDurationMinVal,
-          workDurationFormatted: workDurationStrVal,
-          workSessionStatus: workSessionStatusVal,
-          workSessions: updatedSessions,
-          _offlineSyncStatus: !isOnline ? 'pending' : 'synced',
-          _offlineLastModified: now,
-          updatedAt: now,
-          updatedBy: currentUser.name
-        };
-      })
-    );
-
-    const activity: TicketActivity = {
-      id: 'act-' + Date.now(),
-      ticketId,
-      woNumber: ticket.woNumber,
-      action: 'Laporan Pekerjaan Teknisi Diserahkan',
-      description: `Root Cause: ${report.rootCause} | Hasil: ${report.workResult}${checkOutAtVal ? ` | Check-out: ${formatJakartaTimestamp(checkOutAtVal)} (Durasi: ${workDurationStrVal})` : ''}`,
-      performedBy: currentUser.name,
-      userRole: currentUser.role,
-      timestamp: now
-    };
-    setTicketActivities(prev => [activity, ...prev]);
-
-    addAuditLog('Technical Report Submitted', 'ticket', ticketId, `Installer ${currentUser.name} submitted Wi-Fi report for WO ${ticket.woNumber} (${report.workResult})`);
-
-    if (!isOnline) {
-      enqueueChange({
-        entity: 'technical_report',
-        entityId: ticketId,
-        action: 'REPORT',
-        summary: `Laporan Teknis WO ${ticket.woNumber} (${report.workResult})`,
-        payload: { ticketId, report },
-        user: { id: currentUser.id, name: currentUser.name, role: currentUser.role }
-      }).catch(e => console.warn('Offline report enqueue error', e));
-      toast.warning(`Laporan teknis WO ${ticket.woNumber} tersimpan offline di IndexedDB lokal.`, 'Laporan Offline');
-    }
-
-    // Persist report to Cloud Firestore (Confirmed Write)
-    const updatedWithReport: Ticket = {
-      ...ticket,
-      technicalReport: report,
-      statusWOInstaller: reportData.workResult === 'Tidak Berhasil' ? 'Failed / Cancelled' : reportData.workResult === 'Pekerjaan Tertunda' ? 'Pending Technical' : 'Completed',
-      statusWOAgent: 'In Progress',
-      approvalStatus: 'BUTUH APPROVAL',
-      checkOutAt: checkOutAtVal,
-      workDurationMinutes: workDurationMinVal,
-      workDurationFormatted: workDurationStrVal,
-      workSessionStatus: workSessionStatusVal,
-      workSessions: updatedSessions,
-      _offlineSyncStatus: !isOnline ? 'pending' : 'synced',
-      _offlineLastModified: now,
-      updatedAt: now,
-      updatedBy: currentUser.name
+    const payloadForServer = {
+      report: {
+        ...report,
+        checkOutAt: checkOutAtVal,
+        workDurationMinutes: workDurationMinVal,
+        workDurationFormatted: workDurationStrVal,
+        workSessionStatus: workSessionStatusVal,
+        workSessions: updatedSessions
+      }
     };
 
     setSyncStatus('SYNCING');
-    saveTicketToFirestore(updatedWithReport)
-      .then(() => {
-        setSyncStatus('SAVED');
-        setLastSyncTime(new Date().toISOString());
-        toast.success(`Laporan teknis lapangan untuk WO ${ticket.woNumber} berhasil disimpan (BUTUH APPROVAL).`, 'Laporan Teknis Tersimpan');
-      })
-      .catch(err => {
-        setSyncStatus('ERROR');
-        if (!isOnline) {
-          toast.warning(`Laporan teknis WO ${ticket.woNumber} tersimpan offline di IndexedDB lokal.`, 'Laporan Offline');
-        } else {
-          toast.error('Gagal menyimpan laporan teknis ke Cloud Firestore: ' + (err?.message || err), 'Penyimpanan Gagal');
-        }
+
+    // 1. Send request to server authoritative endpoint (AWAIT)
+    try {
+      const response = await fetch(`/api/tickets/${encodeURIComponent(ticketId)}/report`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payloadForServer)
       });
 
-    // Also persist report to backend API
-    fetch(`/api/tickets/${ticketId}/report`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ report })
-    }).catch(e => console.error('Error saving technical report to server:', e));
+      const responseBody = await response.json().catch(() => null);
 
-    return { success: true };
+      if (response.status === 503 || responseBody?.code === 'DATABASE_UNAVAILABLE') {
+        setSyncStatus('ERROR');
+        toast.error('DATABASE_UNAVAILABLE: Database authoritative Supabase tidak tersedia saat menyimpan laporan.', 'Database Unavailable');
+        return {
+          success: false,
+          code: 'DATABASE_UNAVAILABLE',
+          error: 'DATABASE_UNAVAILABLE: Database authoritative Supabase tidak tersedia. Silakan coba kembali.'
+        };
+      }
+
+      if (!response.ok || !responseBody?.success) {
+        setSyncStatus('ERROR');
+        const errCode = responseBody?.code || (response.status === 403 ? 'FORBIDDEN' : response.status === 404 ? 'NOT_FOUND' : 'SERVER_ERROR');
+        const errMsg = responseBody?.message || responseBody?.error?.message || responseBody?.error || 'Gagal menyimpan laporan teknis ke server PostgreSQL.';
+        toast.error(`Penyimpanan Gagal (${errCode}): ${errMsg}`, 'Penyimpanan Ditolak');
+        return {
+          success: false,
+          code: errCode,
+          error: errMsg
+        };
+      }
+
+      // 2. Authoritative PostgreSQL Commit Confirmed!
+      const committedReport: TechnicalReport = responseBody.technicalReport || report;
+      const committedTicket: Ticket | undefined = responseBody.ticket;
+
+      setTickets(prev =>
+        prev.map(t => {
+          if (t.id !== ticketId && t.woNumber !== ticket.woNumber) return t;
+          if (committedTicket) {
+            return {
+              ...committedTicket,
+              technicalReport: committedReport
+            };
+          }
+          const nextInstallerStatus = reportData.workResult === 'Tidak Berhasil'
+            ? 'Failed / Cancelled'
+            : reportData.workResult === 'Pekerjaan Tertunda'
+            ? 'Pending Technical'
+            : 'Completed';
+
+          return {
+            ...t,
+            technicalReport: committedReport,
+            statusWOInstaller: nextInstallerStatus,
+            statusWOAgent: nextInstallerStatus === 'Completed' ? 'Resolved' : t.statusWOAgent,
+            checkOutAt: checkOutAtVal,
+            workDurationMinutes: workDurationMinVal,
+            workDurationFormatted: workDurationStrVal,
+            workSessionStatus: workSessionStatusVal,
+            workSessions: updatedSessions,
+            _offlineSyncStatus: 'synced',
+            _offlineLastModified: now,
+            updatedAt: now,
+            updatedBy: currentUser.name
+          };
+        })
+      );
+
+      const activity: TicketActivity = {
+        id: 'act-' + Date.now(),
+        ticketId,
+        woNumber: ticket.woNumber,
+        action: 'Laporan Pekerjaan Teknisi Diserahkan',
+        description: `Root Cause: ${report.rootCause} | Hasil: ${report.workResult}${checkOutAtVal ? ` | Check-out: ${formatJakartaTimestamp(checkOutAtVal)} (Durasi: ${workDurationStrVal})` : ''}`,
+        performedBy: currentUser.name,
+        userRole: currentUser.role,
+        timestamp: now
+      };
+      setTicketActivities(prev => [activity, ...prev]);
+
+      addAuditLog('Technical Report Submitted', 'ticket', ticketId, `Installer ${currentUser.name} submitted Wi-Fi report for WO ${ticket.woNumber} (${report.workResult})`);
+
+      setSyncStatus('SAVED');
+      setLastSyncTime(new Date().toISOString());
+
+      // 3. Secondary fire-and-forget sync to Firestore (preserves dual-read compatibility without blocking)
+      saveTicketToFirestore({
+        ...ticket,
+        technicalReport: committedReport,
+        statusWOInstaller: reportData.workResult === 'Tidak Berhasil' ? 'Failed / Cancelled' : reportData.workResult === 'Pekerjaan Tertunda' ? 'Pending Technical' : 'Completed',
+        statusWOAgent: reportData.workResult === 'Tidak Berhasil' ? ticket.statusWOAgent : 'Resolved',
+        approvalStatus: 'BUTUH APPROVAL',
+        checkOutAt: checkOutAtVal,
+        workDurationMinutes: workDurationMinVal,
+        workDurationFormatted: workDurationStrVal,
+        workSessionStatus: workSessionStatusVal,
+        workSessions: updatedSessions,
+        updatedAt: now,
+        updatedBy: currentUser.name
+      }).catch(e => console.warn('[Firestore] Secondary sync background warning:', e));
+
+      return { success: true };
+    } catch (networkErr: any) {
+      setSyncStatus('ERROR');
+      if (!isOnline) {
+        await enqueueChange({
+          entity: 'technical_report',
+          entityId: ticketId,
+          action: 'REPORT',
+          summary: `Laporan Teknis WO ${ticket.woNumber} (${report.workResult})`,
+          payload: { ticketId, report },
+          user: { id: currentUser.id, name: currentUser.name, role: currentUser.role }
+        }).catch(e => console.warn('Offline report enqueue error', e));
+        toast.warning(`Laporan teknis WO ${ticket.woNumber} tersimpan offline di IndexedDB lokal.`, 'Laporan Offline');
+        return { success: true };
+      }
+      toast.error('Gagal menghubungi server database: ' + (networkErr?.message || networkErr), 'Koneksi Gagal');
+      return { success: false, code: 'NETWORK_ERROR', error: networkErr?.message || 'Gagal menghubungi server.' };
+    }
   };
 
   const isInstallerMatch = (ticketInstaller: string | undefined, installerName: string): boolean => {
@@ -2701,33 +2739,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, report: entry };
   };
 
-  const verifyTechnicalReport = (ticketId: string) => {
-    if (currentUser.role !== 'dispatch' && currentUser.role !== 'super_admin') return;
-    const target = tickets.find(t => t.id === ticketId);
-    if (!target || !target.technicalReport) return;
+  const verifyTechnicalReport = async (ticketId: string): Promise<{ success: boolean; error?: string }> => {
+    if (currentUser.role !== 'dispatch' && currentUser.role !== 'super_admin') {
+      return { success: false, error: 'Akses Ditolak: Hanya Dispatch dan Super Admin yang berhak memverifikasi laporan.' };
+    }
+    const target = tickets.find(t => t.id === ticketId || t.woNumber === ticketId);
+    if (!target || !target.technicalReport) {
+      return { success: false, error: 'Tiket atau laporan teknis tidak ditemukan.' };
+    }
 
-    const verifiedTicket: Ticket = {
-      ...target,
-      technicalReport: {
-        ...target.technicalReport,
-        verifiedByDispatch: true,
-        verifiedAt: new Date().toISOString(),
-        verifiedBy: currentUser.name
-      }
-    };
-
-    setTickets(prev =>
-      prev.map(t => (t.id === ticketId ? verifiedTicket : t))
-    );
-    addAuditLog('Report Verified', 'ticket', ticketId, `Dispatch ${currentUser.name} verified technician work report`);
-
-    saveTicketToFirestore(verifiedTicket)
-      .then(() => {
-        toast.success('Laporan teknis pekerjaan lapangan berhasil diverifikasi oleh Dispatch.', 'Laporan Terverifikasi');
-      })
-      .catch(err => {
-        toast.error('Gagal memverifikasi laporan di Cloud Firestore: ' + (err?.message || err), 'Verifikasi Gagal');
+    const reportId = target.technicalReport.id || target.id;
+    try {
+      const res = await fetch(`/api/technical-reports/${encodeURIComponent(reportId)}/verify`, {
+        method: 'PATCH',
+        headers: getAuthHeaders()
       });
+
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.success) {
+        const msg = body?.message || body?.error?.message || 'Gagal memverifikasi laporan di database Supabase.';
+        toast.error(msg, 'Verifikasi Gagal');
+        return { success: false, error: msg };
+      }
+
+      const verifiedTicket: Ticket = {
+        ...target,
+        technicalReport: {
+          ...target.technicalReport,
+          verifiedByDispatch: true,
+          verifiedAt: new Date().toISOString(),
+          verifiedBy: currentUser.name
+        }
+      };
+
+      setTickets(prev =>
+        prev.map(t => (t.id === ticketId || t.woNumber === ticketId ? verifiedTicket : t))
+      );
+      addAuditLog('Report Verified', 'ticket', ticketId, `Dispatch ${currentUser.name} verified technician work report`);
+
+      saveTicketToFirestore(verifiedTicket).catch(err => {
+        console.warn('Secondary Firestore verify warning:', err);
+      });
+
+      toast.success('Laporan teknis pekerjaan lapangan berhasil diverifikasi oleh Dispatch.', 'Laporan Terverifikasi');
+      return { success: true };
+    } catch (err: any) {
+      toast.error('Gagal memverifikasi laporan teknis: ' + (err?.message || err), 'Verifikasi Gagal');
+      return { success: false, error: err?.message };
+    }
   };
 
   const approveProgressReport = async (

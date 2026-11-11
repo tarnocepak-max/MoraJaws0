@@ -1,5 +1,6 @@
 import { getSupabaseBackendClient } from './supabaseClient.ts';
 import type { ServerUser } from '../server.ts';
+import type { TechnicalReport } from '../src/types/index.ts';
 
 // ==============================================================================
 // MORAJAWS SUPABASE DATA ACCESS LAYER & HARDENED ADAPTER
@@ -3804,3 +3805,270 @@ export async function reassignTicketInSupabase(
     }
   };
 }
+
+// -----------------------------------------------------------------------------
+// DATA ACCESS LAYER: TECHNICAL REPORTS (CANONICAL TABLE)
+// -----------------------------------------------------------------------------
+
+/**
+ * Converts a raw PostgreSQL technical_reports row to a TypeScript TechnicalReport model.
+ * Maps submitted_by to submittedBy (never technician_name).
+ */
+export function postgresRowToTechnicalReport(row: any): TechnicalReport {
+  return {
+    id: row.id,
+    ticketId: row.work_order_id || row.ticket_id || '',
+    mainCategory: row.main_category || '',
+    rootCause: row.root_cause || '',
+    subCategory: row.sub_category || undefined,
+    workResult: row.work_result || 'COMPLETED',
+    technicalDescription: row.technical_description || '',
+    correctiveAction: row.corrective_action || '',
+    usedMaterials: row.used_materials || undefined,
+    deviceSerialNumber: row.device_serial_number || undefined,
+    opticalPowerDbm: row.optical_power_dbm || undefined,
+    opticalPowerRx: row.optical_power_rx || undefined,
+    rootCauseCategory: row.root_cause_category || undefined,
+    rootCauseSubCategory: row.root_cause_sub_category || undefined,
+    photos: Array.isArray(row.photos) ? row.photos : (row.photos ? [row.photos] : []),
+    startTime: row.start_time ? new Date(row.start_time).toISOString() : undefined,
+    endTime: row.end_time ? new Date(row.end_time).toISOString() : undefined,
+    photoBeforeUrl: row.photo_before_url || undefined,
+    photoAfterUrl: row.photo_after_url || undefined,
+    additionalNotes: row.additional_notes || undefined,
+    verifiedByDispatch: Boolean(row.verified_by_dispatch),
+    verifiedAt: row.verified_at ? new Date(row.verified_at).toISOString() : undefined,
+    verifiedBy: row.verified_by || undefined,
+    submittedBy: row.submitted_by || '',
+    submittedAt: row.submitted_at ? new Date(row.submitted_at).toISOString() : new Date().toISOString(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined
+  };
+}
+
+/**
+ * Retrieves technical report associated with a work order from Supabase.
+ */
+export async function getTechnicalReportByWorkOrderIdFromSupabase(
+  workOrderIdOrWoNumber: string
+): Promise<SupabaseOpResult<TechnicalReport | null>> {
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
+  }
+
+  const cleanId = (workOrderIdOrWoNumber || '').trim();
+  if (!cleanId) {
+    return { success: false, error: { code: 'INVALID_INPUT', message: 'ID atau nomor Work Order wajib diisi.' } };
+  }
+
+  try {
+    // 1. Search by work_order_id
+    const { data: byWoId, error: errWoId } = await client
+      .from('technical_reports')
+      .select('*')
+      .eq('work_order_id', cleanId)
+      .limit(1)
+      .maybeSingle();
+
+    if (errWoId) {
+      return { success: false, error: classifySupabaseError(errWoId) };
+    }
+    if (byWoId) {
+      return { success: true, data: postgresRowToTechnicalReport(byWoId) };
+    }
+
+    // 2. Search by wo_number
+    const { data: byWoNum, error: errWoNum } = await client
+      .from('technical_reports')
+      .select('*')
+      .eq('wo_number', cleanId)
+      .limit(1)
+      .maybeSingle();
+
+    if (errWoNum) {
+      return { success: false, error: classifySupabaseError(errWoNum) };
+    }
+    if (byWoNum) {
+      return { success: true, data: postgresRowToTechnicalReport(byWoNum) };
+    }
+
+    return { success: true, data: null };
+  } catch (err: any) {
+    return { success: false, error: classifySupabaseError(err) };
+  }
+}
+
+/**
+ * Inserts or updates a technical report into the canonical public.technical_reports table.
+ */
+export async function insertTechnicalReportToSupabase(
+  report: Partial<TechnicalReport>,
+  woNumber?: string
+): Promise<SupabaseOpResult<TechnicalReport>> {
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
+  }
+
+  const cleanWoId = (report.ticketId || '').trim();
+  const reportId = report.id || `rep_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const nowIso = new Date().toISOString();
+
+  let resolvedWoNumber = (woNumber || '').trim();
+  if (!resolvedWoNumber && cleanWoId) {
+    const woLookup = await getWorkOrderByIdFromSupabase(cleanWoId);
+    if (woLookup.success && woLookup.data) {
+      resolvedWoNumber = woLookup.data.woNumber;
+    }
+  }
+
+  const row: Record<string, any> = {
+    id: reportId,
+    work_order_id: cleanWoId || null,
+    ticket_id: cleanWoId || null,
+    wo_number: resolvedWoNumber || 'UNKNOWN-WO',
+    main_category: report.mainCategory || 'Gangguan Fisik Kabel',
+    root_cause: report.rootCause || 'Kabel Putus',
+    sub_category: report.subCategory || null,
+    root_cause_category: report.rootCauseCategory || null,
+    root_cause_sub_category: report.rootCauseSubCategory || null,
+    work_result: report.workResult || 'COMPLETED',
+    technical_description: report.technicalDescription || 'Pekerjaan perbaikan selesai.',
+    corrective_action: report.correctiveAction || 'Penyambungan kabel dan pengukuran ulang redaman.',
+    used_materials: report.usedMaterials || null,
+    device_serial_number: report.deviceSerialNumber || null,
+    optical_power_dbm: report.opticalPowerDbm ? String(report.opticalPowerDbm) : null,
+    optical_power_rx: report.opticalPowerRx ? String(report.opticalPowerRx) : null,
+    photo_before_url: report.photoBeforeUrl || null,
+    photo_after_url: report.photoAfterUrl || null,
+    photos: Array.isArray(report.photos) ? report.photos : [],
+    start_time: report.startTime || null,
+    end_time: report.endTime || null,
+    additional_notes: report.additionalNotes || null,
+    verified_by_dispatch: Boolean(report.verifiedByDispatch),
+    verified_at: report.verifiedAt || null,
+    verified_by: report.verifiedBy || null,
+    submitted_by: report.submittedBy || 'Teknisi Lapangan',
+    submitted_at: report.submittedAt || nowIso,
+    payload: {
+      clientReportId: report.id,
+      submittedBy: report.submittedBy,
+      submittedAt: report.submittedAt || nowIso
+    },
+    created_at: nowIso,
+    updated_at: nowIso
+  };
+
+  try {
+    const { data, error } = await client
+      .from('technical_reports')
+      .upsert(row, { onConflict: 'id' })
+      .select('*')
+      .single();
+
+    if (error) {
+      return { success: false, error: classifySupabaseError(error) };
+    }
+
+    return { success: true, data: postgresRowToTechnicalReport(data || row) };
+  } catch (err: any) {
+    return { success: false, error: classifySupabaseError(err) };
+  }
+}
+
+/**
+ * Dispatch verification for a technical report in Supabase.
+ */
+export async function verifyTechnicalReportInSupabase(
+  reportId: string,
+  dispatchUser: string
+): Promise<SupabaseOpResult<TechnicalReport>> {
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
+  }
+
+  const nowIso = new Date().toISOString();
+  try {
+    const { data, error } = await client
+      .from('technical_reports')
+      .update({
+        verified_by_dispatch: true,
+        verified_at: nowIso,
+        verified_by: dispatchUser,
+        updated_at: nowIso
+      })
+      .eq('id', reportId)
+      .select('*')
+      .single();
+
+    if (error) {
+      return { success: false, error: classifySupabaseError(error) };
+    }
+
+    return { success: true, data: postgresRowToTechnicalReport(data) };
+  } catch (err: any) {
+    return { success: false, error: classifySupabaseError(err) };
+  }
+}
+
+/**
+ * Submits a technical report atomically using PostgreSQL function fn_submit_technical_report_atomic.
+ * Guarantees in a single PostgreSQL transaction:
+ * 1. Target Work Order existence and row lock
+ * 2. Role and assignment scoping
+ * 3. Required fields validation
+ * 4. Technical report upsert
+ * 5. Work order status, duration, session, and payload update
+ * 6. Audit log append
+ */
+export async function submitTechnicalReportAtomic(
+  workOrderIdOrWoNumber: string,
+  reportData: Partial<TechnicalReport>,
+  user: { id: string; name: string; role: string }
+): Promise<SupabaseOpResult<{ report: TechnicalReport; workOrder: Ticket }>> {
+  const client = getSupabaseBackendClient();
+  if (!client) {
+    return { success: false, error: { code: 'NOT_CONFIGURED', message: 'Supabase client belum dikonfigurasi.' } };
+  }
+
+  const cleanId = (workOrderIdOrWoNumber || '').trim();
+  if (!cleanId) {
+    return { success: false, error: { code: 'INVALID_INPUT', message: 'ID atau nomor Work Order wajib diisi.' } };
+  }
+
+  try {
+    const { data: rpcRes, error: rpcErr } = await client.rpc('fn_submit_technical_report_atomic', {
+      p_work_order_id: cleanId,
+      p_report_data: reportData,
+      p_submitted_by: user.name,
+      p_submitted_by_id: user.id,
+      p_user_role: user.role
+    });
+
+    if (rpcErr) {
+      return { success: false, error: classifySupabaseError(rpcErr) };
+    }
+
+    if (rpcRes && rpcRes.success) {
+      const woRes = await getWorkOrderByIdOrWoNumberFromSupabase(rpcRes.work_order_id || cleanId);
+      const repRes = await getTechnicalReportByWorkOrderIdFromSupabase(rpcRes.work_order_id || cleanId);
+
+      return {
+        success: true,
+        data: {
+          report: repRes.data || (reportData as TechnicalReport),
+          workOrder: woRes.data!
+        }
+      };
+    }
+
+    return {
+      success: false,
+      error: { code: 'RPC_FAILED', message: rpcRes?.message || 'Gagal mengeksekusi fn_submit_technical_report_atomic.' }
+    };
+  } catch (err: any) {
+    return { success: false, error: classifySupabaseError(err) };
+  }
+}
+

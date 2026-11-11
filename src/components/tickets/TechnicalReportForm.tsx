@@ -71,6 +71,8 @@ export const TechnicalReportForm: React.FC<TechnicalReportFormProps> = ({ ticket
 
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   // Available root causes based on chosen mainCategory
   const currentCategoryObj = rootCauseCategories.find(c => c.name === mainCategory);
@@ -103,8 +105,9 @@ export const TechnicalReportForm: React.FC<TechnicalReportFormProps> = ({ ticket
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
 
     if (!technicalDescription.trim()) {
       setNotice({ type: 'error', text: 'Deskripsi teknis kendala wajib diisi.' });
@@ -118,30 +121,39 @@ export const TechnicalReportForm: React.FC<TechnicalReportFormProps> = ({ ticket
       return;
     }
 
-    const result = saveTechnicalReport(ticket.id, {
-      mainCategory,
-      rootCause,
-      workResult,
-      technicalDescription: technicalDescription.trim(),
-      correctiveAction: correctiveAction.trim(),
-      opticalPowerDbm: opticalPowerDbm.trim(),
-      deviceSerialNumber: deviceSerialNumber.trim(),
-      usedMaterials: usedMaterials.trim(),
-      photoBeforeUrl,
-      photoAfterUrl,
-      additionalNotes: additionalNotes.trim()
-    });
+    setIsSubmitting(true);
+    try {
+      const result = await saveTechnicalReport(ticket.id, {
+        mainCategory,
+        rootCause,
+        workResult,
+        technicalDescription: technicalDescription.trim(),
+        correctiveAction: correctiveAction.trim(),
+        opticalPowerDbm: opticalPowerDbm.trim(),
+        deviceSerialNumber: deviceSerialNumber.trim(),
+        usedMaterials: usedMaterials.trim(),
+        photoBeforeUrl,
+        photoAfterUrl,
+        additionalNotes: additionalNotes.trim()
+      });
 
-    if (result.success) {
-      playReportSavedSound();
-      setIsEditing(false);
-      setNotice({ type: 'success', text: 'Laporan teknis pekerjaan & root cause berhasil disimpan!' });
-      setTimeout(() => setNotice(null), 3500);
-      onSuccess?.();
-    } else {
+      if (result.success) {
+        playReportSavedSound();
+        setIsEditing(false);
+        setNotice({ type: 'success', text: 'Laporan teknis pekerjaan & root cause berhasil disimpan!' });
+        setTimeout(() => setNotice(null), 3500);
+        onSuccess?.();
+      } else {
+        playErrorSound();
+        setNotice({ type: 'error', text: result.error || 'Gagal menyimpan laporan.' });
+        setTimeout(() => setNotice(null), 4000);
+      }
+    } catch (err: any) {
       playErrorSound();
-      setNotice({ type: 'error', text: result.error || 'Gagal menyimpan laporan.' });
-      setTimeout(() => setNotice(null), 3500);
+      setNotice({ type: 'error', text: err?.message || 'Terjadi kesalahan saat menyimpan laporan.' });
+      setTimeout(() => setNotice(null), 4000);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

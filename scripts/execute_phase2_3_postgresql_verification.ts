@@ -1,5 +1,5 @@
-import { PGlite } from '/tmp/node_modules/@electric-sql/pglite/dist/index.js';
-import { pgcrypto } from '/tmp/node_modules/@electric-sql/pglite/dist/contrib/pgcrypto.js';
+import { PGlite } from '@electric-sql/pglite';
+import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
