@@ -29,20 +29,20 @@ export const LoginLogView: React.FC = () => {
   };
 
   const loginLogs = useMemo(() => {
-    return auditLogs.filter(l => l.entity === 'auth' || l.action.toLowerCase().includes('login'));
+    return auditLogs.filter(l => l.entity === 'auth' || String(l.action || '').toLowerCase().includes('login'));
   }, [auditLogs]);
 
   const filteredLogs = useMemo(() => {
     return loginLogs.filter(log => {
-      const isSuccess = log.action.toLowerCase().includes('success');
+      const isSuccess = String(log.action || '').toLowerCase().includes('success');
       if (statusFilter === 'success' && !isSuccess) return false;
       if (statusFilter === 'failed' && isSuccess) return false;
 
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase().trim();
-        const m1 = log.performedBy.toLowerCase().includes(q);
-        const m2 = log.details.toLowerCase().includes(q);
-        const m3 = log.action.toLowerCase().includes(q);
+        const m1 = String(log.performedBy || '').toLowerCase().includes(q);
+        const m2 = String(log.details || '').toLowerCase().includes(q);
+        const m3 = String(log.action || '').toLowerCase().includes(q);
         if (!m1 && !m2 && !m3) return false;
       }
       return true;
@@ -170,7 +170,7 @@ export const LoginLogView: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {sortedLogs.map(log => {
-                  const isSuccess = log.action.toLowerCase().includes('success');
+                  const isSuccess = String(log.action || '').toLowerCase().includes('success');
                   return (
                     <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                       <td className="py-2.5 px-3 font-mono text-slate-500 whitespace-nowrap">

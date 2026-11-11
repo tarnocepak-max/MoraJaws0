@@ -173,7 +173,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
       : Array.isArray((row.contractor as any)?.coverage_areas)
       ? (row.contractor as any).coverage_areas
       : [];
-    const matchesArea = selectedAreaFilter === 'ALL' || cAreas.includes(selectedAreaFilter);
+    const matchesArea = selectedAreaFilter === 'ALL' || (Array.isArray(cAreas) && cAreas.includes(selectedAreaFilter));
     return matchesSearch && matchesArea;
   });
 
@@ -191,7 +191,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
         : Array.isArray((c as any)?.coverage_areas)
         ? (c as any).coverage_areas
         : [];
-      return cAreas.includes(area.name);
+      return Array.isArray(cAreas) && Boolean(area?.name) && cAreas.includes(area.name);
     });
 
     return {

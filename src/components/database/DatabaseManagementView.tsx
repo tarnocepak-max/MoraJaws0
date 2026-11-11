@@ -214,7 +214,7 @@ export const DatabaseManagementView: React.FC = () => {
 
   // Import history from auditLogs
   const importHistoryLogs = useMemo(() => {
-    return auditLogs.filter(l => l.entity === 'import_batch' || l.action.toLowerCase().includes('import'));
+    return auditLogs.filter(l => l.entity === 'import_batch' || String(l.action || '').toLowerCase().includes('import'));
   }, [auditLogs]);
 
   // Handlers for Data Edit

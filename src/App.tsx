@@ -114,7 +114,8 @@ const MainLayout: React.FC = () => {
     if (isInstaller && !installerAllowedTabs.includes(activeTab)) {
       setActiveTab('installer_dashboard');
       try {
-        localStorage.setItem(`morajaws_active_tab_${currentUser.id || currentUser.role}`, 'installer_dashboard');
+        const userKey = currentUser?.id || currentUser?.role || 'default';
+        localStorage.setItem(`morajaws_active_tab_${userKey}`, 'installer_dashboard');
         window.history.replaceState({ tab: 'installer_dashboard' }, '', '#installer_dashboard');
       } catch (e) {}
     }
@@ -147,7 +148,8 @@ const MainLayout: React.FC = () => {
       setLeaderSubTab(targetTab as LeaderTabType);
     }
     try {
-      localStorage.setItem(`morajaws_active_tab_${currentUser.id || currentUser.role}`, targetTab);
+      const userKey = currentUser?.id || currentUser?.role || 'default';
+      localStorage.setItem(`morajaws_active_tab_${userKey}`, targetTab);
     } catch (e) {}
     if (pushHistory) {
       if (window.location.hash !== `#${targetTab}`) {

@@ -160,9 +160,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const list = Array.isArray(standaloneMenus) ? standaloneMenus : [];
     return [...list]
       .filter(item => {
-        if (item.visible === false) return false;
+        if (!item || item.visible === false) return false;
         if (item.id === 'templates' && userRole !== 'super_admin' && userRole !== 'dispatch') return false;
-        if (Array.isArray(item.roles) && item.roles.length > 0 && !item.roles.includes(userRole)) return false;
+        if (Array.isArray(item.roles) && item.roles.length > 0 && (!userRole || !item.roles.includes(userRole))) return false;
         return true;
       })
       .sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -182,33 +182,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
     return [...categories]
       .filter(cat => {
-        if (cat.isActive === false) return false;
+        if (!cat || cat.isActive === false) return false;
+        const catId = String(cat.id || '').toLowerCase();
+        const catName = String(cat.name || '').toLowerCase();
         // Role DISPATCH dan LEADER tidak boleh melihat kategori installer (Hanya super_admin & installer)
-        if ((userRole === 'dispatch' || userRole === 'leader') && 
-            (cat.id === 'cat_installer' || cat.id === 'installer' || (cat.name && String(cat.name).toLowerCase().includes('installer')))) {
+        if (isDispatchOrLeader && (catId === 'cat_installer' || catId === 'installer' || catName.includes('installer'))) {
           return false;
         }
         return true;
       })
       .sort((a, b) => (a.order || 0) - (b.order || 0))
       .map(cat => {
+        const catId = String(cat.id || '');
         const matchingSubmenus = allSubmenus
           .filter(sub => {
-            if (sub.categoryId !== cat.id) return false;
+            if (!sub || String(sub.categoryId || '') !== catId) return false;
             if (sub.visible === false) return false;
+            const subId = String(sub.id || '');
+            const subCatId = String(sub.categoryId || '');
             // Role DISPATCH tidak boleh melihat pendaftaran/menu installer
-            if (userRole === 'dispatch' && (sub.categoryId === 'installer' || sub.id === 'report_installer' || sub.id === 'installer_mgmt')) {
+            if (userRole === 'dispatch' && (subCatId === 'installer' || subId === 'report_installer' || subId === 'installer_mgmt')) {
               return false;
             }
             // Role LEADER tidak boleh melihat report installer, hanya pendaftaran akun teknisi
-            if (userRole === 'leader' && sub.id === 'report_installer') {
+            if (userRole === 'leader' && subId === 'report_installer') {
               return false;
             }
             // Requirement 5: WhatsApp Templates strictly for super_admin and dispatch only
-            if (sub.id === 'templates' && userRole !== 'super_admin' && userRole !== 'dispatch') {
+            if (subId === 'templates' && userRole !== 'super_admin' && userRole !== 'dispatch') {
               return false;
             }
-            if (Array.isArray(sub.roles) && sub.roles.length > 0 && !sub.roles.includes(userRole)) return false;
+            if (Array.isArray(sub.roles) && sub.roles.length > 0 && (!userRole || !sub.roles.includes(userRole))) return false;
             return true;
           })
           .sort((a, b) => (a.order || 0) - (b.order || 0));

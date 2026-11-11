@@ -49,6 +49,7 @@ export interface StoredAuthSession {
   tokenHash: string;
   expiresAt: string;
   lastActivityAt: string;
+  sessionVersion?: number;
   revokedAt?: string | null;
   ipAddress?: string;
   userAgent?: string;
@@ -192,17 +193,19 @@ export async function verifyUserPasswordEx(
 // ------------------------------------------------------------------------------
 
 /**
- * Generates cryptographically secure random access token.
+ * Generates cryptographically secure random access token tied to sessionVersion.
  */
-export function generateSecureAccessToken(): string {
-  return `mora_at_${crypto.randomBytes(32).toString('hex')}`;
+export function generateSecureAccessToken(sessionVersion: number = 1): string {
+  const v = Math.max(1, typeof sessionVersion === 'number' ? sessionVersion : 1);
+  return `mora_at_v${v}_${crypto.randomBytes(32).toString('hex')}`;
 }
 
 /**
- * Generates cryptographically secure random refresh token.
+ * Generates cryptographically secure random refresh token tied to sessionVersion.
  */
-export function generateSecureRefreshToken(): string {
-  return `mora_rt_${crypto.randomBytes(48).toString('hex')}`;
+export function generateSecureRefreshToken(sessionVersion: number = 1): string {
+  const v = Math.max(1, typeof sessionVersion === 'number' ? sessionVersion : 1);
+  return `mora_rt_v${v}_${crypto.randomBytes(48).toString('hex')}`;
 }
 
 /**
@@ -366,8 +369,9 @@ export async function persistNewAuthSession(params: {
   refreshToken: string;
   ipAddress?: string;
   userAgent?: string;
+  sessionVersion?: number;
 }): Promise<{ sessionId: string; expiresAt: string }> {
-  const { userId, accessToken, refreshToken, ipAddress, userAgent } = params;
+  const { userId, accessToken, refreshToken, ipAddress, userAgent, sessionVersion = 1 } = params;
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
   const expiresAt = new Date(now + ACCESS_TOKEN_TTL_MS).toISOString();
@@ -386,6 +390,7 @@ export async function persistNewAuthSession(params: {
     tokenHash: sessionHash,
     expiresAt,
     lastActivityAt: nowIso,
+    sessionVersion,
     revokedAt: null,
     ipAddress,
     userAgent,
@@ -456,6 +461,7 @@ export async function persistNewAuthSession(params: {
     username: '', // Populated by caller
     name: '',     // Populated by caller
     role: 'super_admin',
+    sessionVersion,
     loginAt: nowIso,
     lastActivityAt: nowIso,
     expiresAt,
@@ -615,6 +621,34 @@ export async function verifyAccessToken(
     };
   }
 
+  // Authoritative Session Version Check
+  const authoritativeVersion = authoritativeUser.sessionVersion || 1;
+  const tokenVersionMatch = cleanToken.match(/^mora_at_v(\d+)_/);
+  const tokenSessionVersion = tokenVersionMatch ? parseInt(tokenVersionMatch[1], 10) : undefined;
+  const sessionStoredVersion = matchedSession.sessionVersion;
+
+  if (
+    (tokenSessionVersion !== undefined && tokenSessionVersion !== authoritativeVersion) ||
+    (sessionStoredVersion !== undefined && sessionStoredVersion !== authoritativeVersion)
+  ) {
+    matchedSession.revokedAt = new Date().toISOString();
+    if (client) {
+      client
+        .from('auth_sessions')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('id', matchedSession.id)
+        .then(() => {})
+        .catch(() => {});
+    }
+    return {
+      success: false,
+      error: {
+        code: 'SESSION_REVOKED',
+        message: 'Sesi login telah dicabut karena perubahan kata sandi atau pembaruan akun. Silakan login kembali.'
+      }
+    };
+  }
+
   // Extend last activity timestamp in database asynchronously
   if (client) {
     client
@@ -735,9 +769,25 @@ export async function rotateRefreshToken(
     };
   }
 
-  // 3. Issue new tokens with rotation
-  const newAccessToken = generateSecureAccessToken();
-  const newRefreshToken = generateSecureRefreshToken();
+  // Authoritative Session Version Check on Refresh Token
+  const authoritativeVersion = user.sessionVersion || 1;
+  const rtVersionMatch = cleanRt.match(/^mora_rt_v(\d+)_/);
+  const rtTokenVersion = rtVersionMatch ? parseInt(rtVersionMatch[1], 10) : undefined;
+
+  if (rtTokenVersion !== undefined && rtTokenVersion !== authoritativeVersion) {
+    matchedRt.revokedAt = new Date().toISOString();
+    if (client) {
+      await client.from('refresh_tokens').update({ revoked_at: matchedRt.revokedAt }).eq('id', matchedRt.id);
+    }
+    return {
+      success: false,
+      error: { code: 'REFRESH_TOKEN_REVOKED', message: 'Refresh token tidak valid karena perubahan kredensial akun.' }
+    };
+  }
+
+  // 3. Issue new tokens with rotation tied to current sessionVersion
+  const newAccessToken = generateSecureAccessToken(authoritativeVersion);
+  const newRefreshToken = generateSecureRefreshToken(authoritativeVersion);
   const newSessionHash = hashToken(newAccessToken);
   const newRtHash = hashToken(newRefreshToken);
 
@@ -1098,9 +1148,10 @@ export async function loginWithCustomAuth(params: {
     }
   }
 
-  // 5. Generate Access Token & Refresh Token
-  const accessToken = generateSecureAccessToken();
-  const refreshToken = generateSecureRefreshToken();
+  // 5. Generate Access Token & Refresh Token tied to current sessionVersion
+  const currentVersion = user.sessionVersion || 1;
+  const accessToken = generateSecureAccessToken(currentVersion);
+  const refreshToken = generateSecureRefreshToken(currentVersion);
 
   // 6. Persist Session into Supabase PostgreSQL
   const { sessionId, expiresAt } = await persistNewAuthSession({
@@ -1108,7 +1159,8 @@ export async function loginWithCustomAuth(params: {
     accessToken,
     refreshToken,
     ipAddress,
-    userAgent
+    userAgent,
+    sessionVersion: currentVersion
   });
 
   // 7. Update User login stats & reset failed login count in Supabase PostgreSQL

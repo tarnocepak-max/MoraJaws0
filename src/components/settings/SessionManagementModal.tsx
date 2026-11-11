@@ -146,9 +146,9 @@ export const SessionManagementModal: React.FC<SessionManagementModalProps> = ({ 
     if (searchUser) {
       const q = searchUser.toLowerCase();
       return (
-        s.name.toLowerCase().includes(q) ||
-        s.username.toLowerCase().includes(q) ||
-        s.role.toLowerCase().includes(q)
+        String(s.name || '').toLowerCase().includes(q) ||
+        String(s.username || '').toLowerCase().includes(q) ||
+        String(s.role || '').toLowerCase().includes(q)
       );
     }
     return true;

@@ -132,7 +132,7 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
             severity: 'HIGH',
             status: 'OPEN'
           });
-        } else if (res.errorCode === 'auth/user-disabled' || errorMsg.includes('dinonaktifkan')) {
+        } else if (res.errorCode === 'auth/user-disabled' || String(errorMsg || '').includes('dinonaktifkan')) {
           showGlobalError({
             errorCode: 'MJ-AUTH-003',
             module: 'Authentication',
@@ -143,7 +143,7 @@ export const StaffLoginPortal: React.FC<StaffLoginPortalProps> = ({ onLoginSucce
             severity: 'HIGH',
             status: 'OPEN'
           });
-        } else if (res.errorCode === 'auth/user-not-found' || errorMsg.includes('tidak ditemukan') || errorMsg.includes('tidak terdaftar')) {
+        } else if (res.errorCode === 'auth/user-not-found' || String(errorMsg || '').includes('tidak ditemukan') || String(errorMsg || '').includes('tidak terdaftar')) {
           showGlobalError({
             errorCode: 'MJ-AUTH-002',
             module: 'Authentication',

@@ -55,11 +55,14 @@ export const SystemHealthView: React.FC = () => {
   }, []);
 
   const recentErrors = auditLogs
-    .filter(l => l.action.toLowerCase().includes('failed') || l.action.toLowerCase().includes('blocked') || l.action.toLowerCase().includes('error'))
+    .filter(l => {
+      const act = String(l.action || '').toLowerCase();
+      return act.includes('failed') || act.includes('blocked') || act.includes('error');
+    })
     .slice(0, 10);
 
   const recentAuthFailures = auditLogs
-    .filter(l => l.entity === 'auth' && (l.action.toLowerCase().includes('failed') || l.action.toLowerCase().includes('blocked')))
+    .filter(l => l.entity === 'auth' && (String(l.action || '').toLowerCase().includes('failed') || String(l.action || '').toLowerCase().includes('blocked')))
     .slice(0, 5);
 
   return (

@@ -1408,7 +1408,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Role Scoped Work Orders (Strict RBAC Data Management)
   const scopedTickets = React.useMemo(() => {
     return tickets.filter(t => {
-      if (t.isDeleted) return false;
+      if (!t || t.isDeleted) return false;
+      if (!currentUser || !currentUser.role) return false;
       // 1. Super Admin, Dispatch, and Management Data have system-wide visibility
       if (currentUser.role === 'super_admin' || currentUser.role === 'dispatch' || currentUser.role === 'management_data') return true;
 
@@ -3375,22 +3376,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const markTicketMessagesAsRead = (ticketId: string) => {
     setTicketMessages(prev => {
       let changed = false;
+      const currentUserId = currentUser?.id || '';
+      if (!currentUserId) return prev;
       const next = prev.map(m => {
         if (m.ticketId !== ticketId) return m;
         const currentReaders = Array.isArray(m.readBy) ? m.readBy : [];
-        if (currentReaders.includes(currentUser.id)) return m;
+        if (currentReaders.includes(currentUserId)) return m;
         changed = true;
-        return { ...m, readBy: [...currentReaders, currentUser.id] };
+        return { ...m, readBy: [...currentReaders, currentUserId] };
       });
       return changed ? next : prev;
     });
   };
 
   const getTicketUnreadCount = (ticketId: string): number => {
+    const currentUserId = currentUser?.id || '';
+    if (!currentUserId) return 0;
     return ticketMessages.filter(
       m => m.ticketId === ticketId &&
-           m.senderId !== currentUser.id &&
-           !(Array.isArray(m.readBy) ? m.readBy : []).includes(currentUser.id)
+           m.senderId !== currentUserId &&
+           !(Array.isArray(m.readBy) ? m.readBy : []).includes(currentUserId)
     ).length;
   };
 

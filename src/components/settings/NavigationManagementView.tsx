@@ -256,7 +256,7 @@ export const NavigationManagementView: React.FC = () => {
   };
 
   const filteredIcons = AVAILABLE_ICON_NAMES.filter(name =>
-    name.toLowerCase().includes(iconSearchQuery.toLowerCase())
+    String(name || '').toLowerCase().includes(String(iconSearchQuery || '').toLowerCase())
   );
 
   return (

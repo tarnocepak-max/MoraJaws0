@@ -2949,7 +2949,7 @@ export const LeaderPortal: React.FC<LeaderPortalProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {myInstallers
-                    .filter(u => !installerSearch || u.name.toLowerCase().includes(installerSearch.toLowerCase()) || u.username.toLowerCase().includes(installerSearch.toLowerCase()))
+                    .filter(u => !installerSearch || String(u.name || '').toLowerCase().includes(installerSearch.toLowerCase()) || String(u.username || '').toLowerCase().includes(installerSearch.toLowerCase()))
                     .map(u => {
                       const woCount = contractorTickets.filter(t => t.installerName?.toLowerCase().trim() === u.name.toLowerCase().trim() && t.statusWOInstaller !== 'Completed').length;
                       return (

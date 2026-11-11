@@ -251,11 +251,21 @@ export function userToPostgresRow(user: ServerUser): Record<string, any> {
     ? (user as any).payload
     : {};
 
+  const sessionVer = typeof user.sessionVersion === 'number' ? user.sessionVersion : 1;
+  const passwordHash = user.passwordHash || existingPayload.passwordHash || null;
+  const accountStatus = (user as any).accountStatus || (user as any).account_status || (user.active !== false ? 'active' : 'inactive');
+  const failedLoginCount = typeof (user as any).failedLoginCount === 'number'
+    ? (user as any).failedLoginCount
+    : (typeof (user as any).failed_login_count === 'number' ? (user as any).failed_login_count : 0);
+  const lockedUntil = (user as any).lockedUntil || (user as any).locked_until || null;
+  const passwordChangedAt = (user as any).passwordChangedAt || (user as any).password_changed_at || null;
+
   const payload = {
     ...existingPayload,
-    passwordHash: user.passwordHash || null,
-    sessionVersion: typeof user.sessionVersion === 'number' ? user.sessionVersion : 1,
-    authUserId: user.authUserId || existingPayload.authUserId || null
+    passwordHash,
+    sessionVersion: sessionVer,
+    authUserId: user.authUserId || existingPayload.authUserId || null,
+    accountStatus
   };
 
   return {
@@ -272,7 +282,7 @@ export function userToPostgresRow(user: ServerUser): Record<string, any> {
     contractor: user.contractor || null,
     area: user.area || null,
     cluster_name: (user as any).clusterName || null,
-    active: user.active !== false,
+    active: user.active !== false && accountStatus !== 'inactive' && accountStatus !== 'locked',
     must_change_password: Boolean(user.mustChangePassword),
     permissions: Array.isArray(user.permissions) ? user.permissions : [],
     last_login_at: user.lastLoginAt || null,
@@ -284,6 +294,12 @@ export function userToPostgresRow(user: ServerUser): Record<string, any> {
     deleted_at: user.deletedAt || null,
     deleted_by: user.deletedBy || null,
     deletion_reason: user.deletionReason || null,
+    password_hash: passwordHash,
+    session_version: sessionVer,
+    account_status: accountStatus,
+    failed_login_count: failedLoginCount,
+    locked_until: lockedUntil,
+    password_changed_at: passwordChangedAt,
     payload,
     created_at: user.createdAt || new Date().toISOString(),
     updated_at: new Date().toISOString()
@@ -292,15 +308,19 @@ export function userToPostgresRow(user: ServerUser): Record<string, any> {
 
 /**
  * Converts snake_case PostgreSQL user row from public.users to application ServerUser object.
- * SECURITY: Never defaults to fixed '28232849' password.
+ * SECURITY: Prioritizes authoritative session_version and custom auth status from PostgreSQL columns.
  */
 export function postgresRowToUser(row: any): ServerUser {
   const payload = row.payload && typeof row.payload === 'object' ? row.payload : {};
   const passwordHash = row.password_hash || payload.passwordHash || '';
-  const sessionVersion = typeof payload.sessionVersion === 'number'
-    ? payload.sessionVersion
-    : (typeof row.session_version === 'number' ? row.session_version : 1);
+  const sessionVersion = typeof row.session_version === 'number'
+    ? row.session_version
+    : (typeof payload.sessionVersion === 'number' ? payload.sessionVersion : 1);
   const authUserId = row.auth_user_id || payload.authUserId || payload.auth_user_id || undefined;
+  const accountStatus = row.account_status || payload.accountStatus || 'active';
+  const failedLoginCount = typeof row.failed_login_count === 'number' ? row.failed_login_count : 0;
+  const lockedUntil = row.locked_until || payload.lockedUntil || undefined;
+  const passwordChangedAt = row.password_changed_at || payload.passwordChangedAt || undefined;
 
   return {
     id: row.id,
@@ -314,7 +334,7 @@ export function postgresRowToUser(row: any): ServerUser {
     contractor: row.contractor || undefined,
     contractorId: row.contractor_id || undefined,
     area: row.area || undefined,
-    active: row.active !== false,
+    active: row.active !== false && accountStatus !== 'inactive' && accountStatus !== 'locked',
     passwordHash,
     permissions: Array.isArray(row.permissions) ? row.permissions : [],
     lastLoginAt: row.last_login_at || undefined,
@@ -326,8 +346,12 @@ export function postgresRowToUser(row: any): ServerUser {
     deletedAt: row.deleted_at || undefined,
     deletedBy: row.deleted_by || undefined,
     deletionReason: row.deletion_reason || undefined,
-    createdAt: row.created_at || new Date().toISOString()
-  };
+    createdAt: row.created_at || new Date().toISOString(),
+    accountStatus,
+    failedLoginCount,
+    lockedUntil,
+    passwordChangedAt
+  } as ServerUser;
 }
 
 // ------------------------------------------------------------------------------
@@ -1015,7 +1039,9 @@ export async function updateUserInSupabase(id: string, updates: Partial<ServerUs
     if (updates.firebaseUid !== undefined) updateRow.firebase_uid = updates.firebaseUid || null;
 
     const prevPayload = existing.payload && typeof existing.payload === 'object' ? existing.payload : {};
-    const currentSessionVersion = typeof prevPayload.sessionVersion === 'number' ? prevPayload.sessionVersion : 1;
+    const currentSessionVersion = typeof existing.session_version === 'number'
+      ? existing.session_version
+      : (typeof prevPayload.sessionVersion === 'number' ? prevPayload.sessionVersion : 1);
 
     const isSecuritySensitiveChange =
       (updates.active !== undefined && updates.active !== existing.active) ||
@@ -1028,6 +1054,13 @@ export async function updateUserInSupabase(id: string, updates: Partial<ServerUs
     const nextSessionVersion = updates.sessionVersion !== undefined
       ? updates.sessionVersion
       : (isSecuritySensitiveChange ? currentSessionVersion + 1 : currentSessionVersion);
+
+    updateRow.session_version = nextSessionVersion;
+    if (updates.passwordHash !== undefined) updateRow.password_hash = updates.passwordHash || null;
+    if ((updates as any).accountStatus !== undefined) updateRow.account_status = (updates as any).accountStatus;
+    if ((updates as any).failedLoginCount !== undefined) updateRow.failed_login_count = (updates as any).failedLoginCount;
+    if ((updates as any).lockedUntil !== undefined) updateRow.locked_until = (updates as any).lockedUntil;
+    if ((updates as any).passwordChangedAt !== undefined) updateRow.password_changed_at = (updates as any).passwordChangedAt;
 
     updateRow.payload = {
       ...prevPayload,

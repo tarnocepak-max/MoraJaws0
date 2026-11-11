@@ -178,10 +178,10 @@ export const DatabaseSyncMonitoringView: React.FC = () => {
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
       return (
-        item.jobId.toLowerCase().includes(q) ||
-        item.dataSource.toLowerCase().includes(q) ||
-        item.initiatedBy.toLowerCase().includes(q) ||
-        (item.errorSummary && item.errorSummary.toLowerCase().includes(q))
+        String(item.jobId || '').toLowerCase().includes(q) ||
+        String(item.dataSource || '').toLowerCase().includes(q) ||
+        String(item.initiatedBy || '').toLowerCase().includes(q) ||
+        (item.errorSummary ? String(item.errorSummary).toLowerCase().includes(q) : false)
       );
     }
     return true;

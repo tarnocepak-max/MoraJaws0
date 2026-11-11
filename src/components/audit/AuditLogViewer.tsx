@@ -24,9 +24,9 @@ export const AuditLogViewer: React.FC = () => {
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
         return (
-          log.action.toLowerCase().includes(q) ||
-          log.details.toLowerCase().includes(q) ||
-          log.performedBy.toLowerCase().includes(q)
+          String(log.action || '').toLowerCase().includes(q) ||
+          String(log.details || '').toLowerCase().includes(q) ||
+          String(log.performedBy || '').toLowerCase().includes(q)
         );
       }
       return true;
